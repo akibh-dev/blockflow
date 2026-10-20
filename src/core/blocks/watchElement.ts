@@ -111,7 +111,7 @@ export const watchElementBlock: BlockDefinition<WatchElementConfig> = {
       kind: 'number',
       min: 1,
       step: 1,
-      help: 'Only used when this block starts the flow. After a Timer, the Timer decides.',
+      help: 'Only used when this block starts the flow. After a Timer, the Timer decides. Under 30 seconds keeps the background worker awake.',
     },
     {
       key: 'reload',

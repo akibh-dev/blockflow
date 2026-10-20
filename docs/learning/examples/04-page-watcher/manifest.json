@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Page Watcher",
+  "version": "0.1.0",
+  "description": "Watches one element on a page and tells you when it changes.",
+  "action": { "default_popup": "popup.html" },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["alarms", "storage", "tabs", "scripting"],
+  "host_permissions": ["<all_urls>"]
+}

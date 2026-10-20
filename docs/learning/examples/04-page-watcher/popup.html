@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font: 13px system-ui, sans-serif; width: 340px; padding: 12px; }
+      label { display: block; margin: 8px 0 2px; font-weight: 600; }
+      input { width: 100%; box-sizing: border-box; padding: 4px 6px; }
+      .row { display: flex; gap: 6px; margin-top: 10px; }
+      .muted { color: #666; font-size: 12px; margin-top: 4px; }
+      .error { color: #b91c1c; }
+      ul { padding-left: 16px; margin: 6px 0 0; }
+      li { margin-bottom: 4px; word-break: break-word; }
+    </style>
+  </head>
+  <body>
+    <label for="url">Page URL</label>
+    <input id="url" type="url" placeholder="https://example.com/product" />
+
+    <label for="selector">CSS selector</label>
+    <input id="selector" placeholder="#price" />
+    <div class="muted">Tip: right click the element → Inspect → right click the node → Copy → Copy selector.</div>
+
+    <label for="minutes">Check every (minutes)</label>
+    <input id="minutes" type="number" min="0.1" step="0.1" value="1" />
+    <div class="muted">Published extensions: alarms cannot go below 0.5 minutes. Unpacked, anything works.</div>
+
+    <div class="row">
+      <button id="start">Start watching</button>
+      <button id="stop">Stop</button>
+    </div>
+
+    <div id="status" class="muted"></div>
+    <ul id="history"></ul>
+    <script src="popup.js"></script>
+  </body>
+</html>

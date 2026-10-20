@@ -30,7 +30,7 @@ export const timerBlock: BlockDefinition<TimerConfig> = {
       kind: 'number',
       min: 1,
       step: 1,
-      help: 'Browsers may enforce a minimum of about 30 seconds for background timers.',
+      help: 'Under 30 seconds the extension keeps its background worker awake to fire on time (Chromium). 30 seconds or more uses browser alarms.',
     },
     {
       key: 'repeat',

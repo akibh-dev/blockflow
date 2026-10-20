@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { createExtensionHost } from '../browser/host';
+import { createBrowserScheduler } from '../browser/scheduler';
 import { cancelPicking, finishPicking, startPicking } from '../browser/picking';
 import { appendLog, loadWorkflows, saveWorkflows } from '../browser/stores';
 import { createDefaultRegistry } from '../core/blocks';
@@ -19,7 +20,11 @@ import type { Workflow } from '../core/types';
  * browser alarms; a runner is rebuilt whenever an alarm fires.
  */
 export default defineBackground(() => {
-  const host = createExtensionHost();
+  // Short timers (under 30s) fire from memory; longer ones from alarms. Both end up in onAlarm.
+  const scheduler = createBrowserScheduler((key) => {
+    void onAlarm(key).catch(report('timer'));
+  });
+  const host = createExtensionHost(scheduler);
   const registry = createDefaultRegistry();
 
   const newRunner = (workflow: Workflow) =>
@@ -69,8 +74,16 @@ export default defineBackground(() => {
   // Listeners are registered synchronously, as service workers require.
 
   browser.alarms.onAlarm.addListener((alarm) => {
-    void onAlarm(alarm.name).catch(report('alarm'));
+    void (async () => {
+      // A short timer's alarm is only a heartbeat that re-arms its in-memory timer.
+      if (await scheduler.handleAlarm(alarm.name)) return;
+      await onAlarm(alarm.name);
+    })().catch(report('alarm'));
   });
+
+  // Every time the worker starts (not just at browser startup): re-arm short timers and
+  // recreate alarms the browser may have dropped.
+  void scheduler.restoreAll().catch(report('restore timers'));
 
   browser.runtime.onStartup.addListener(() => {
     void startAllEnabled().catch(report('startup'));

@@ -36,12 +36,22 @@ never which block sent it.
 
 ## Surviving the background worker sleeping
 
-Chrome stops the MV3 service worker after about 30 seconds idle, so nothing important lives in memory:
+Chrome stops the MV3 service worker after about 30 seconds idle (and the keep-alive above is only a
+convenience for short timers), so nothing important lives in memory:
 
-- **Timers** go through `Scheduler` (backed by `browser.alarms`). The alarm name is a key
-  `bf::<workflowId>::<nodeId>::<timerName>`. When an alarm fires, `background.ts` builds a **fresh**
-  `WorkflowRunner` and calls `handleTimer(key)`, which finds the block and calls its `onTimer`.
-  Data a timer carries (the payload a delay-Timer is holding) is stored next to the alarm.
+- **Timers** go through `Scheduler`, implemented by `HybridScheduler` (`src/browser/hybridScheduler.ts`).
+  The timer key is `bf::<workflowId>::<nodeId>::<timerName>`. Every timer is stored in `storage.local`
+  (`bf:timer:<key>`, including any payload it carries) and has a `browser.alarms` entry.
+  - **30s or more:** the alarm does the work. When it fires, `background.ts` builds a **fresh**
+    `WorkflowRunner` and calls `handleTimer(key)`, which finds the block and calls its `onTimer`.
+  - **Under 30s** (alarms cannot do this in published extensions): an in-memory `setTimeout` fires it, then
+    goes through the same `onAlarm` path. While any such timer is armed, a ping (`runtime.getPlatformInfo`
+    every 20s) resets the worker's idle timer so it is not stopped. The alarm becomes a 30s *heartbeat*:
+    if the worker dies anyway, the heartbeat wakes it and `handleAlarm()` re-arms the in-memory timer.
+  - `restoreAll()` runs on every worker start: it recreates alarms the browser forgot and re-arms short
+    timers. An overdue periodic timer waits a full period; an overdue one-shot fires straight away.
+  - All browser access is behind small ports (alarms, store, clock, ping), so the logic is tested with a
+    fake clock in `tests/browser/hybridScheduler.test.ts`.
 - **Block state** (the last value Watch Element saw, a Timer's tick count) is in `Host.state`
   (`storage.local`), via `ctx.state`.
 - `start()` is only called when a workflow is enabled or edited, on browser startup, and on install. A

@@ -9,7 +9,8 @@ WXT + React + TypeScript + React Flow. Read `README.md` for the product and `doc
 npm install            # runs `wxt prepare` (generates .wxt/ types)
 npm run typecheck      # tsc --noEmit
 npm test               # vitest run (core + editor in Node, tests/dom in jsdom)
-npm run check          # both
+npm run check          # typecheck + tests + learning examples in sync
+npm run learn:sync     # regenerate docs/learning/examples from the lessons (learn:check verifies)
 npm run dev            # Chrome with hot reload; `npm run dev:firefox` for Firefox
 npm run build / build:firefox / build:safari
 ```
@@ -26,9 +27,9 @@ Prototype 1 was written where npm was blocked, so it was verified only partially
    before suspecting the code.
 3. `npm run build` and `npm run build:firefox`.
 4. `npm run dev`, then walk through "Try it end to end" in the README using `docs/manual-test/clock.html`.
-5. Confirm the things that were never run for real: alarms firing and restarting the flow, the picker
-   injection (`/content-scripts/picker.js` path), Watch Element reading a background tab, Firefox host
-   permission grant, Safari conversion.
+5. Confirm what was only run through a shim, not a real WXT build: the picker injection path
+   (`/content-scripts/picker.js`), Watch Element, short and long timers (all passed in unpacked Chromium 141 with a
+   thin `wxt/browser` shim). Still never run: Firefox host permission grant, Safari conversion, a worker restart mid-run.
 
 ## Rules of the codebase
 
@@ -36,14 +37,29 @@ Prototype 1 was written where npm was blocked, so it was verified only partially
   through `Host` (`src/core/types.ts`). That is what keeps the engine unit-testable.
 - Use `import type` for type-only imports (`verbatimModuleSyntax` is on).
 - Relative imports only. No path aliases (the Node test runner and WXT must agree).
-- Never use `setTimeout`/`setInterval` for workflow timing: the MV3 worker sleeps. Use
+- Never use `setTimeout`/`setInterval` in blocks for workflow timing: the MV3 worker sleeps. Use
   `ctx.timers.set(...)` and handle it in `onTimer`. Keep anything a block must remember in `ctx.state`.
+  (Timers under 30s are handled for you by `HybridScheduler`: in-memory timers + keep-alive ping, alarm as heartbeat.
+  Only `src/browser/hybridScheduler.ts` may use `setTimeout`/`setInterval`, via its injected `Clock`.)
 - Block payloads must stay JSON-serialisable (they are stored with alarms).
 - Register all event listeners synchronously at the top of `defineBackground` (service worker rule).
 - WXT auto-imports `defineBackground` / `defineContentScript`; `browser` is imported from `wxt/browser`.
 - React Flow node `data` types must be `type` aliases, not interfaces (see `BlockNodeData`).
 - Add or change a block: edit `src/core/blocks/`, register in `index.ts`, test with `tests/helpers/fakeHost.ts`.
   The editor needs no changes.
+
+## Learning material (keep it current)
+
+`docs/learning/` is a hand-coding course for the project owner, who knows React/Next.js/SaaS but is new to
+extensions and wants to write their own extension by hand. **While you build or change things here, also write
+or update the matching lesson in the same change.** Read `docs/learning/MAINTAINING.md` first; the short version:
+
+- Lessons are numbered `NN-*.md`; start at `docs/learning/README.md`. Plain JS for lessons 1 to 5, WXT/React/TS after.
+- Code fences with `file=<example>/<name>` in a lesson are the source of truth for `docs/learning/examples/`.
+  After editing a lesson run `node docs/learning/tools/sync-examples.mjs`; `--check` must pass. Never hand-edit `examples/`.
+- Verify examples by loading them in real Chromium before claiming they work; mark unverified lessons with a `> **Status:**` note.
+- Match concepts to the owner's web-dev background first, then show the extension-specific difference.
+  End lessons with a checkpoint, exercises and an "In BlockFlow" pointer to real files.
 
 ## Where things are
 

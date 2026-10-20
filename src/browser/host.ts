@@ -1,9 +1,8 @@
 import { browser } from 'wxt/browser';
 import { STORAGE_KEYS } from '../shared/keys';
 import { readElement } from './pageReader';
-import { AlarmScheduler } from './scheduler';
 import { requireTabId } from './tabs';
-import type { Host, OpenTabOptions, StateStore } from '../core/types';
+import type { Host, OpenTabOptions, Scheduler, StateStore } from '../core/types';
 
 class StorageState implements StateStore {
   async get(key: string): Promise<unknown> {
@@ -30,11 +29,11 @@ async function openTab({ url, newTab, active }: OpenTabOptions): Promise<{ tabId
 }
 
 /** The real Host: connects the engine to the browser. */
-export function createExtensionHost(): Host {
+export function createExtensionHost(scheduler: Scheduler): Host {
   return {
     tabs: { open: openTab },
     page: { readElement },
-    scheduler: new AlarmScheduler(),
+    scheduler,
     state: new StorageState(),
     now: () => new Date(),
   };

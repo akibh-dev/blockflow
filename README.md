@@ -98,6 +98,7 @@ src/
 tests/                   Vitest. core/ and editor/ run in Node, dom/ runs in jsdom.
 docs/ARCHITECTURE.md     how it fits together and why
 docs/manual-test/        a page that changes on every load, for end-to-end testing
+docs/learning/           hand-coding course: build your own extension step by step (start at its README)
 ```
 
 ## Adding a block
@@ -122,15 +123,19 @@ WXT build were **not** run there. What was checked, and how:
 | Selector generator and element picker (29 tests) | Run in real Chromium 141, passing. Not yet run under jsdom. |
 | React editor (state sync, autosave, validation, picker round trip, logs) | Driven in Chromium with React 19 in dev mode: 39 checks, no warnings, no render loops. React Flow itself was **faked**, so dragging, connecting and visuals are untested. |
 | `npm install`, `wxt build`, `tsc` against real WXT/React Flow types | **Not run.** First thing to do. |
-| Real extension behaviour (alarms, tabs, scripting, picker injection) in Chrome / Firefox / Safari | **Not run.** |
+| Real extension in Chromium 141 (unpacked MV3, bundled background + picker, local test server): 5s Timer → Open URL and Watch Element every 5s for 50s, disable stops everything, element picker round trip (15 checks) | Run, passing. Used the real background code with a thin `wxt/browser` shim, not a WXT build. |
+| Same on Firefox / Safari, Chrome Web Store build, a worker restart mid-run in a real browser | **Not run.** |
 
 Expect small fixes on first contact with real dependencies, most likely type errors in `src/browser` and
 the editor, or dependency version bumps.
 
 ## Known limitations
 
-- **Timers are coarse.** Background timers use `browser.alarms`, which Chrome limits to about 30 seconds.
-  A 5-second Timer will not fire every 5 seconds.
+- **Short timers keep the worker awake.** Browsers limit `browser.alarms` to about 30 seconds, so timers
+  below that run from in-memory timers plus a keep-alive ping (the alarm remains as a 30s heartbeat that
+  revives the worker after a crash or browser restart). Verified in Chromium 141 with 5s timers running for
+  50s. Costs a little battery while such a workflow is enabled. Firefox/Safari event pages and Safari in
+  particular may still suspend the worker: untested. Timers of 30s or more are alarm-only and cheap.
 - **Watch Element uses its own background tab** per watched URL (never your own tabs) and reloads it on each
   check by default. Pages that need a login work if you are signed in in the same browser profile.
 - Broad site access (`<all_urls>`) for now. Later: ask for access per workflow with optional permissions.

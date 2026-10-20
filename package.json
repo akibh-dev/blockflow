@@ -16,7 +16,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run typecheck && npm run test",
+    "check": "npm run typecheck && npm run test && npm run learn:check",
+    "learn:sync": "node docs/learning/tools/sync-examples.mjs",
+    "learn:check": "node docs/learning/tools/sync-examples.mjs --check",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

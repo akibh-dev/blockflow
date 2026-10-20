@@ -1,55 +1,52 @@
 import { browser } from 'wxt/browser';
 import { STORAGE_KEYS } from '../shared/keys';
-import type { Payload, Scheduler, TimerOptions, TimerRecord } from '../core/types';
-
-interface StoredTimer {
-  data?: Payload;
-  periodic: boolean;
-}
+import { HybridScheduler } from './hybridScheduler';
+import type { StoredTimer } from './hybridScheduler';
 
 /**
- * Scheduler on top of browser.alarms, so timers survive the background worker being put to
- * sleep. The alarm name is the timer key; any payload the timer carries is kept in storage.
+ * The real scheduler: browser.alarms for durability, in-memory timers plus a keep-alive ping
+ * for intervals below the 30 second alarm minimum. See hybridScheduler.ts for how it works.
  *
- * Note: Chrome enforces a minimum alarm period of about 30 seconds.
+ * `fire` is called when a short timer is due; the background worker points it at the same
+ * code path an alarm uses.
  */
-export class AlarmScheduler implements Scheduler {
-  async set(key: string, options: TimerOptions, data?: Payload): Promise<void> {
-    const record: StoredTimer = { periodic: options.periodMs !== undefined, ...(data ? { data } : {}) };
-    // Store first: the alarm can only fire after the record is there.
-    await browser.storage.local.set({ [STORAGE_KEYS.timerPrefix + key]: record });
-    await browser.alarms.create(key, {
-      when: Date.now() + options.delayMs,
-      ...(options.periodMs !== undefined ? { periodInMinutes: options.periodMs / 60_000 } : {}),
-    });
-  }
+export function createBrowserScheduler(fire: (key: string) => void | Promise<void>): HybridScheduler {
+  const prefix = STORAGE_KEYS.timerPrefix;
 
-  async clear(key: string): Promise<void> {
-    await browser.alarms.clear(key);
-    await browser.storage.local.remove(STORAGE_KEYS.timerPrefix + key);
-  }
-
-  async clearPrefix(prefix: string): Promise<void> {
-    const alarms = await browser.alarms.getAll();
-    await Promise.all(alarms.filter((alarm) => alarm.name.startsWith(prefix)).map((alarm) => browser.alarms.clear(alarm.name)));
-
-    const everything = await browser.storage.local.get(null);
-    const stale = Object.keys(everything).filter((name) =>
-      name.startsWith(STORAGE_KEYS.timerPrefix + prefix),
-    );
-    if (stale.length > 0) await browser.storage.local.remove(stale);
-  }
-
-  async take(key: string): Promise<TimerRecord | undefined> {
-    const storageKey = STORAGE_KEYS.timerPrefix + key;
-    const stored = await browser.storage.local.get(storageKey);
-    const record = stored[storageKey] as StoredTimer | undefined;
-    if (!record) {
-      // An alarm with no record is left over from a cleared timer. Make sure it stops.
-      await browser.alarms.clear(key);
-      return undefined;
-    }
-    if (!record.periodic) await browser.storage.local.remove(storageKey);
-    return { periodic: record.periodic, ...(record.data ? { data: record.data } : {}) };
-  }
+  return new HybridScheduler({
+    alarms: {
+      create: async (name, info) => {
+        await browser.alarms.create(name, info);
+      },
+      clear: async (name) => {
+        await browser.alarms.clear(name);
+      },
+      names: async () => (await browser.alarms.getAll()).map((alarm) => alarm.name),
+    },
+    store: {
+      async get(key) {
+        const storageKey = prefix + key;
+        const stored = await browser.storage.local.get(storageKey);
+        return stored[storageKey] as StoredTimer | undefined;
+      },
+      set: (key, record) => browser.storage.local.set({ [prefix + key]: record }),
+      remove: (key) => browser.storage.local.remove(prefix + key),
+      async keys() {
+        const everything = await browser.storage.local.get(null);
+        return Object.keys(everything)
+          .filter((name) => name.startsWith(prefix))
+          .map((name) => name.slice(prefix.length));
+      },
+    },
+    clock: {
+      now: () => Date.now(),
+      setTimeout: (fn, ms) => setTimeout(fn, ms),
+      clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+      setInterval: (fn, ms) => setInterval(fn, ms),
+      clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),
+    },
+    fire,
+    // Any extension API call resets the worker's idle timer; this is the cheapest one.
+    ping: () => browser.runtime.getPlatformInfo(),
+  });
 }

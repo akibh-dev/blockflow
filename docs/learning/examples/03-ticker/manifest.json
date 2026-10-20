@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Ticker",
+  "version": "0.1.0",
+  "description": "Counts every 30 seconds, even though the worker keeps being stopped.",
+  "action": { "default_popup": "popup.html" },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["alarms", "storage"]
+}

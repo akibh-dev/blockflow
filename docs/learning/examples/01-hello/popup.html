@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Hello</title>
+    <style>
+      body { font: 14px system-ui, sans-serif; width: 280px; padding: 12px; }
+      h1 { font-size: 15px; margin: 0 0 8px; }
+      #url { color: #555; word-break: break-all; }
+      button { margin-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <h1 id="title">Loading…</h1>
+    <div id="url"></div>
+    <button id="copy">Copy address</button>
+    <!-- Must be a separate file: Manifest V3 forbids inline <script> blocks. -->
+    <script src="popup.js"></script>
+  </body>
+</html>

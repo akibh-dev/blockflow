@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Hello Learner",
+  "version": "0.1.0",
+  "description": "Shows the title and address of the current page.",
+  "action": {
+    "default_title": "Hello",
+    "default_popup": "popup.html"
+  },
+  "permissions": ["activeTab"]
+}
