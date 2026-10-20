@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>BlockFlow test page</title>
+    <style>
+      body { font: 18px system-ui, sans-serif; max-width: 520px; margin: 48px auto; line-height: 1.5; }
+      #now { font: 700 28px ui-monospace, monospace; }
+      .stable { color: #555; }
+    </style>
+  </head>
+  <body>
+    <h1>BlockFlow test page</h1>
+    <p>Time when this page loaded (changes on every reload):</p>
+    <p><span id="now">…</span></p>
+    <p class="stable">This line never changes, so watching it should never fire.</p>
+    <script>
+      document.getElementById('now').textContent = new Date().toLocaleTimeString();
+    </script>
+  </body>
+</html>

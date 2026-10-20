@@ -1,0 +1,396 @@
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --border: #e2e5ea;
+  --text: #1b1e24;
+  --muted: #6b7280;
+  --primary: #2563eb;
+  --danger: #dc2626;
+  --ok: #16a34a;
+  color-scheme: light dark;
+  font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f25;
+    --border: #2d323b;
+    --text: #e8eaee;
+    --muted: #9aa1ad;
+    --primary: #60a5fa;
+    --danger: #f87171;
+    --ok: #4ade80;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 5px 10px;
+}
+
+button:hover {
+  border-color: var(--primary);
+}
+
+input[type='text'],
+input[type='number'],
+select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.bf-link {
+  border: 0;
+  background: none;
+  color: var(--primary);
+  padding: 2px 4px;
+}
+
+.bf-muted {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 4px 0;
+}
+
+.bf-error {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.bf-loading {
+  padding: 40px;
+  color: var(--muted);
+}
+
+/* Layout */
+
+.bf-app {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr) 300px;
+  grid-template-rows: 48px minmax(0, 1fr) 190px;
+  grid-template-areas:
+    'header header header'
+    'sidebar canvas config'
+    'logs logs logs';
+  height: 100vh;
+}
+
+.bf-header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.bf-brand {
+  font-size: 15px;
+}
+
+.bf-name {
+  width: 280px !important;
+  font-weight: 600;
+}
+
+.bf-spacer {
+  flex: 1;
+}
+
+.bf-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.bf-sidebar {
+  grid-area: sidebar;
+  overflow: auto;
+  padding: 12px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+}
+
+.bf-section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 8px 0 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.bf-workflow-list,
+.bf-palette {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bf-workflow-list button,
+.bf-palette button {
+  width: 100%;
+  text-align: left;
+}
+
+.bf-workflow-list button.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, var(--panel));
+}
+
+.bf-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.bf-dot.on {
+  background: var(--ok);
+}
+
+.bf-palette button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-left: 4px solid var(--border);
+  cursor: grab;
+}
+
+.bf-palette span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.bf-canvas {
+  grid-area: canvas;
+  position: relative;
+  min-width: 0;
+}
+
+.bf-empty {
+  position: absolute;
+  inset: auto 0 40% 0;
+  margin: 0 auto;
+  max-width: 360px;
+  text-align: center;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* Blocks on the canvas */
+
+.bf-node {
+  min-width: 170px;
+  max-width: 240px;
+  padding: 8px 12px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.bf-node.selected {
+  outline: 2px solid var(--primary);
+}
+
+.bf-node.has-problem {
+  border-color: var(--danger);
+}
+
+.bf-node-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bf-node-summary {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bf-badge {
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Settings panel */
+
+.bf-config {
+  grid-area: config;
+  overflow: auto;
+  padding: 14px;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+}
+
+.bf-config h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.bf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0;
+}
+
+.bf-field > span {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.bf-field input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+}
+
+.bf-pick.waiting {
+  color: var(--primary);
+}
+
+.bf-pick.done {
+  color: var(--ok);
+}
+
+.bf-pick.error {
+  color: var(--danger);
+}
+
+.bf-problems {
+  margin: 10px 0;
+  padding: 8px 8px 8px 24px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.bf-outputs {
+  margin: 14px 0;
+  font-size: 13px;
+}
+
+.bf-outputs ul {
+  padding-left: 18px;
+}
+
+.bf-danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+/* Log panel */
+
+.bf-logs {
+  grid-area: logs;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+}
+
+.bf-logs header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.bf-logs header label {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.bf-log-lines {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 14px;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.bf-log {
+  display: flex;
+  gap: 10px;
+}
+
+.bf-log time {
+  color: var(--muted);
+  flex: none;
+}
+
+.bf-log-label {
+  flex: none;
+  min-width: 90px;
+  color: var(--muted);
+}
+
+.bf-log.debug {
+  opacity: 0.55;
+}
+
+.bf-log.warn {
+  color: #d97706;
+}
+
+.bf-log.error {
+  color: var(--danger);
+}
+
+@media (max-width: 1000px) {
+  .bf-app {
+    grid-template-columns: 200px minmax(0, 1fr) 260px;
+  }
+}

@@ -1,0 +1,123 @@
+import { browser } from 'wxt/browser';
+import { createExtensionHost } from '../browser/host';
+import { cancelPicking, finishPicking, startPicking } from '../browser/picking';
+import { appendLog, loadWorkflows, saveWorkflows } from '../browser/stores';
+import { createDefaultRegistry } from '../core/blocks';
+import { WorkflowRunner } from '../core/engine';
+import { sampleWorkflows } from '../core/samples';
+import { parseTimerKey, workflowTimerPrefix } from '../core/timerKey';
+import { diffWorkflows } from '../core/workflow';
+import { STORAGE_KEYS } from '../shared/keys';
+import { isExtensionMessage } from '../shared/messages';
+import type { Workflow } from '../core/types';
+
+/**
+ * Background worker: runs enabled workflows.
+ *
+ * It can be put to sleep at any time (Chrome) or run as an event page (Firefox/Safari), so
+ * it keeps no important state in memory. Everything a workflow needs lives in storage and
+ * browser alarms; a runner is rebuilt whenever an alarm fires.
+ */
+export default defineBackground(() => {
+  const host = createExtensionHost();
+  const registry = createDefaultRegistry();
+
+  const newRunner = (workflow: Workflow) =>
+    new WorkflowRunner({ workflow, registry, host, log: (entry) => void appendLog(entry) });
+
+  async function startWorkflow(id: string): Promise<void> {
+    const workflow = (await loadWorkflows()).find((candidate) => candidate.id === id);
+    if (workflow?.enabled) await newRunner(workflow).start();
+  }
+
+  async function stopWorkflow(id: string): Promise<void> {
+    await host.scheduler.clearPrefix(workflowTimerPrefix(id));
+  }
+
+  async function startAllEnabled(): Promise<void> {
+    for (const workflow of await loadWorkflows()) {
+      if (workflow.enabled) await newRunner(workflow).start();
+    }
+  }
+
+  async function onAlarm(name: string): Promise<void> {
+    const parsed = parseTimerKey(name);
+    if (!parsed) return; // not one of ours
+    const workflow = (await loadWorkflows()).find((candidate) => candidate.id === parsed.workflowId);
+    if (!workflow || !workflow.enabled) {
+      await host.scheduler.clear(name); // orphaned alarm
+      return;
+    }
+    await newRunner(workflow).handleTimer(name);
+  }
+
+  async function openEditor(): Promise<void> {
+    const url = browser.runtime.getURL('/editor.html');
+    const [existing] = await browser.tabs.query({ url });
+    if (existing?.id !== undefined) {
+      await browser.tabs.update(existing.id, { active: true });
+      if (existing.windowId !== undefined) await browser.windows.update(existing.windowId, { focused: true });
+    } else {
+      await browser.tabs.create({ url });
+    }
+  }
+
+  const report = (what: string) => (error: unknown) => {
+    console.error(`[BlockFlow] ${what} failed`, error);
+  };
+
+  // Listeners are registered synchronously, as service workers require.
+
+  browser.alarms.onAlarm.addListener((alarm) => {
+    void onAlarm(alarm.name).catch(report('alarm'));
+  });
+
+  browser.runtime.onStartup.addListener(() => {
+    void startAllEnabled().catch(report('startup'));
+  });
+
+  browser.runtime.onInstalled.addListener((details) => {
+    void (async () => {
+      if (details.reason === 'install' && (await loadWorkflows()).length === 0) {
+        await saveWorkflows(sampleWorkflows());
+      }
+      await startAllEnabled();
+    })().catch(report('install'));
+  });
+
+  // The editor saves workflows to storage; reacting to that keeps the editor and the worker decoupled.
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    const change = changes[STORAGE_KEYS.workflows];
+    if (!change) return;
+    const { start, stop } = diffWorkflows(
+      change.oldValue as Workflow[] | undefined,
+      change.newValue as Workflow[] | undefined,
+    );
+    void (async () => {
+      for (const id of stop) await stopWorkflow(id);
+      for (const id of start) await startWorkflow(id);
+    })().catch(report('workflow change'));
+  });
+
+  browser.action.onClicked.addListener(() => {
+    void openEditor().catch(report('open editor'));
+  });
+
+  browser.runtime.onMessage.addListener((message, sender) => {
+    if (!isExtensionMessage(message)) return;
+    switch (message.type) {
+      case 'bf:start-pick':
+        void startPicking(sender.tab?.id, message.url).catch(report('start picking'));
+        break;
+      case 'bf:picked':
+        void finishPicking(message).catch(report('finish picking'));
+        break;
+      case 'bf:pick-cancelled':
+        void cancelPicking().catch(report('cancel picking'));
+        break;
+      default:
+        break; // pick-result / pick-error are for the editor
+    }
+  });
+});

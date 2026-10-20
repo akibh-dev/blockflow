@@ -1,0 +1,9 @@
+node_modules
+.output
+.wxt
+.env
+*.log
+web-ext.log
+dist
+coverage
+.DS_Store
