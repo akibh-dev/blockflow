@@ -1,0 +1,204 @@
+// @vitest-environment jsdom
+import { createElement, useState } from 'react';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { createAgent } from '../../src/dom/agent';
+import type { AgentRequest, AgentResponse } from '../../src/core/page';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const agent = createAgent();
+const run = (request: AgentRequest, budgetMs = 0): Promise<AgentResponse> => agent.run({ request, budgetMs });
+const page = (html: string) => {
+  document.body.innerHTML = html;
+};
+const $ = <T extends Element = HTMLInputElement>(selector: string) => document.querySelector(selector) as T;
+
+beforeEach(() => page(''));
+
+describe('click', () => {
+  it('fires the full mouse sequence and the default action', async () => {
+    page('<button id="b">Go</button><input id="c" type="checkbox">');
+    const events: string[] = [];
+    for (const type of ['mouseover', 'mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu']) {
+      $('#b').addEventListener(type, () => events.push(type));
+    }
+    expect(await run({ op: 'click', locator: '#b', action: 'click' })).toMatchObject({ status: 'done' });
+    expect(events).toEqual(['mouseover', 'mousedown', 'mouseup', 'click']);
+    expect(document.activeElement?.id).toBe('b');
+
+    events.length = 0;
+    await run({ op: 'click', locator: '#b', action: 'double' });
+    expect(events.filter((type) => type === 'click')).toHaveLength(2);
+    expect(events.at(-1)).toBe('dblclick');
+
+    await run({ op: 'click', locator: '#c', action: 'click' });
+    expect($('#c').checked).toBe(true);
+  });
+
+  it('is strict: two matches is an error that says how to fix it', async () => {
+    page('<button>A</button><button>B</button>');
+    const response = await run({ op: 'click', locator: 'button', action: 'click' });
+    expect(response.status).toBe('error');
+    expect(response.status === 'error' && response.message).toContain('matches 2 elements');
+    expect(response.status === 'error' && response.message).toContain('nth=0');
+  });
+
+  it('waits for a missing, hidden or disabled element, and says what it waited for', async () => {
+    page('<button id="b" disabled>Go</button><button id="h" style="display:none">Hidden</button>');
+    expect(await run({ op: 'click', locator: '#nope', action: 'click' })).toEqual({
+      status: 'pending',
+      reason: 'waiting for #nope: no element matches',
+    });
+    expect(await run({ op: 'click', locator: '#b', action: 'click' })).toMatchObject({ reason: expect.stringContaining('to be enabled') });
+    expect(await run({ op: 'click', locator: '#h', action: 'click' })).toMatchObject({ reason: expect.stringContaining('to be visible') });
+  });
+
+  it('keeps retrying inside the page until the element shows up', async () => {
+    page('<div id="root"></div>');
+    setTimeout(() => {
+      $('#root').innerHTML = '<button id="late">Late</button>';
+    }, 120);
+    expect(await run({ op: 'click', locator: '#late', action: 'click' }, 1000)).toMatchObject({ status: 'done' });
+  });
+
+  it('force skips the checks', async () => {
+    page('<button id="b" disabled>Go</button>');
+    expect(await run({ op: 'click', locator: '#b', action: 'click', force: true })).toMatchObject({ status: 'done' });
+  });
+});
+
+describe('fill and type', () => {
+  it('fills inputs and textareas with input + change events', async () => {
+    page('<input id="i"><textarea id="t"></textarea>');
+    const events: string[] = [];
+    $('#i').addEventListener('input', () => events.push('input'));
+    $('#i').addEventListener('change', () => events.push('change'));
+    await run({ op: 'fill', locator: '#i', value: 'hello', mode: 'fill' });
+    await run({ op: 'fill', locator: '#t', value: 'multi\nline', mode: 'fill' });
+    expect($('#i').value).toBe('hello');
+    expect($<HTMLTextAreaElement>('#t').value).toBe('multi\nline');
+    expect(events).toEqual(['input', 'change']);
+  });
+
+  it('types key by key, replacing what was there', async () => {
+    page('<input id="i" value="old">');
+    const keys: string[] = [];
+    $('#i').addEventListener('keydown', (event) => keys.push((event as KeyboardEvent).key));
+    await run({ op: 'fill', locator: '#i', value: 'abc', mode: 'type' });
+    expect($('#i').value).toBe('abc');
+    expect(keys).toEqual(['a', 'b', 'c']);
+  });
+
+  it('refuses read-only fields (waits) and non-text fields (error)', async () => {
+    page('<input id="r" readonly><input id="c" type="checkbox"><div id="d">x</div>');
+    expect(await run({ op: 'fill', locator: '#r', value: 'x', mode: 'fill' })).toMatchObject({ status: 'pending' });
+    expect(await run({ op: 'fill', locator: '#c', value: 'x', mode: 'fill' })).toMatchObject({ status: 'error' });
+    expect(await run({ op: 'fill', locator: '#d', value: 'x', mode: 'fill' })).toMatchObject({ status: 'error' });
+  });
+
+  it('updates a React controlled input (React ignores plain value assignment)', async () => {
+    const seen: string[] = [];
+    function Form() {
+      const [email, setEmail] = useState('');
+      const [agree, setAgree] = useState(false);
+      const [plan, setPlan] = useState('free');
+      seen.push(`${email}|${agree}|${plan}`);
+      return createElement(
+        'form',
+        null,
+        createElement('input', { id: 'email', value: email, onChange: (e: { target: HTMLInputElement }) => setEmail(e.target.value) }),
+        createElement('input', { id: 'agree', type: 'checkbox', checked: agree, onChange: (e: { target: HTMLInputElement }) => setAgree(e.target.checked) }),
+        createElement(
+          'select',
+          { id: 'plan', value: plan, onChange: (e: { target: HTMLSelectElement }) => setPlan(e.target.value) },
+          createElement('option', { value: 'free' }, 'Free'),
+          createElement('option', { value: 'pro' }, 'Pro plan'),
+        ),
+        createElement('output', { id: 'out' }, `${email}|${agree}|${plan}`),
+      );
+    }
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(createElement(Form)));
+
+    await act(async () => {
+      await run({ op: 'set-field', locator: '#email', value: 'a@b.co' });
+      await run({ op: 'set-field', locator: '#agree', value: 'true' });
+      await run({ op: 'set-field', locator: '#plan', value: 'Pro plan' });
+    });
+    expect($('#out').textContent).toBe('a@b.co|true|pro');
+    await act(async () => root.unmount());
+  });
+});
+
+describe('select, check, press', () => {
+  it('selects by value or label, waits for a missing option', async () => {
+    page('<select id="s"><option value="bd">Bangladesh</option><option value="us">United States</option></select>');
+    expect(await run({ op: 'select', locator: '#s', values: ['United States'] })).toMatchObject({ status: 'done', result: { selected: ['us'] } });
+    expect($<HTMLSelectElement>('#s').value).toBe('us');
+    expect(await run({ op: 'select', locator: '#s', values: ['fr'] })).toMatchObject({ status: 'pending', reason: expect.stringContaining('option "fr"') });
+  });
+
+  it('checks and unchecks; no-op when already in that state; ARIA switches too', async () => {
+    page('<input id="c" type="checkbox"><div id="sw" role="switch" aria-checked="false" tabindex="0"></div>');
+    $('#sw').addEventListener('click', () => $('#sw').setAttribute('aria-checked', String($('#sw').getAttribute('aria-checked') !== 'true')));
+    expect(await run({ op: 'check', locator: '#c', checked: true })).toMatchObject({ result: { changed: true } });
+    expect(await run({ op: 'check', locator: '#c', checked: true })).toMatchObject({ result: { changed: false } });
+    expect(await run({ op: 'check', locator: '#sw', checked: true })).toMatchObject({ result: { changed: true } });
+    expect($('#sw').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('Enter in a field submits its form; Tab moves focus; letters type', async () => {
+    page('<form id="f"><input id="a"><input id="b"></form>');
+    let submitted = 0;
+    $('#f').addEventListener('submit', (event) => {
+      event.preventDefault();
+      submitted += 1;
+    });
+    await run({ op: 'press', locator: '#a', key: 'x' });
+    expect($('#a').value).toBe('x');
+    await run({ op: 'press', locator: '#a', key: 'Tab' });
+    expect(document.activeElement?.id).toBe('b');
+    await run({ op: 'press', key: 'Enter' });
+    expect(submitted).toBe(1);
+  });
+});
+
+describe('read, wait, detect-form', () => {
+  it('reads text, value, attribute, count', async () => {
+    page('<p class="m">Hello</p><p class="m">Bye</p><input id="i" value="v">');
+    expect(await run({ op: 'read', locator: '.m', kind: 'text' })).toMatchObject({ result: { text: 'Hello', count: 2 } });
+    expect(await run({ op: 'read', locator: '#i', kind: 'value' })).toMatchObject({ result: { text: 'v' } });
+    expect(await run({ op: 'read', locator: '.none', kind: 'count' })).toMatchObject({ result: { text: '0' } });
+  });
+
+  it('waits for states and text', async () => {
+    page('<div id="msg" hidden>Saved!</div>');
+    expect(await run({ op: 'wait', state: 'hidden', locator: '#msg' })).toMatchObject({ status: 'done' });
+    expect(await run({ op: 'wait', state: 'visible', locator: '#msg' })).toMatchObject({ status: 'pending' });
+    expect(await run({ op: 'wait', state: 'attached', locator: '#msg' })).toMatchObject({ status: 'done' });
+    setTimeout(() => $('#msg').removeAttribute('hidden'), 60);
+    expect(await run({ op: 'wait', state: 'visible', locator: '#msg' }, 1000)).toMatchObject({ status: 'done' });
+    expect(await run({ op: 'wait', state: 'text', text: 'saved' })).toMatchObject({ status: 'done' });
+    expect(await run({ op: 'wait', state: 'no-text', text: 'saved' })).toMatchObject({ status: 'pending' });
+  });
+
+  it('detects a form\'s fields with readable locators', async () => {
+    page(`<form id="f">
+      <label for="e">Email</label><input id="e" type="email">
+      <input name="phone" placeholder="Phone">
+      <select name="country"><option value="">Pick</option><option value="bd">Bangladesh</option></select>
+      <label><input type="checkbox" name="tos"> I agree</label>
+      <input type="hidden" name="csrf"><button>Send</button>
+    </form>`);
+    const response = await run({ op: 'detect-form', locator: '#e' });
+    expect(response.status).toBe('done');
+    const fields = response.status === 'done' ? (response.result.fields as { locator: string; hint: string }[]) : [];
+    expect(fields.map((field) => field.locator)).toEqual(['label="Email"', 'placeholder="Phone"', 'select[name="country"]', 'label="I agree"']);
+    expect(fields[2]?.hint).toContain('select: Bangladesh');
+    expect(fields[3]?.hint).toContain('checkbox');
+  });
+});

@@ -19,7 +19,8 @@
     "check": "npm run typecheck && npm run test && npm run learn:check",
     "learn:sync": "node docs/learning/tools/sync-examples.mjs",
     "learn:check": "node docs/learning/tools/sync-examples.mjs --check",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "e2e": "npm run build && node tests/e2e/run.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.0.0",
@@ -31,6 +32,7 @@
     "@types/react-dom": "^19.0.0",
     "@wxt-dev/module-react": "^1.1.0",
     "jsdom": "^26.0.0",
+    "playwright-core": "^1.64.1",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0",
     "wxt": "^0.20.0"

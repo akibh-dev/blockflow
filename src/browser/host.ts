@@ -1,8 +1,10 @@
 import { browser } from 'wxt/browser';
 import { STORAGE_KEYS } from '../shared/keys';
+import { tabInfo, waitForLoad, waitForUrl } from './navigation';
+import { actInTab } from './pageDriver';
 import { readElement } from './pageReader';
 import { requireTabId, sleep } from './tabs';
-import type { Host, HttpRequestOptions, HttpResult, NotifyOptions, OpenTabOptions, Scheduler, StateStore } from '../core/types';
+import type { Host, HttpRequestOptions, HttpResult, NavigateOptions, NotifyOptions, OpenTabOptions, Scheduler, StateStore } from '../core/types';
 
 class StorageState implements StateStore {
   async get(key: string): Promise<unknown> {
@@ -16,16 +18,44 @@ class StorageState implements StateStore {
   }
 }
 
-async function openTab({ url, newTab, active }: OpenTabOptions): Promise<{ tabId: number }> {
-  if (!newTab) {
+async function openTab({ url, newTab, active, reuseTabId, newWindow, waitUntil = 'none', timeoutMs = 30_000 }: OpenTabOptions): Promise<{ tabId: number }> {
+  let tabId: number | undefined;
+  if (reuseTabId !== undefined && (await tabInfo(reuseTabId))) {
+    await browser.tabs.update(reuseTabId, { url, ...(active ? { active: true } : {}) });
+    tabId = reuseTabId;
+  } else if (!newTab) {
     const [current] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
     if (current?.id !== undefined) {
       await browser.tabs.update(current.id, { url });
-      return { tabId: current.id };
+      tabId = current.id;
     }
   }
-  const tab = await browser.tabs.create({ url, active });
-  return { tabId: requireTabId(tab) };
+  if (tabId === undefined) {
+    if (newWindow) {
+      const window = await browser.windows.create({ url, focused: active });
+      tabId = requireTabId(window?.tabs?.[0] ?? {});
+    } else {
+      tabId = requireTabId(await browser.tabs.create({ url, active }));
+    }
+  }
+  // Give the navigation a moment to start, so "complete" is not the previous page's.
+  if (waitUntil !== 'none') {
+    await sleep(100);
+    await waitForLoad(tabId, waitUntil, timeoutMs);
+  }
+  return { tabId };
+}
+
+async function navigate(tabId: number, { action, url, waitUntil, timeoutMs }: NavigateOptions): Promise<{ url: string }> {
+  if (action === 'goto') {
+    if (!url) throw new Error('Navigate needs a URL');
+    await browser.tabs.update(tabId, { url });
+  } else if (action === 'back') await browser.tabs.goBack(tabId);
+  else if (action === 'forward') await browser.tabs.goForward(tabId);
+  else await browser.tabs.reload(tabId);
+  await sleep(100);
+  await waitForLoad(tabId, waitUntil, timeoutMs);
+  return { url: (await tabInfo(tabId))?.url ?? '' };
 }
 
 const MAX_BODY_CHARS = 200_000;
@@ -51,8 +81,17 @@ export function createExtensionHost(scheduler: Scheduler): Host {
     sleep,
     http: { fetch: httpFetch },
     notify,
-    tabs: { open: openTab },
-    page: { readElement },
+    tabs: {
+      open: openTab,
+      navigate,
+      close: async (tabId) => {
+        if (await tabInfo(tabId)) await browser.tabs.remove(tabId);
+      },
+      info: tabInfo,
+      waitForLoad,
+      waitForUrl,
+    },
+    page: { readElement, act: actInTab },
     scheduler,
     state: new StorageState(),
     now: () => new Date(),

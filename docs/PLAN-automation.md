@@ -1,7 +1,7 @@
 # Plan: browser automation, testing and scraping
 
-Status (2026-10-23): **Phase A built** (see the table in section 6 for what is in and what moved).
-Phases B to F are plans. Today BlockFlow has 8 blocks
+Status (2026-10-23): **Phases A and B built** (see the table in section 6 for what is in and what moved).
+Phases C to F are plans. Today BlockFlow has 8 blocks
 (Timer, Open URL, Watch Element, Read Element, If, Set Variable, HTTP Request, Notify), a workflow
 manager and a run log.
 
@@ -369,7 +369,7 @@ the matching learning lesson updated (CLAUDE.md rule).
 | Phase | Builds | Done when |
 | --- | --- | --- |
 | **A. Engine foundation** ✅ built 2026-10-23. Not yet: Resume for interrupted runs (they are marked, with "Run" to start again), If with several and/or clauses in the UI (`condition.ts` supports them), run history in IndexedDB (uses `storage.local`, last 40 runs, payloads over 3 KB stored as a preview) | ports + migration, step settings, runStep wrapper, runs + journal, cancel, step budget, conditions core, If with true/false, Run/Stop button, live node status, step inspector | an If with two branches works in the editor; a failing step routes to `error`; a manual run shows per-step input/output; killing the worker mid-run marks it interrupted |
-| **B. Page agent + sessions** | locator engine, actionability, agent content script, `$session` tabs, Open Tab, Navigate, Click, Fill, Fill Form (+ Detect fields), Select, Check, Press Key, Wait For (element, URL, network idle, text), Read Element on session tabs | the fixture login form (React-controlled, SPA redirect) is filled, submitted and its success message read, in Chrome and Firefox |
+| **B. Page agent + sessions** ✅ built 2026-10-23 (`npm run e2e`, Chrome-family only so far; Firefox not run). Open URL became Open Tab (same type id, old settings still work). Not yet: frame= locators (phase F), a recorder-style ranked picker (the picker still returns CSS; phase E) | locator engine, actionability, agent content script, `$session` tabs, Open Tab, Navigate, Click, Fill, Fill Form (+ Detect fields), Select, Check, Press Key, Wait For (element, URL, network idle, text), Read Element on session tabs | the fixture login form (React-controlled, SPA redirect) is filled, submitted and its success message read, in Chrome and Firefox |
 | **C. Testing** | Assert, Expect Page, screenshots on failure, run history in IndexedDB, reports page, JUnit/HTML export, Manual Step, Run Workflow (sub-flows), secrets | "Login" sub-flow reused by 3 tests; a broken selector gives a red step with a screenshot and a readable message |
 | **D. Scraping and data** | Extract List, Extract Table, For Each, Loop, Paginate, Filter, Transform + expression language, datasets, Export CSV/JSON, data tables, Fetch & Parse (offscreen) | scrape a 3-page fixture list into a CSV; data-driven test runs once per CSV row |
 | **E. Recorder and productivity** | recorder, assert-from-page toolbar, picker candidates, `{{` autocomplete, undo/redo, copy/paste, templates, Page Visited and Context Menu triggers | recording the fixture login produces a flow that replays green without edits |

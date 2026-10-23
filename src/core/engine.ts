@@ -301,8 +301,8 @@ export class WorkflowRunner {
 
     const settings = node.step ?? {};
     const retries = clamp(settings.retries ?? 0, 0, MAX_RETRIES);
-    const timeoutSeconds = settings.timeoutSeconds && settings.timeoutSeconds > 0 ? settings.timeoutSeconds : DEFAULT_TIMEOUT_SECONDS;
-    const ctx = this.makeContext(node, resolved.config, run);
+    const timeoutSeconds = stepTimeoutSeconds(node, def);
+    const ctx = this.makeContext(node, resolved.config, run, 'start', timeoutSeconds * 1000);
 
     for (let attempt = 1; ; attempt += 1) {
       step.attempts = attempt;
@@ -427,7 +427,13 @@ export class WorkflowRunner {
    * `run` is set for blocks running as a step. Start blocks (start / onTimer) have none: their
    * `emit` begins a new run, with `trigger` saying what started it.
    */
-  private makeContext(node: NodeDef, config: object, run: ActiveRun | undefined, trigger: RunTrigger = 'start'): BlockContext<never> {
+  private makeContext(
+    node: NodeDef,
+    config: object,
+    run: ActiveRun | undefined,
+    trigger: RunTrigger = 'start',
+    timeoutMs = DEFAULT_TIMEOUT_SECONDS * 1000,
+  ): BlockContext<never> {
     const workflowId = this.workflow.id;
     const emit = async (payload: Payload, port: string = DEFAULT_PORT): Promise<void> => {
       if (run) {
@@ -448,6 +454,7 @@ export class WorkflowRunner {
       nodeId: node.id,
       config,
       isRoot: !this.hasIncoming.has(node.id),
+      timeoutMs,
       host: this.host,
       emit,
       log: (level, message) => this.log(level, node.id, message),
@@ -475,6 +482,13 @@ export class WorkflowRunner {
       message,
     });
   }
+}
+
+/** The step's own setting, else the block type's default, else DEFAULT_TIMEOUT_SECONDS. */
+export function stepTimeoutSeconds(node: Pick<NodeDef, 'step'>, def: Pick<AnyBlockDefinition, 'timeoutSeconds'> | undefined): number {
+  const own = node.step?.timeoutSeconds;
+  if (own && own > 0) return own;
+  return def?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
 }
 
 function errorMessage(error: unknown): string {

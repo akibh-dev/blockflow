@@ -6,7 +6,10 @@
  * whole engine can be unit-tested in plain Node.
  */
 
+import type { AgentRequest, ReadKind, WaitUntil } from './page';
 import type { Routed } from './ports';
+
+export type { ReadKind } from './page';
 
 /** Data passed from one block to the next. Must stay JSON-serialisable. */
 export type Payload = Record<string, unknown>;
@@ -89,8 +92,11 @@ interface FieldBase {
 }
 
 export interface TextField extends FieldBase {
-  /** "selector" renders a "pick on page" button in the editor. "url" is validated as http(s). */
-  kind: 'text' | 'url' | 'selector';
+  /**
+   * "selector" (CSS) and "locator" (any locator syntax, see src/dom/locator.ts) render a
+   * "pick on page" button in the editor. "url" is validated as http(s).
+   */
+  kind: 'text' | 'url' | 'selector' | 'locator';
   placeholder?: string;
   /** When true, `{{value}}` placeholders are filled from the incoming payload at run time. */
   templated?: boolean;
@@ -114,7 +120,24 @@ export interface SelectField extends FieldBase {
   options: { value: string; label: string }[];
 }
 
-export type FieldSpec = TextField | NumberField | BooleanField | SelectField;
+/** A table of rows, e.g. Fill Form's "field → value" list. Stored as an array of objects of strings. */
+export interface RowsField extends FieldBase {
+  kind: 'rows';
+  columns: {
+    key: string;
+    label: string;
+    placeholder?: string;
+    /** Renders a "pick on page" button for this column. */
+    locator?: boolean;
+    templated?: boolean;
+  }[];
+  /** Shows a "Detect fields" button that fills the rows from a form picked on the page. */
+  detectForm?: boolean;
+}
+
+export type FieldSpec = TextField | NumberField | BooleanField | SelectField | RowsField;
+
+export type Row = Record<string, string>;
 
 export interface OutputSpec {
   key: string;
@@ -136,6 +159,8 @@ export interface BlockContext<C extends object = BlockConfig> {
   config: C;
   /** True when no other block feeds this one, so it starts the flow. */
   isRoot: boolean;
+  /** How long this step may take (its step settings). Page blocks give their waits a little less. */
+  timeoutMs: number;
   host: Host;
   /** Send a payload to every block connected to one of this block's outputs (default "out"). */
   emit(payload: Payload, port?: string): Promise<void>;
@@ -170,6 +195,9 @@ export interface BlockDefinition<C extends object = BlockConfig> {
    * The engine adds an "error" output when the block's step settings ask for it.
    */
   ports?: string[];
+
+  /** Default timeout for this kind of block, in seconds (engine default: 60). Page actions use 30. */
+  timeoutSeconds?: number;
 
   /**
    * Called when the workflow starts, for blocks that nothing else feeds ("root" blocks).
@@ -232,10 +260,27 @@ export interface OpenTabOptions {
   /** false = navigate the current tab instead of opening a new one. */
   newTab: boolean;
   active: boolean;
+  /** Navigate this tab instead, if it still exists (a workflow's own tab, reused between runs). */
+  reuseTabId?: number;
+  /** Open in a new window (tests: a visible window is not throttled like a background tab). */
+  newWindow?: boolean;
+  /** Default 'none': do not wait. */
+  waitUntil?: WaitUntil;
+  timeoutMs?: number;
 }
 
-/** What to read from the element. Default is its text. */
-export type ReadKind = 'text' | 'attribute' | 'has-class' | 'exists' | 'count';
+export interface NavigateOptions {
+  action: 'goto' | 'back' | 'forward' | 'reload';
+  url?: string;
+  waitUntil: WaitUntil;
+  timeoutMs: number;
+}
+
+export interface TabInfo {
+  url: string;
+  title: string;
+  loading: boolean;
+}
 
 export interface ReadElementOptions {
   url: string;
@@ -284,9 +329,22 @@ export interface Host {
   notify(options: NotifyOptions): Promise<void>;
   tabs: {
     open(options: OpenTabOptions): Promise<{ tabId: number }>;
+    navigate(tabId: number, options: NavigateOptions): Promise<{ url: string }>;
+    close(tabId: number): Promise<void>;
+    /** null when the tab no longer exists. */
+    info(tabId: number): Promise<TabInfo | null>;
+    waitForLoad(tabId: number, until: WaitUntil, timeoutMs: number): Promise<void>;
+    /** Resolves with the URL once it matches `pattern` (see urlPattern.ts). */
+    waitForUrl(tabId: number, pattern: string, timeoutMs: number): Promise<string>;
   };
   page: {
+    /** Watch Element / Read Element without a tab: BlockFlow's own background tab per URL. */
     readElement(options: ReadElementOptions): Promise<ReadElementResult>;
+    /**
+     * Runs one request in a tab through the page agent, waiting until it can be done (element
+     * present, visible, enabled...) or `timeoutMs` passes. Throws with the reason.
+     */
+    act(tabId: number, request: AgentRequest, timeoutMs: number): Promise<Record<string, unknown>>;
   };
   scheduler: Scheduler;
   state: StateStore;

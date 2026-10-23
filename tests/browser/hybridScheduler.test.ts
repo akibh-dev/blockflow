@@ -377,6 +377,7 @@ describe('with the workflow engine', () => {
       fire: (key) => holder.runner?.handleTimer(key),
       ping: () => {},
     });
+    // Same fake browser as FakeHost, but with the real HybridScheduler.
     const host: Host = {
       sleep: base.sleep,
       http: base.http,

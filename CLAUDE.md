@@ -10,6 +10,7 @@ npm install            # runs `wxt prepare` (generates .wxt/ types)
 npm run typecheck      # tsc --noEmit
 npm test               # vitest run (core + editor in Node, tests/dom in jsdom)
 npm run check          # typecheck + tests + learning examples in sync
+npm run e2e            # build + drive the real extension in Brave/Chromium (tests/e2e, fixtures in tests/fixtures/site)
 npm run learn:sync     # regenerate docs/learning/examples from the lessons (learn:check verifies)
 npm run dev            # Chrome with hot reload; `npm run dev:firefox` for Firefox
 npm run build / build:firefox / build:safari
@@ -40,13 +41,19 @@ Prototype 1 was written where npm was blocked, so it was verified only partially
 - Never use `setTimeout`/`setInterval` in blocks for workflow timing: the MV3 worker sleeps. Use
   `ctx.timers.set(...)` and handle it in `onTimer`. Keep anything a block must remember in `ctx.state`.
   (Timers under 30s are handled for you by `HybridScheduler`: in-memory timers + keep-alive ping, alarm as heartbeat.
-  Only `src/browser/hybridScheduler.ts` may use `setTimeout`/`setInterval`, via its injected `Clock`.)
+  Only `src/browser/hybridScheduler.ts` may use `setTimeout`/`setInterval` for timers, via its injected `Clock`.
+  Short polling inside one step, in `src/browser` (`sleep` from `tabs.ts`) or in the page agent, is fine;
+  the engine waits through `Host.sleep`.)
 - Block payloads must stay JSON-serialisable (they are stored with alarms).
 - Register all event listeners synchronously at the top of `defineBackground` (service worker rule).
 - WXT auto-imports `defineBackground` / `defineContentScript`; `browser` is imported from `wxt/browser`.
 - React Flow node `data` types must be `type` aliases, not interfaces (see `BlockNodeData`).
 - Add or change a block: edit `src/core/blocks/`, register in `index.ts`, test with `tests/helpers/fakeHost.ts`.
   The editor needs no changes.
+- Blocks that touch a page go through `ctx.host.page.act(tabId, request, …)` (requests in `src/core/page.ts`,
+  carried out by `src/dom/agent.ts`), and find their tab with `requireSessionTab(input, ctx.config.tab)`.
+  New page abilities: add an op to `page.ts`, implement it in `agent.ts` with a jsdom test, then the block.
+- `src/dom/*` runs inside web pages: DOM only, `import type` from elsewhere.
 
 ## Learning material (keep it current)
 

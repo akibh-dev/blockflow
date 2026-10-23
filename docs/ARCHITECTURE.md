@@ -75,6 +75,43 @@ convenience for short timers), so nothing important lives in memory:
 - `diffWorkflows()` compares old and new saved workflows. It ignores block positions and names, so
   dragging a block never restarts a workflow.
 
+## Page blocks and the page agent
+
+A run keeps its tabs by name in the payload: `$session.tabs.main = <tabId>` (`src/core/session.ts`). Open
+Tab adds one; every page block has a Tab field (default `main`) and fails with a clear message if that tab
+is not in the run. Being plain payload data, it survives timers and worker restarts.
+
+Page blocks send one request each to `Host.page.act(tabId, request, timeoutMs)` (`src/core/page.ts`):
+
+```text
+ block (core) ── act() ──▶ pageDriver.ts ── scripting.executeScript ──▶ agent (content script, isolated world)
+                           │  inject agent.js when the page has none           │ locator.ts: find
+                           │  ask again every ≤2s until the timeout            │ actionability: visible, enabled,
+                           │  "vanished" after an action = it navigated        │   stable, not covered
+                           ◀────── done / pending + reason / error ────────────┘ events: pointer/mouse/key/input
+```
+
+- **Locators** (`src/dom/locator.ts`): CSS (default, `>>>` pierces open shadow roots), `text=`, `role=`
+  (with a simplified ARIA role and accessible-name model in `aria.ts`), `label=`, `placeholder=`,
+  `testid=`, `alt=`, `title=`, `xpath=`, chained with `>>`, `nth=`. Actions are **strict**: two matches is
+  an error that suggests `>> nth=0`.
+- **Auto-wait**: each action waits for exactly one match that is visible, enabled (and editable for
+  Fill), stable for two looks 50 ms apart, and is what `elementFromPoint` hits at its center (a label
+  covering its own checkbox counts as the checkbox). A timeout reports the last reason.
+- **Why short calls**: a navigation destroys the page and the agent mid-wait; extension API calls every
+  ≤2s also keep the MV3 worker from being stopped during long waits.
+- **Values** are set through the native prototype setter plus `input`/`change` events, which React, Vue
+  and Angular all pick up. Keys are synthetic, so their default actions (type a character, Enter submits,
+  Tab moves focus) are done by the agent.
+- **Waiting for the page**: `navigation.ts` polls tab status for load, counts in-flight requests with
+  `webRequest` (observe only) for network idle, and polls the tab URL for URL patterns, which also catches
+  `history.pushState` in single-page apps.
+- Watch Element and Read Element with a Page URL still use BlockFlow's own background tab per URL, but read
+  through the agent too, so every locator works there.
+
+Known gaps (see docs/PLAN-automation.md, phase F): events are `isTrusted: false`, so sites that check it
+need the future CDP driver; iframes and closed shadow roots are not reached yet.
+
 ## Watch Element
 
 `Host.page.readElement({ url, selector, reload })` (see `src/browser/pageReader.ts`):
@@ -104,6 +141,12 @@ moves to the parent or back, Enter confirms, Esc cancels.
   `content-scripts/picker.js`, and forwards the result to the editor.
 
 ## Testing strategy
+
+- `npm run e2e` (`tests/e2e/run.mjs`) builds, loads `.output/chrome-mv3` into a Chromium-based browser with a
+  throwaway profile (Brave, Chromium or Chrome; `BF_BROWSER` to choose), serves `tests/fixtures/site` (a
+  classic login form, a single-page app with a controlled form, an overlay, a custom checkbox, a web
+  component) and runs workflows through the real background worker.
+
 
 - `tests/core`: engine and blocks through `tests/helpers/fakeHost.ts`. Timers are "fired" by calling
   `runner.handleTimer`, so no real time passes. There is a test that a brand-new runner continues a flow,

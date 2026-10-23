@@ -36,6 +36,7 @@ export function BlockNode({ id, data, selected }: NodeProps<BlockFlowNode>) {
   if (problems.length > 0) classes.push('has-problem');
   if (data.step?.disabled) classes.push('disabled');
   if (status) classes.push(`run-${status}`);
+  if (!single) classes.push('multi-port');
 
   return (
     <div

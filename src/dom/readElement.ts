@@ -9,7 +9,7 @@
  */
 export function readSelectorInPage(
   selector: string,
-  kind: 'text' | 'attribute' | 'has-class' | 'exists' | 'count' = 'text',
+  kind: 'text' | 'value' | 'attribute' | 'has-class' | 'exists' | 'count' = 'text',
   name = '',
 ): { found: boolean; text: string; count: number; error?: string } {
   try {
@@ -20,6 +20,7 @@ export function readSelectorInPage(
     if (kind === 'exists') return { found: true, text: String(count > 0), count };
     if (!element) return { found: false, text: '', count };
     if (kind === 'attribute') return { found: true, text: element.getAttribute(name) ?? '', count };
+    if (kind === 'value') return { found: true, text: 'value' in element ? String((element as HTMLInputElement).value) : '', count };
     if (kind === 'has-class') return { found: true, text: String(element.classList.contains(name)), count };
     return { found: true, text: element.textContent ?? '', count };
   } catch {

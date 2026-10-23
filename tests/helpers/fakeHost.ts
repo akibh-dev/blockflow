@@ -2,6 +2,7 @@ import type {
   Host,
   HttpRequestOptions,
   HttpResult,
+  NavigateOptions,
   NotifyOptions,
   LogEntry,
   OpenTabOptions,
@@ -11,11 +12,14 @@ import type {
   Scheduler,
   StateStore,
   StepSettings,
+  TabInfo,
   TimerOptions,
   TimerRecord,
   Workflow,
 } from '../../src/core/types';
 import { WorkflowRunner } from '../../src/core/engine';
+import { urlMatches } from '../../src/core/urlPattern';
+import type { AgentRequest, WaitUntil } from '../../src/core/page';
 import type { RunRecord } from '../../src/core/runs';
 import { createDefaultRegistry } from '../../src/core/blocks';
 
@@ -100,10 +104,44 @@ export class FakeHost implements Host {
     this.notifications.push(options);
   };
 
+  /** Open tabs: id → current URL. Closed tabs are removed. */
+  readonly tabUrls = new Map<number, string>();
+  /** Every request sent to the page agent. */
+  readonly actions: { tabId: number; request: AgentRequest; timeoutMs: number }[] = [];
+  readonly navigations: { tabId: number; options: NavigateOptions }[] = [];
+  readonly loads: { tabId: number; until: WaitUntil }[] = [];
+
+  /** Replace to control what the page agent answers (throw to simulate a failure). */
+  agent: (tabId: number, request: AgentRequest) => Promise<Record<string, unknown>> = async () => ({});
+
   tabs = {
     open: async (options: OpenTabOptions) => {
       this.opened.push(options);
-      return { tabId: this.nextTabId++ };
+      const tabId = options.reuseTabId !== undefined && this.tabUrls.has(options.reuseTabId) ? options.reuseTabId : this.nextTabId++;
+      this.tabUrls.set(tabId, options.url);
+      if (options.waitUntil && options.waitUntil !== 'none') this.loads.push({ tabId, until: options.waitUntil });
+      return { tabId };
+    },
+    navigate: async (tabId: number, options: NavigateOptions) => {
+      this.navigations.push({ tabId, options });
+      if (!this.tabUrls.has(tabId)) throw new Error('The tab was closed');
+      if (options.action === 'goto' && options.url) this.tabUrls.set(tabId, options.url);
+      return { url: this.tabUrls.get(tabId) ?? '' };
+    },
+    close: async (tabId: number) => {
+      this.tabUrls.delete(tabId);
+    },
+    info: async (tabId: number): Promise<TabInfo | null> => {
+      const url = this.tabUrls.get(tabId);
+      return url === undefined ? null : { url, title: '', loading: false };
+    },
+    waitForLoad: async (tabId: number, until: WaitUntil) => {
+      this.loads.push({ tabId, until });
+    },
+    waitForUrl: async (tabId: number, pattern: string, timeoutMs: number) => {
+      const url = this.tabUrls.get(tabId) ?? '';
+      if (!urlMatches(url, pattern)) throw new Error(`Timed out after ${timeoutMs / 1000}s waiting for the URL to match ${pattern} (it is ${url})`);
+      return url;
     },
   };
 
@@ -111,6 +149,11 @@ export class FakeHost implements Host {
     readElement: async (options: ReadElementOptions) => {
       this.reads.push(options);
       return this.pageReader(options);
+    },
+    act: async (tabId: number, request: AgentRequest, timeoutMs: number) => {
+      this.actions.push({ tabId, request, timeoutMs });
+      if (!this.tabUrls.has(tabId)) throw new Error('The tab was closed');
+      return this.agent(tabId, request);
     },
   };
 

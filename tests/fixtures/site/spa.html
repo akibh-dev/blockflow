@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture: single-page app</title>
+    <style>
+      body { font: 16px system-ui, sans-serif; max-width: 480px; margin: 40px auto; }
+      label { display: block; margin: 10px 0 4px; }
+      #overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: grid; place-items: center; }
+      #overlay div { background: #fff; padding: 20px; border-radius: 8px; }
+      /* A custom checkbox: the real input is invisible and covered by its styled label. */
+      .terms { position: relative; padding-left: 28px; }
+      .terms input { position: absolute; left: 0; top: 2px; opacity: 0; width: 20px; height: 20px; margin: 0; }
+      .terms .box { position: absolute; left: 0; top: 2px; width: 18px; height: 18px; border: 1px solid #555; border-radius: 4px; }
+      .terms input:checked + .box { background: #2563eb; }
+      #toast { transition: transform 0.4s; transform: translateX(200px); }
+      #toast.in { transform: none; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <!-- A cookie banner covers the page until accepted. -->
+    <div id="overlay"><div>We use cookies. <button id="accept">Accept</button></div></div>
+    <fancy-counter></fancy-counter>
+    <script>
+      // A web component with an open shadow root.
+      customElements.define('fancy-counter', class extends HTMLElement {
+        connectedCallback() {
+          const root = this.attachShadow({ mode: 'open' });
+          root.innerHTML = '<button part="add">Add one</button> <span class="count">0</span>';
+          root.querySelector('button').addEventListener('click', () => {
+            const count = root.querySelector('.count');
+            count.textContent = String(Number(count.textContent) + 1);
+          });
+        }
+      });
+
+      // Like React: inputs keep their own copy of the value and only see a change when the
+      // DOM value differs from it. Assigning element.value from page code updates the copy too.
+      function controlled(input, onChange) {
+        const native = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        let tracked = input.value;
+        Object.defineProperty(input, 'value', {
+          configurable: true,
+          get() { return native.get.call(this); },
+          set(next) { tracked = String(next); native.set.call(this, next); },
+        });
+        input.addEventListener('input', () => {
+          const now = native.get.call(input);
+          if (now === tracked) return;
+          tracked = now;
+          onChange(now);
+        });
+      }
+
+      const state = { name: '', email: '', plan: 'free', terms: false };
+      const app = document.getElementById('app');
+
+      function renderForm() {
+        app.innerHTML = `
+          <h1>Create your account</h1>
+          <form id="signup" novalidate>
+            <label for="name">Full name</label><input id="name" autocomplete="off">
+            <label for="email">Email</label><input id="email" type="email" placeholder="you@example.com">
+            <label for="plan">Plan</label>
+            <select id="plan"><option value="free">Free</option><option value="pro">Pro</option><option value="team">Team</option></select>
+            <p><label class="terms"><input type="checkbox" id="terms"><span class="box"></span> I accept the terms</label></p>
+            <button type="submit" id="create" disabled>Create account</button>
+          </form>
+          <p id="state" data-testid="state"></p>`;
+        const sync = () => {
+          document.getElementById('state').textContent = JSON.stringify(state);
+          document.getElementById('create').disabled = !(state.name && /.+@.+\..+/.test(state.email) && state.terms);
+        };
+        controlled(document.getElementById('name'), (value) => { state.name = value; sync(); });
+        controlled(document.getElementById('email'), (value) => { state.email = value; sync(); });
+        document.getElementById('plan').addEventListener('change', (event) => { state.plan = event.target.value; sync(); });
+        document.getElementById('terms').addEventListener('change', (event) => { state.terms = event.target.checked; sync(); });
+        document.getElementById('signup').addEventListener('submit', async (event) => {
+          event.preventDefault();
+          document.getElementById('create').textContent = 'Creating…';
+          const response = await fetch('/api/slow');
+          const { order } = await response.json();
+          history.pushState({}, '', '/spa/done');
+          renderDone(order);
+        });
+        sync();
+      }
+
+      function renderDone(order) {
+        app.innerHTML = `<h1>Thanks, ${state.name}!</h1><p>Your <b>${state.plan}</b> plan is ready. Order <span id="order">#${order}</span></p>
+          <p id="toast">Welcome email sent</p>`;
+        requestAnimationFrame(() => document.getElementById('toast').classList.add('in'));
+      }
+
+      renderForm();
+      document.getElementById('accept').addEventListener('click', () => document.getElementById('overlay').remove());
+    </script>
+  </body>
+</html>

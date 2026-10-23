@@ -90,7 +90,7 @@ select {
 
 .bf-app {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr) 300px;
+  grid-template-columns: 250px minmax(0, 1fr) 340px;
   grid-template-rows: 48px minmax(0, 1fr) 190px;
   grid-template-areas:
     'header header header'
@@ -578,6 +578,10 @@ select {
   color: var(--muted);
 }
 
+.bf-node.multi-port {
+  padding-right: 44px;
+}
+
 .bf-port-label {
   position: absolute;
   right: 10px;
@@ -665,4 +669,46 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Rows field (Fill Form) */
+
+.bf-rows table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.bf-rows th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 2px 2px 4px;
+}
+
+.bf-rows td {
+  padding: 2px;
+  vertical-align: middle;
+}
+
+.bf-cell {
+  display: flex;
+  gap: 2px;
+}
+
+.bf-cell input {
+  min-width: 0;
+  padding: 4px 6px !important;
+  font-size: 12px;
+}
+
+.bf-cell button {
+  padding: 2px 4px;
+  flex: none;
+}
+
+.bf-rows-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
 }

@@ -11,8 +11,19 @@ export type ValidationMode = 'design' | 'run';
 
 function fieldError(field: FieldSpec, value: unknown, mode: ValidationMode): string | null {
   switch (field.kind) {
+    case 'rows': {
+      if (value !== undefined && !Array.isArray(value)) return `${field.label} must be a list`;
+      const rows = (value ?? []) as Record<string, unknown>[];
+      const [first] = field.columns;
+      const filled = rows.filter((row) => field.columns.some((column) => String(row[column.key] ?? '').trim() !== ''));
+      if (field.required && filled.length === 0) return `${field.label} needs at least one row`;
+      const broken = filled.findIndex((row) => first && String(row[first.key] ?? '').trim() === '');
+      if (broken >= 0 && first) return `${field.label}: row ${broken + 1} has no ${first.label}`;
+      return null;
+    }
     case 'text':
     case 'selector':
+    case 'locator':
     case 'url': {
       const text = typeof value === 'string' ? value.trim() : '';
       if (!text) return field.required ? `${field.label} is required` : null;
@@ -87,11 +98,21 @@ export function resolveConfig<C extends object>(
   const merged = withDefaults(def, raw);
   for (const field of def.fields) {
     if (
-      (field.kind === 'text' || field.kind === 'url' || field.kind === 'selector') &&
+      (field.kind === 'text' || field.kind === 'url' || field.kind === 'selector' || field.kind === 'locator') &&
       field.templated &&
       typeof merged[field.key] === 'string'
     ) {
       merged[field.key] = render(merged[field.key] as string, input);
+    }
+    if (field.kind === 'rows' && Array.isArray(merged[field.key])) {
+      merged[field.key] = (merged[field.key] as Record<string, unknown>[]).map((row) => {
+        const out: Record<string, string> = {};
+        for (const column of field.columns) {
+          const text = String(row[column.key] ?? '');
+          out[column.key] = column.templated ? render(text, input) : text;
+        }
+        return out;
+      });
     }
   }
   return { config: merged as C, errors: validateConfig(def, merged, 'run') };

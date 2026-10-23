@@ -21,7 +21,7 @@ describe('resolveConfig', () => {
   it('renders templated fields from the input payload', () => {
     const { config, errors } = resolveConfig(openUrlBlock, { url: '{{url}}' }, { url: 'https://a.com' });
     expect(errors).toEqual([]);
-    expect(config).toEqual({ url: 'https://a.com', newTab: true, active: true });
+    expect(config).toEqual({ ...openUrlBlock.defaultConfig, url: 'https://a.com' });
   });
 
   it('does not render fields that are not templated', () => {
@@ -48,7 +48,7 @@ describe('validateConfig', () => {
   });
 
   it('accepts templated URLs while designing but not when running', () => {
-    const config = { url: 'https://x.com/{{id}}', newTab: true, active: true };
+    const config = withDefaults(openUrlBlock, { url: 'https://x.com/{{id}}' });
     expect(validateConfig(openUrlBlock, config, 'design')).toEqual([]);
     expect(validateConfig(openUrlBlock, { ...config, url: '{{ id }}' }, 'design')).toEqual([]);
   });

@@ -3,7 +3,7 @@
 Build small browser automations by connecting blocks, like n8n or AutoHotkey, but inside your browser.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
 
-**Status: prototype 1.** Eight blocks, a canvas editor, and a background engine. See
+**Status: prototype 1.** Seventeen blocks, a canvas editor, and a background engine. See
 [What has been verified](#what-has-been-verified) before you rely on it.
 
 ## The idea
@@ -13,13 +13,19 @@ other block's input. The data a block produces becomes available to the next blo
 
 | Block | What it does | Output data |
 | --- | --- | --- |
+| 🔗 **Open Tab** | Opens a page in a new tab, the workflow's own reused tab, a new window or the current tab, waits for load / network idle, and **names the tab** (`main`) for the blocks after it. | `url`, `tabId` |
+| 👆 **Click** | Click, double-click, right-click or hover an element. Waits until it is visible, enabled, still and not covered. | passes input through |
+| ⌨️ **Fill** | Types into a field (all at once, or key by key). Works with React/Vue/Angular forms. | passes input through |
+| 📋 **Fill Form** | Many fields in one block (text, selects, checkboxes), optional submit click. **🎯 Detect fields** lists a form's fields for you. | passes input through |
+| 🔽 **Select Option** · ☑️ **Check** · ⏎ **Press Key** | Dropdowns by text or value; tick/untick; Enter, Tab, Control+A… | |
+| ⏳ **Wait For** | Element visible/hidden/gone/enabled, text appears/disappears, URL matches (also SPA route changes), page load, network quiet. | `url` |
+| 🧭 **Navigate** · ✖️ **Close Tab** | Go to URL, back, forward, reload; close a tab of the run. | `url` |
 | ⏱ **Timer** | Nothing connected to it: starts the flow every N seconds (or once). After another block: **delays** the flow by N seconds. | `tick`, `firedAt` |
-| 🔗 **Open URL** | Opens a page in a tab. | `url`, `tabId` |
 | 🔀 **If** | Two outputs, **true** and **false**: the data goes one way or the other (equals, contains, starts with, regex, greater/at least, empty, is true…). | passes input through |
 | 📝 **Set Variable** | Adds a named value to the data, usable as `{{name}}` later. | your `name` |
 | 🌐 **HTTP Request** | Calls an API or webhook (GET/POST/…, headers, body). | `status`, `ok`, `body`, `data` (parsed JSON) |
 | 🔔 **Notify** | Shows a desktop notification. | `notified` |
-| 🔎 **Read Element** | Reads one value from a page each time the flow reaches it: text, an attribute (`aria-pressed`), whether it has a class (`dark`), whether it exists, or how many match. | `value`, `previous`, `changed`, `count`, `url` |
+| 🔎 **Read Element** | Reads one value: text, input value, an attribute (`aria-pressed`), a class (`dark`), exists, or how many match. From the run's tab (after Click/Fill), or from a Page URL in BlockFlow's own background tab. | `value`, `previous`, `changed`, `count`, `url` |
 | 👁 **Watch Element** | Watches one element of a page and fires when its text changes. Pick the element by clicking it, like uBlock Origin's picker. | `value`, `previous`, `url`, `selector`, `changedAt` |
 
 Blocks that nothing feeds are **start blocks**. They begin running when you switch the workflow **On**.
@@ -39,6 +45,32 @@ Timer ──▶ Watch Element ──▶ Open URL            Timer decides how of
 Watch Element ──▶ Timer (delay) ──▶ Open URL    wait 20s after a change, then open
 Timer ──▶ Open URL A
       └─▶ Open URL B                            one block feeds several
+```
+
+## Elements: locators
+
+Every "Element" setting takes a **locator**, Playwright style. Press 🎯 **Pick on page** to get a CSS one, or
+write a more readable one yourself:
+
+| Locator | Finds |
+| --- | --- |
+| `#save`, `form .btn` | CSS (the default). `my-widget >>> button` reaches inside a web component |
+| `text=Sign in` · `text="Sign in"` · `text=/sign ?in/i` | by visible text: contains (any case) · exact · regex |
+| `role=button[name="Save"]` | by role and accessible name (`checkbox[checked]`, `heading[level=2]`) |
+| `label=Email` · `placeholder=you@example.com` · `testid=submit` | form fields by label / placeholder; `data-testid` (`data-test`, `data-cy`, `data-qa`) |
+| `#list >> text=Pro` · `li >> nth=0` | inside another element · the first (`-1` = last) |
+
+Actions are strict: if a locator matches two elements the step fails and says so, instead of clicking the
+wrong one.
+
+## Form filling example
+
+```text
+Open Tab (https://shop.test/login)
+  → Fill Form (label=Email: me@x.com · label=Password: … · label=Country: Bangladesh · label="Remember me": true,
+               then click role=button[name="Sign in"])
+  → Wait For (URL matches /account)            ← on error → Notify "login broken"
+  → Read Element (#greeting) → If ({{value}} contains "Welcome") → true: Notify "login OK"
 ```
 
 ## Running and debugging
@@ -118,12 +150,15 @@ src/
   dom/                   Code that runs inside web pages
     selector.ts          CSS selector generation + widen/narrow navigation
     picker.ts            the click-to-pick overlay (shadow DOM)
-    readElement.ts       function injected into a page to read an element
+    readElement.ts       function injected into a page to read an element (CSS only, kept for reference)
+    locator.ts, aria.ts  Playwright-style locators: css, text=, role=, label=, testid=, >>, nth=
+    agent.ts             the page agent: auto-wait, click, fill, select, check, press, read, wait, detect form
   browser/               Real implementations of the Host (alarms, tabs, storage, scripting)
   shared/                Storage keys and message types
   entrypoints/
     background.ts        runs enabled workflows; restart-safe
     picker.content.ts    injects the picker on demand
+    agent.content.ts     the page agent, injected on demand by src/browser/pageDriver.ts
     editor/              React + React Flow editor page
 tests/                   Vitest. core/ and editor/ run in Node, dom/ runs in jsdom.
 docs/ARCHITECTURE.md     how it fits together and why
@@ -154,6 +189,7 @@ needed.
 | 2026-10-23, Brave Origin 155: workflow manager UI driven through the real editor (new, rename, duplicate, enable/disable, turn all off, export, import, bad import, refuse empty, delete) | Run, passing (13 checks). |
 | 2026-10-23, Brave Origin 155 against the live akibh.dev and blog.akibh.dev: Read Element (class `dark` on `<html>`, `aria-pressed` on the theme button, post-link count) → If → Notify. Flipping the theme between two reads gave `changed=true` and a notification; a local page whose post count grows 3→5→7 notified only on increases; unchanged reads stayed quiet | Run, passing. |
 | 2026-10-23, Brave Origin 155, Phase A (runs, ports, step settings) through the real editor: If true/false branches, dragging a new connection from the "false" output, inspector input/output, error output + retries (2 attempts), switching back to "stop" removes the error output and its edge, Stop button cancels before the next block, killing the service worker mid-run marks the run interrupted (18 checks) | Run, passing. |
+| 2026-10-23, `npm run e2e` (Brave Origin 155, 20 checks, 3 runs in a row): classic login with Fill Form + submit + Wait For URL + Read + If; wrong password routed to the error output with a readable timeout; SPA with a cookie overlay ("covered by" reason), React-style controlled inputs, typed email, select, custom checkbox under its label, disabled-until-valid button, pushState route, text appearing, shadow DOM button; strict-mode and missing-element errors; Detect fields in the editor on a real form. Unit tests: 212 incl. a React 19 form filled in jsdom | Run, passing. |
 | Firefox host permission grant, Safari conversion, Chrome Web Store upload | **Not run.** |
 
 ## Known limitations
@@ -166,7 +202,9 @@ needed.
 - **Watch Element uses its own background tab** per watched URL (never your own tabs) and reloads it on each
   check by default. Pages that need a login work if you are signed in in the same browser profile.
 - Broad site access (`<all_urls>`) for now. Later: ask for access per workflow with optional permissions.
-- No templates or undo yet.
+- No templates or undo yet. Two editor tabs open at once overwrite each other's changes.
+- Page actions use synthetic events (`isTrusted: false`); a few sites reject them. Iframes, closed shadow
+  roots, file uploads and native dialogs are not supported yet (plan: phase F).
 - No "Resume" for an interrupted run yet, and If has one condition (several joined with and/or come later).
 
 ## Roadmap ideas

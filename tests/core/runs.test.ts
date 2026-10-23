@@ -83,7 +83,7 @@ describe('Run button (runOnce)', () => {
     const h = harness(flow([timer, { id: 'o', type: 'open-url', config: { url: '{{nope}}' } }], [['t', 'o']]));
     const run = await h.runner.runOnce();
     expect(run.status).toBe('failed');
-    expect(run.error).toContain('Open URL');
+    expect(run.error).toContain('Open Tab');
     expect(run.steps[1]?.status).toBe('failed');
   });
 

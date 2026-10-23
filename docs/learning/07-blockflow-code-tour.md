@@ -64,6 +64,7 @@ exercise: read the tests first and try to implement `renderTemplate` yourself be
 | `pageReader.ts`, `tabs.ts` | Watch Element's engine: own tab, reload, read | 5 |
 | `picking.ts` | start/finish the element picker | 3 |
 | `stores.ts` | storage wrappers | 4 |
+| `pageDriver.ts`, `navigation.ts` | page agent calls, waiting for load / URL / network idle | 3, 5 |
 | `host.ts` | assembles the `Host` | 6 |
 
 Read `hybridScheduler.ts` with its test file `tests/browser/hybridScheduler.test.ts` open. The test uses a
@@ -81,7 +82,29 @@ About 140 lines. Check against lesson 4: top-level synchronous listeners ✔, no
 class names like `css-1x2y3`). `picker.ts` is the overlay UI in Shadow DOM. The picker is a content script
 (lesson 3) that talks to the worker by messages (`src/shared/messages.ts`).
 
-## 8. The editor: `src/entrypoints/editor/`
+## 8. The page agent: clicking and filling like Playwright
+
+Page blocks (Click, Fill, Fill Form, Wait For…) never touch a page themselves. They call
+`ctx.host.page.act(tabId, request, timeoutMs)` with a plain request such as
+`{ op: 'click', locator: 'role=button[name="Save"]' }` (`src/core/page.ts`). The trip:
+
+1. `src/browser/pageDriver.ts` injects `src/entrypoints/agent.content.ts` into the tab (once per page load:
+   a navigation wipes it) and calls it with `scripting.executeScript` (lesson 3).
+2. `src/dom/agent.ts` finds the element with `src/dom/locator.ts` (CSS, `text=`, `role=`, `label=`…),
+   waits until it is visible, enabled, not moving and not covered, then dispatches the events a real user
+   would cause. It answers `done`, `error`, or `pending` + the reason.
+3. The driver asks again until the timeout. Short calls survive navigations and keep the worker awake.
+
+Two web-dev ideas you already know show up here. **Controlled inputs**: React ignores `input.value = x`
+from its own JavaScript world, so the agent sets the value through the prototype's setter and fires `input`.
+(From an extension's isolated world even a plain assignment works, because React's wrapper lives in the
+page's world; lesson 3.) **Synthetic events have no default action** for keys: pressing Enter with
+`dispatchEvent` does not submit a form, so the agent calls `form.requestSubmit()` itself.
+
+Try: run `npm run e2e` and watch the browser fill the fixture forms (`tests/fixtures/site/`). Then read
+`tests/dom/agent.test.ts`: it renders a real React form in jsdom and fills it through the agent.
+
+## 9. The editor: `src/entrypoints/editor/`
 
 An ordinary React app (React Flow for the canvas). The interesting file is `flow/convert.ts`: it converts
 between the saved `Workflow` and React Flow's nodes/edges. Everything else is UI. If you know React you
@@ -94,11 +117,12 @@ can already read this directory.
    The editor needs no change.
 2. **Notification block** (already built in `notify.ts`: read it, then add a different Host method, e.g. clipboard). Needs the `notifications` permission and a new `Host` method (`notify`). Touch
    `types.ts`, `fakeHost.ts`, `host.ts`, `wxt.config.ts`. This is how you extend the Host.
-3. **IF block** with two outputs ("true"/"false"). The engine currently sends a payload to every outgoing
-   connection; you must teach connections a "port". Read `convert.ts`, `types.ts` and `engine.ts` first and
-   write the plan before the code.
-4. **Cron-ish Timer** ("every day at 09:00"): needs `when` alarms and `restoreAll()` thinking.
-5. **Import/export workflows** as JSON. Mostly validation: reuse `validate.ts`.
+3. **IF block** with two outputs: already built (`ifBlock.ts`, `ports.ts`). Read how `routeTo` and
+   `edgePort` work, then write a **Switch** block with one output per case.
+4. **Hover-and-read block** using the page agent: add an op to `src/core/page.ts`, handle it in
+   `src/dom/agent.ts` (test it in `tests/dom/agent.test.ts` first), then a block that calls it.
+5. **Cron-ish Timer** ("every day at 09:00"): needs `when` alarms and `restoreAll()` thinking.
+6. **Import/export workflows** as JSON: already built (`library.ts`). Compare it with how you would have done it.
 
 Rule for all of them (from `CLAUDE.md`): `src/core` stays free of browser APIs; payloads stay
 JSON-serialisable; tests first for engine and block changes.

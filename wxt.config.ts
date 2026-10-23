@@ -11,7 +11,7 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: 'BlockFlow',
     description: 'Build small browser automations by connecting blocks: timers, open a URL, watch part of a page.',
-    permissions: ['alarms', 'storage', 'tabs', 'scripting', 'activeTab', 'notifications'],
+    permissions: ['alarms', 'storage', 'tabs', 'scripting', 'activeTab', 'notifications', 'webRequest'],
     // Prototype: broad host access so "watch element" works on any site.
     // Later: switch to optional_host_permissions and ask per workflow.
     host_permissions: ['<all_urls>'],

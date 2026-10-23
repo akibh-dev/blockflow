@@ -97,10 +97,10 @@ export const watchElementBlock: BlockDefinition<WatchElementConfig> = {
     {
       key: 'selector',
       label: 'Element',
-      kind: 'selector',
+      kind: 'locator',
       required: true,
       pickerUrlKey: 'url',
-      placeholder: 'CSS selector, or use "Pick on page"',
+      placeholder: 'CSS, text=…, role=…, or use "Pick on page"',
     },
     {
       key: 'url',

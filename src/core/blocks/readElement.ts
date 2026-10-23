@@ -1,9 +1,13 @@
+import { DEFAULT_TAB, requireSessionTab } from '../session';
 import { normalizeText } from '../text';
 import { normalizeHttpUrl } from '../url';
+import { pageWaitMs } from './pageCommon';
 import type { BlockDefinition, ReadKind } from '../types';
 
 export interface ReadElementConfig {
   url: string;
+  /** Read from this tab of the run (Open Tab) instead of BlockFlow's own background tab for `url`. */
+  tab: string;
   selector: string;
   read: ReadKind;
   name: string;
@@ -28,23 +32,39 @@ export const readElementBlock: BlockDefinition<ReadElementConfig> = {
   description: 'Read a value from a page: text, attribute, class, whether it exists, or how many.',
   icon: '🔎',
   accent: '#0ea5e9',
-  defaultConfig: { url: '', selector: '', read: 'text', name: '', reload: true },
+  defaultConfig: { url: '', tab: '', selector: '', read: 'text', name: '', reload: true },
   fields: [
     {
       key: 'selector',
       label: 'Element',
-      kind: 'selector',
+      kind: 'locator',
       required: true,
+      templated: true,
       pickerUrlKey: 'url',
-      placeholder: 'CSS selector, or use "Pick on page"',
+      placeholder: 'CSS, text=…, role=…, label=…, or use "Pick on page"',
     },
-    { key: 'url', label: 'Page URL', kind: 'url', required: true, templated: true, placeholder: 'https://example.com' },
+    {
+      key: 'url',
+      label: 'Page URL',
+      kind: 'url',
+      templated: true,
+      placeholder: 'https://example.com',
+      help: 'BlockFlow opens it in its own background tab. Leave empty to read the run\'s tab instead (see Tab).',
+    },
+    {
+      key: 'tab',
+      label: 'Tab',
+      kind: 'text',
+      placeholder: DEFAULT_TAB,
+      help: 'Used when Page URL is empty: read from this tab of the run (from Open Tab), as it is now, without reloading.',
+    },
     {
       key: 'read',
       label: 'Read',
       kind: 'select',
       options: [
         { value: 'text', label: 'its text' },
+        { value: 'value', label: 'its value (input fields)' },
         { value: 'attribute', label: 'an attribute (e.g. aria-pressed)' },
         { value: 'has-class', label: 'whether it has a class (e.g. dark)' },
         { value: 'exists', label: 'whether it exists' },
@@ -69,12 +89,29 @@ export const readElementBlock: BlockDefinition<ReadElementConfig> = {
   ],
 
   async run(ctx, input) {
-    const url = normalizeHttpUrl(ctx.config.url);
-    if (!url) throw new Error(`"${ctx.config.url}" is not a valid http(s) URL`);
     const { selector, read, name, reload } = ctx.config;
     if (NEEDS_NAME.includes(read) && !name.trim()) throw new Error('Attribute / class name is required');
 
-    const result = await ctx.host.page.readElement({ url, selector, reload, read: { kind: read, name: name.trim() } });
+    let url: string;
+    let result: { found: boolean; text: string; count?: number; error?: string };
+    if (ctx.config.url.trim()) {
+      const normalized = normalizeHttpUrl(ctx.config.url);
+      if (!normalized) throw new Error(`"${ctx.config.url}" is not a valid http(s) URL`);
+      url = normalized;
+      result = await ctx.host.page.readElement({ url, selector, reload, read: { kind: read, name: name.trim() } });
+    } else {
+      // The run's own tab, as it is right now (after the Click / Fill blocks before this one).
+      const tabId = requireSessionTab(input, ctx.config.tab || DEFAULT_TAB);
+      url = (await ctx.host.tabs.info(tabId))?.url ?? '';
+      try {
+        const reading = await ctx.host.page.act(tabId, { op: 'read', locator: selector, kind: read, name: name.trim() }, Math.min(pageWaitMs(ctx), 5_000));
+        result = { found: true, text: String(reading.text ?? ''), count: Number(reading.count ?? 0) };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.startsWith('Timed out')) throw error;
+        result = { found: false, text: '' };
+      }
+    }
     if (result.error) throw new Error(result.error);
     if (!result.found) {
       ctx.log('warn', `Element not found on the page: ${selector}`);

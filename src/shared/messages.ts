@@ -1,3 +1,4 @@
+import type { FormFieldRow } from '../core/page';
 import type { Workflow } from '../core/types';
 
 /**
@@ -12,6 +13,8 @@ import type { Workflow } from '../core/types';
 export interface StartPickMessage {
   type: 'bf:start-pick';
   url?: string;
+  /** form: pick any element of a form, and get all of the form's fields back (Fill Form). */
+  mode?: 'element' | 'form';
 }
 
 /** Picker → background. */
@@ -33,6 +36,8 @@ export interface PickResultMessage {
   selector: string;
   url: string;
   sample: string;
+  /** For mode "form": the form's fields. */
+  fields?: FormFieldRow[];
 }
 
 /** Background → editor: picking could not start (restricted page, no tab...). */

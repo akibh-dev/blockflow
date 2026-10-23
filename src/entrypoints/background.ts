@@ -151,10 +151,10 @@ export default defineBackground(() => {
     if (!isExtensionMessage(message)) return;
     switch (message.type) {
       case 'bf:start-pick':
-        void startPicking(sender.tab?.id, message.url).catch(report('start picking'));
+        void startPicking(sender.tab?.id, message.url, message.mode).catch(report('start picking'));
         break;
       case 'bf:picked':
-        void finishPicking(message).catch(report('finish picking'));
+        void finishPicking(message, sender.tab?.id).catch(report('finish picking'));
         break;
       case 'bf:pick-cancelled':
         void cancelPicking().catch(report('cancel picking'));
