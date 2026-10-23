@@ -7,7 +7,7 @@
  *   placeholder=you@example.com · testid=submit · xpath=//form · A >> B · A >> nth=1
  */
 
-export type ReadKind = 'text' | 'value' | 'attribute' | 'has-class' | 'exists' | 'count';
+export type ReadKind = 'text' | 'value' | 'attribute' | 'has-class' | 'exists' | 'count' | 'visible' | 'checked' | 'enabled';
 
 export type WaitState = 'visible' | 'hidden' | 'attached' | 'detached' | 'enabled' | 'text' | 'no-text';
 

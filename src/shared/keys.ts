@@ -3,6 +3,8 @@ export const STORAGE_KEYS = {
   workflows: 'bf:workflows',
   logs: 'bf:logs',
   runs: 'bf:runs',
+  secrets: 'bf:secrets',
+  prompts: 'bf:prompts',
   pendingPick: 'bf:pending-pick',
   watchTabs: 'bf:watch-tabs',
   timerPrefix: 'bf:timer:',

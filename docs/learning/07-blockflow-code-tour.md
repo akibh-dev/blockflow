@@ -104,7 +104,23 @@ page's world; lesson 3.) **Synthetic events have no default action** for keys: p
 Try: run `npm run e2e` and watch the browser fill the fixture forms (`tests/fixtures/site/`). Then read
 `tests/dom/agent.test.ts`: it renders a real React form in jsdom and fills it through the agent.
 
-## 9. The editor: `src/entrypoints/editor/`
+## 9. Testing features: what an engine adds around blocks
+
+Read `src/core/blocks/assert.ts`: it is small because the engine does the rest. Compare with what you
+know from Jest/Playwright:
+
+| You know | In BlockFlow |
+| --- | --- |
+| `expect(locator).toHaveText()` retrying | Assert on the page retries until the step timeout |
+| `expect.soft()` | Assert with **soft**: `ctx.softFail()` |
+| a shared `login()` helper | Run Workflow (`ctx.callWorkflow`), a child `WorkflowRunner` |
+| CI secrets / `.env` | Secrets: `{{secret.x}}`, masked by `maskPayload` before anything is stored |
+| JUnit reporter | `src/core/report.ts`, pure functions tested in `tests/core/report.test.ts` |
+
+The screenshot store (`src/browser/blobStore.ts`) is plain IndexedDB, the same API you would use in a
+web app: extension pages and the worker share it because they share the `chrome-extension://` origin.
+
+## 10. The editor: `src/entrypoints/editor/`
 
 An ordinary React app (React Flow for the canvas). The interesting file is `flow/convert.ts`: it converts
 between the saved `Workflow` and React Flow's nodes/edges. Everything else is UI. If you know React you

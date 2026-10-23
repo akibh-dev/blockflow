@@ -10,7 +10,7 @@ export const setVariableBlock: BlockDefinition<SetVariableConfig> = {
   type: 'set-variable',
   label: 'Set Variable',
   description: 'Add a value to the data flowing through.',
-  icon: '📝',
+  icon: '🏷️',
   accent: '#8b5cf6',
   defaultConfig: { name: '', value: '' },
   fields: [

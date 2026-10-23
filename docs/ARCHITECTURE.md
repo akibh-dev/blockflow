@@ -46,6 +46,23 @@ in-memory fakes. The **background worker** loads enabled workflows and lets the 
 - **Stop button**: the runner asks `isCancelled(runId)` before every step. **Worker death**: on every
   worker start, runs still marked `running` that this worker does not own become `interrupted`.
 - A run stops after 1000 steps (`DEFAULT_MAX_STEPS`), so accidental loops end.
+- **Soft failures**: `ctx.softFail(message)` marks the step and run failed but lets the block return
+  normally (soft Assert).
+- **Screenshots**: after a failed or handled step (or every step, by step setting) the engine asks
+  `Host.screenshots.capture(tabId)` for the step's tab (`config.tab`, else `main`, looked up in
+  `$session`). The browser host uses `tabs.captureVisibleTab`, so only a tab showing in its window can
+  be captured; images go to IndexedDB (`src/browser/blobStore.ts`, newest 150 kept) and the step keeps
+  the id.
+- **Sub-workflows**: `ctx.callWorkflow(id, input)` builds a child `WorkflowRunner` (same host, registry,
+  observer; `callDepth + 1`, max 8) and calls `runAsCall(input)`: every start block gets the input, and
+  the data at the end of the last path (`lastOutput`) is the result. The child run is a separate record
+  with `parentRunId`; the calling step keeps `childRunId`. Stopping the parent stops the child.
+- **Secrets**: loaded once per run from `Host.secrets`, offered to templates as `secret.*` (never put in
+  the payload), and masked (`maskText`/`maskPayload` in `runs.ts`) in every log line, step input/output
+  and error.
+- **Manual Step** uses `Host.prompt.ask`: the background lists the question in `bf:prompts` (the editor
+  shows a banner), shows a notification with Continue/Fail buttons, and waits, calling an extension API
+  every 500 ms so the worker stays awake.
 
 This is why any block can feed any other: a block only ever sees "a payload came in" or "I was started",
 never which block sent it.

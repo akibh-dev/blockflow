@@ -11,6 +11,10 @@ export type ValidationMode = 'design' | 'run';
 
 function fieldError(field: FieldSpec, value: unknown, mode: ValidationMode): string | null {
   switch (field.kind) {
+    case 'workflow': {
+      const id = typeof value === 'string' ? value.trim() : '';
+      return field.required && !id ? `${field.label} is required` : null;
+    }
     case 'rows': {
       if (value !== undefined && !Array.isArray(value)) return `${field.label} must be a list`;
       const rows = (value ?? []) as Record<string, unknown>[];

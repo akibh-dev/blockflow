@@ -16,11 +16,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run typecheck && npm run test && npm run learn:check",
+    "check": "npm run typecheck && npm run test && npm run learn:check && npm run guide:check",
     "learn:sync": "node docs/learning/tools/sync-examples.mjs",
     "learn:check": "node docs/learning/tools/sync-examples.mjs --check",
     "postinstall": "wxt prepare",
-    "e2e": "npm run build && node tests/e2e/run.mjs"
+    "e2e": "npm run build && node tests/e2e/run.mjs",
+    "guide:sync": "vite-node scripts/guide.ts",
+    "guide:check": "vite-node scripts/guide.ts -- --check"
   },
   "dependencies": {
     "@xyflow/react": "^12.0.0",

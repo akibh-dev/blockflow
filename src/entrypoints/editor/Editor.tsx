@@ -28,7 +28,10 @@ import type { WorkflowActions } from './components/WorkflowActions';
 import { WorkflowsPage } from './components/WorkflowsPage';
 import { downloadText, fileNameFor, readFiles } from './files';
 import { fromFlow, sameGraph, toFlow } from './flow/convert';
-import { useLogs, useRuns } from './hooks';
+import { useLogs, usePrompts, useRuns } from './hooks';
+import { PromptBanner } from './components/PromptBanner';
+import { ReportsPage } from './components/ReportsPage';
+import { SecretsPage } from './components/SecretsPage';
 import { registry } from './registry';
 
 const nodeTypes = { block: BlockNode };
@@ -50,6 +53,7 @@ export function Editor() {
   const [showAllLogs, setShowAllLogs] = useState(false);
   const logs = useLogs();
   const runs = useRuns();
+  const prompts = usePrompts();
   const [inspectedRunId, setInspectedRunId] = useState<string | undefined>();
 
   const active = useMemo(
@@ -199,7 +203,7 @@ export function Editor() {
         // Keep saved workflows small: drop settings that are back to their default.
         for (const key of Object.keys(step) as (keyof StepSettings)[]) {
           const value = step[key];
-          if (value === undefined || value === '' || value === false || value === 0 || value === 'stop') delete step[key];
+          if (value === undefined || value === '' || value === false || value === 0 || value === 'stop' || (key === 'screenshot' && value === 'error')) delete step[key];
         }
         return { ...node, data: { ...node.data, step } };
       }),
@@ -217,7 +221,7 @@ export function Editor() {
 
   // --- workflow list actions (all by id, so the sidebar and the manager page share them) ---
 
-  const [view, setView] = useState<'canvas' | 'manage'>('canvas');
+  const [view, setView] = useState<'canvas' | 'manage' | 'reports' | 'secrets'>('canvas');
   const notice = useCallback((message: string) => window.alert(message), []);
 
   const createNew = useCallback(() => {
@@ -405,6 +409,7 @@ export function Editor() {
   return (
     <IssuesContext.Provider value={issuesByNode}>
       <RunStatusContext.Provider value={statusByNode}>
+      <PromptBanner prompts={prompts} />
       <div className="bf-app">
         <header className="bf-header">
           <strong className="bf-brand">BlockFlow</strong>
@@ -455,10 +460,29 @@ export function Editor() {
             <button type="button" className={view === 'manage' ? 'active' : ''} onClick={() => setView('manage')}>
               All workflows ({workflows.length})
             </button>
+            <button type="button" className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>
+              Reports
+            </button>
+            <button type="button" className={view === 'secrets' ? 'active' : ''} onClick={() => setView('secrets')}>
+              Secrets
+            </button>
           </nav>
         </header>
 
         <Sidebar workflows={workflows} activeId={activeId} onAddBlock={addBlock} {...actions} />
+
+        {view === 'reports' && (
+          <ReportsPage
+            runs={runs}
+            onClear={() => void clearRuns()}
+            onShowOnCanvas={(run) => {
+              select(run.workflowId);
+              setInspectedRunId(run.id);
+            }}
+          />
+        )}
+
+        {view === 'secrets' && <SecretsPage />}
 
         {view === 'manage' && (
           <WorkflowsPage
@@ -505,6 +529,7 @@ export function Editor() {
           onChange={updateConfig}
           onStepChange={updateStep}
           onDelete={deleteBlock}
+          workflows={workflows.filter((workflow) => workflow.id !== activeId)}
           lastStep={selectedNode ? [...(inspectedRun?.steps ?? [])].reverse().find((step) => step.nodeId === selectedNode.id) : undefined}
         />
         )}

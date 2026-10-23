@@ -39,6 +39,8 @@ export interface StepSettings {
   disabled?: boolean;
   /** Free text shown on the block. */
   note?: string;
+  /** Screenshot of the run's tab: on error (default), always, or never. */
+  screenshot?: 'error' | 'always' | 'never';
 }
 
 export interface NodeDef {
@@ -98,6 +100,8 @@ export interface TextField extends FieldBase {
    */
   kind: 'text' | 'url' | 'selector' | 'locator';
   placeholder?: string;
+  /** Several lines (CSV data, scripts, long messages). */
+  multiline?: boolean;
   /** When true, `{{value}}` placeholders are filled from the incoming payload at run time. */
   templated?: boolean;
   /** For kind "selector": config key the picker also fills with the page URL. */
@@ -135,7 +139,12 @@ export interface RowsField extends FieldBase {
   detectForm?: boolean;
 }
 
-export type FieldSpec = TextField | NumberField | BooleanField | SelectField | RowsField;
+/** Pick another saved workflow (stores its id). */
+export interface WorkflowField extends FieldBase {
+  kind: 'workflow';
+}
+
+export type FieldSpec = TextField | NumberField | BooleanField | SelectField | RowsField | WorkflowField;
 
 export type Row = Record<string, string>;
 
@@ -154,6 +163,7 @@ export interface TimerOptions {
 
 export interface BlockContext<C extends object = BlockConfig> {
   workflowId: string;
+  workflowName: string;
   nodeId: string;
   /** Config with defaults applied and templated fields rendered against the input payload. */
   config: C;
@@ -161,6 +171,18 @@ export interface BlockContext<C extends object = BlockConfig> {
   isRoot: boolean;
   /** How long this step may take (its step settings). Page blocks give their waits a little less. */
   timeoutMs: number;
+  /** Id of the run this step belongs to ('' for start blocks between runs). */
+  runId: string;
+  /**
+   * Marks this step and the run as failed but keeps going (a "soft" assertion). The block still
+   * returns its output normally.
+   */
+  softFail(message: string): void;
+  /**
+   * Runs another saved workflow with `input` as its data, like calling a function, and resolves
+   * with the data its last block produced. Throws when that run fails.
+   */
+  callWorkflow(workflowId: string, input: Payload): Promise<Payload>;
   host: Host;
   /** Send a payload to every block connected to one of this block's outputs (default "out"). */
   emit(payload: Payload, port?: string): Promise<void>;
@@ -348,5 +370,21 @@ export interface Host {
   };
   scheduler: Scheduler;
   state: StateStore;
+  /** Saved workflows, for Run Workflow. */
+  workflows: {
+    get(id: string): Promise<Workflow | undefined>;
+  };
+  /** Named secret values, used as {{secret.name}} and masked in logs and run records. */
+  secrets: {
+    all(): Promise<Record<string, string>>;
+  };
+  /** Screenshot of a tab's visible area; resolves with an id to show it later, or null if not possible. */
+  screenshots: {
+    capture(tabId: number, runId: string): Promise<string | null>;
+  };
+  /** Ask the user to do something and confirm (Manual Step). Resolves true = continue, false = fail. */
+  prompt: {
+    ask(options: { runId: string; workflowName: string; message: string; timeoutMs: number }): Promise<boolean>;
+  };
   now(): Date;
 }

@@ -70,4 +70,14 @@ describe('export / import', () => {
     const result = parseImport(JSON.stringify(wf), []);
     expect(result.ok && result.workflows[0]?.edges).toHaveLength(1);
   });
+
+  it('keeps Run Workflow blocks pointing at workflows imported with them', () => {
+    const callee = sample();
+    const caller = flow([{ id: 'c', type: 'run-workflow', config: { workflow: callee.id } }], []);
+    const result = parseImport(exportWorkflows([callee, caller]), []);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const [newCallee, newCaller] = result.workflows;
+    expect(newCaller?.nodes[0]?.config.workflow).toBe(newCallee?.id);
+  });
 });

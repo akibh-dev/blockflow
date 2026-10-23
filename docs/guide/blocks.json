@@ -1,0 +1,1190 @@
+{
+  "generatedBy": "scripts/guide.ts",
+  "blocks": [
+    {
+      "type": "timer",
+      "label": "Timer",
+      "description": "Start the flow on a schedule, or delay it when placed after another block.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "seconds": 60,
+        "repeat": true
+      },
+      "fields": [
+        {
+          "key": "seconds",
+          "label": "Seconds",
+          "kind": "number",
+          "min": 1,
+          "help": "Under 30 seconds the extension keeps its background worker awake to fire on time (Chromium). 30 seconds or more uses browser alarms."
+        },
+        {
+          "key": "repeat",
+          "label": "Repeat",
+          "kind": "boolean",
+          "help": "Only used when this block starts the flow. After another block it always fires once."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "tick",
+          "description": "How many times the timer has fired (when it starts the flow)."
+        },
+        {
+          "key": "firedAt",
+          "description": "ISO time the timer fired."
+        }
+      ]
+    },
+    {
+      "type": "watch-element",
+      "label": "Watch Element",
+      "description": "Fire when the text of a part of a web page changes.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "selector": "",
+        "url": "",
+        "intervalSeconds": 60,
+        "reload": true,
+        "emitOnFirstRead": false
+      },
+      "fields": [
+        {
+          "key": "selector",
+          "label": "Element",
+          "kind": "locator",
+          "required": true
+        },
+        {
+          "key": "url",
+          "label": "Page URL",
+          "kind": "url",
+          "required": true,
+          "templated": true
+        },
+        {
+          "key": "intervalSeconds",
+          "label": "Check every (seconds)",
+          "kind": "number",
+          "min": 1,
+          "help": "Only used when this block starts the flow. After a Timer, the Timer decides. Under 30 seconds keeps the background worker awake."
+        },
+        {
+          "key": "reload",
+          "label": "Reload page before checking",
+          "kind": "boolean",
+          "help": "Needed to see server-side changes. Turn off for pages that update themselves."
+        },
+        {
+          "key": "emitOnFirstRead",
+          "label": "Fire on the first read too",
+          "kind": "boolean",
+          "help": "Off = the first read just records the starting value."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "value",
+          "description": "The new text of the element."
+        },
+        {
+          "key": "previous",
+          "description": "The text before the change (null on the first read)."
+        },
+        {
+          "key": "url",
+          "description": "The page that was watched."
+        },
+        {
+          "key": "selector",
+          "description": "The element selector."
+        },
+        {
+          "key": "changedAt",
+          "description": "ISO time the change was noticed."
+        }
+      ]
+    },
+    {
+      "type": "open-url",
+      "label": "Open Tab",
+      "description": "Open a web page, and remember the tab for the next blocks.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 45,
+      "defaultConfig": {
+        "url": "",
+        "where": "new",
+        "tab": "main",
+        "active": true,
+        "waitUntil": "load"
+      },
+      "fields": [
+        {
+          "key": "url",
+          "label": "URL",
+          "kind": "url",
+          "required": true,
+          "templated": true,
+          "help": "Use {{name}} to insert a value from the previous block."
+        },
+        {
+          "key": "where",
+          "label": "Open in",
+          "kind": "select",
+          "options": [
+            "new",
+            "workflow",
+            "window",
+            "current"
+          ]
+        },
+        {
+          "key": "tab",
+          "label": "Tab name",
+          "kind": "text",
+          "help": "Later blocks find the tab by this name. Use another name (e.g. \"admin\") for a second tab."
+        },
+        {
+          "key": "active",
+          "label": "Switch to it",
+          "kind": "boolean",
+          "help": "Off = open quietly in the background."
+        },
+        {
+          "key": "waitUntil",
+          "label": "Continue when",
+          "kind": "select",
+          "options": [
+            "load",
+            "networkidle",
+            "none"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "key": "url",
+          "description": "The URL that was opened."
+        },
+        {
+          "key": "tabId",
+          "description": "Id of the tab it was opened in."
+        }
+      ]
+    },
+    {
+      "type": "click",
+      "label": "Click",
+      "description": "Click (or double-click, right-click, hover) an element. Waits until it can be clicked.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "locator": "",
+        "action": "click",
+        "force": false
+      },
+      "fields": [
+        {
+          "key": "locator",
+          "label": "Element",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick."
+        },
+        {
+          "key": "action",
+          "label": "Action",
+          "kind": "select",
+          "options": [
+            "click",
+            "double",
+            "right",
+            "hover"
+          ]
+        },
+        {
+          "key": "force",
+          "label": "Skip the checks",
+          "kind": "boolean",
+          "help": "Click even if the element looks hidden, disabled or covered. Only for stubborn pages."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on."
+        }
+      ]
+    },
+    {
+      "type": "fill",
+      "label": "Fill",
+      "description": "Type a value into a text field. Works with React, Vue and Angular forms.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "locator": "",
+        "value": "",
+        "mode": "fill"
+      },
+      "fields": [
+        {
+          "key": "locator",
+          "label": "Field",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick."
+        },
+        {
+          "key": "value",
+          "label": "Value",
+          "kind": "text",
+          "templated": true
+        },
+        {
+          "key": "mode",
+          "label": "How",
+          "kind": "select",
+          "options": [
+            "fill",
+            "type"
+          ]
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on."
+        }
+      ]
+    },
+    {
+      "type": "fill-form",
+      "label": "Fill Form",
+      "description": "Fill several fields at once: text, selects, checkboxes. Optionally click submit.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "fields": [],
+        "submit": ""
+      },
+      "fields": [
+        {
+          "key": "fields",
+          "label": "Fields",
+          "kind": "rows",
+          "required": true,
+          "columns": [
+            {
+              "key": "locator",
+              "label": "Field",
+              "templated": true
+            },
+            {
+              "key": "value",
+              "label": "Value",
+              "templated": true
+            }
+          ],
+          "help": "Empty values are skipped. Selects take the option text or value; checkboxes take true or false."
+        },
+        {
+          "key": "submit",
+          "label": "Then click (optional)",
+          "kind": "locator",
+          "templated": true,
+          "help": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on."
+        }
+      ]
+    },
+    {
+      "type": "select-option",
+      "label": "Select Option",
+      "description": "Choose an option in a dropdown (<select>), by its text or value.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "locator": "",
+        "value": ""
+      },
+      "fields": [
+        {
+          "key": "locator",
+          "label": "Dropdown",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick."
+        },
+        {
+          "key": "value",
+          "label": "Option",
+          "kind": "text",
+          "required": true,
+          "templated": true,
+          "help": "Several for a multi-select: separate with |"
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "selected",
+          "description": "Values of the selected options."
+        }
+      ]
+    },
+    {
+      "type": "check",
+      "label": "Check",
+      "description": "Tick or untick a checkbox, radio button or switch. Does nothing if it already is.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "locator": "",
+        "state": "check"
+      },
+      "fields": [
+        {
+          "key": "locator",
+          "label": "Checkbox",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick."
+        },
+        {
+          "key": "state",
+          "label": "Make it",
+          "kind": "select",
+          "options": [
+            "check",
+            "uncheck"
+          ]
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on."
+        }
+      ]
+    },
+    {
+      "type": "press-key",
+      "label": "Press Key",
+      "description": "Press a key or shortcut: Enter, Tab, Escape, Control+A…",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "key": "Enter",
+        "locator": ""
+      },
+      "fields": [
+        {
+          "key": "key",
+          "label": "Key",
+          "kind": "text",
+          "required": true,
+          "help": "Key names as on the keyboard: Enter, Tab, Escape, Backspace, ArrowDown, a, Control+A, Shift+Tab."
+        },
+        {
+          "key": "locator",
+          "label": "On element (optional)",
+          "kind": "locator",
+          "templated": true,
+          "help": "Focus this element first. Empty = whatever has focus."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on."
+        }
+      ]
+    },
+    {
+      "type": "wait-for",
+      "label": "Wait For",
+      "description": "Wait until an element appears or goes, some text shows, the URL changes, or the page settles.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "mode": "visible",
+        "locator": "",
+        "text": "",
+        "url": ""
+      },
+      "fields": [
+        {
+          "key": "mode",
+          "label": "Wait until",
+          "kind": "select",
+          "options": [
+            "visible",
+            "hidden",
+            "attached",
+            "detached",
+            "enabled",
+            "text",
+            "no-text",
+            "url",
+            "load",
+            "networkidle"
+          ]
+        },
+        {
+          "key": "locator",
+          "label": "Element",
+          "kind": "locator",
+          "templated": true,
+          "help": "For the element modes. For text: only look inside this element (optional)."
+        },
+        {
+          "key": "text",
+          "label": "Text",
+          "kind": "text",
+          "templated": true
+        },
+        {
+          "key": "url",
+          "label": "URL pattern",
+          "kind": "text",
+          "templated": true,
+          "help": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "url",
+          "description": "The tab's URL when the wait ended."
+        }
+      ]
+    },
+    {
+      "type": "read-element",
+      "label": "Read Element",
+      "description": "Read a value from a page: text, attribute, class, whether it exists, or how many.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "url": "",
+        "tab": "",
+        "selector": "",
+        "read": "text",
+        "name": "",
+        "reload": true
+      },
+      "fields": [
+        {
+          "key": "selector",
+          "label": "Element",
+          "kind": "locator",
+          "required": true,
+          "templated": true
+        },
+        {
+          "key": "url",
+          "label": "Page URL",
+          "kind": "url",
+          "templated": true,
+          "help": "BlockFlow opens it in its own background tab. Leave empty to read the run's tab instead (see Tab)."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "Used when Page URL is empty: read from this tab of the run (from Open Tab), as it is now, without reloading."
+        },
+        {
+          "key": "read",
+          "label": "Read",
+          "kind": "select",
+          "options": [
+            "text",
+            "value",
+            "attribute",
+            "has-class",
+            "exists",
+            "count"
+          ]
+        },
+        {
+          "key": "name",
+          "label": "Attribute / class name",
+          "kind": "text",
+          "help": "Only for \"an attribute\" and \"has a class\"."
+        },
+        {
+          "key": "reload",
+          "label": "Reload page before reading",
+          "kind": "boolean"
+        }
+      ],
+      "outputs": [
+        {
+          "key": "value",
+          "description": "What was read (\"true\"/\"false\" for class and exists)."
+        },
+        {
+          "key": "previous",
+          "description": "The value from the last run (empty on the first run)."
+        },
+        {
+          "key": "changed",
+          "description": "True when value differs from previous (false on the first run)."
+        },
+        {
+          "key": "count",
+          "description": "How many elements matched the selector."
+        },
+        {
+          "key": "url",
+          "description": "The page that was read."
+        }
+      ]
+    },
+    {
+      "type": "assert",
+      "label": "Assert",
+      "description": "Check that something is true. Fails the run (or just records it, if soft) when it is not.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 10,
+      "defaultConfig": {
+        "subject": "text",
+        "value": "",
+        "locator": "",
+        "name": "",
+        "operator": "contains",
+        "expected": "",
+        "message": "",
+        "soft": false,
+        "tab": "main"
+      },
+      "fields": [
+        {
+          "key": "subject",
+          "label": "Check",
+          "kind": "select",
+          "options": [
+            "text",
+            "input",
+            "attribute",
+            "count",
+            "visible",
+            "hidden",
+            "checked",
+            "unchecked",
+            "enabled",
+            "disabled",
+            "url",
+            "title",
+            "value"
+          ]
+        },
+        {
+          "key": "locator",
+          "label": "Element",
+          "kind": "locator",
+          "templated": true,
+          "help": "For element checks."
+        },
+        {
+          "key": "name",
+          "label": "Attribute name",
+          "kind": "text",
+          "help": "Only for \"attribute of an element\"."
+        },
+        {
+          "key": "value",
+          "label": "Value",
+          "kind": "text",
+          "templated": true,
+          "help": "Only for \"a value from the data\"."
+        },
+        {
+          "key": "operator",
+          "label": "Must",
+          "kind": "select",
+          "options": [
+            "equals",
+            "not-equals",
+            "contains",
+            "not-contains",
+            "starts-with",
+            "ends-with",
+            "matches",
+            "greater",
+            "greater-equal",
+            "less",
+            "less-equal",
+            "empty",
+            "not-empty",
+            "true",
+            "false"
+          ],
+          "help": "Not used by the yes/no checks (visible, checked…)."
+        },
+        {
+          "key": "expected",
+          "label": "Expected",
+          "kind": "text",
+          "templated": true
+        },
+        {
+          "key": "message",
+          "label": "Message when it fails",
+          "kind": "text",
+          "templated": true
+        },
+        {
+          "key": "soft",
+          "label": "Soft: record the failure but keep going",
+          "kind": "boolean"
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "actual",
+          "description": "What was found."
+        }
+      ]
+    },
+    {
+      "type": "navigate",
+      "label": "Navigate",
+      "description": "Go to a URL, back, forward, or reload, in a tab of this run.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 45,
+      "defaultConfig": {
+        "tab": "main",
+        "action": "goto",
+        "url": "",
+        "waitUntil": "load"
+      },
+      "fields": [
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        },
+        {
+          "key": "action",
+          "label": "Action",
+          "kind": "select",
+          "options": [
+            "goto",
+            "back",
+            "forward",
+            "reload"
+          ]
+        },
+        {
+          "key": "url",
+          "label": "URL",
+          "kind": "text",
+          "templated": true
+        },
+        {
+          "key": "waitUntil",
+          "label": "Continue when",
+          "kind": "select",
+          "options": [
+            "load",
+            "networkidle",
+            "none"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "key": "url",
+          "description": "The URL after navigating."
+        }
+      ]
+    },
+    {
+      "type": "close-tab",
+      "label": "Close Tab",
+      "description": "Close a tab this run opened.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "tab": "main"
+      },
+      "fields": [
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on."
+        }
+      ]
+    },
+    {
+      "type": "if",
+      "label": "If",
+      "description": "Go one way when a condition is true, another when it is false.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "true",
+        "false"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "left": "{{value}}",
+        "operator": "equals",
+        "right": ""
+      },
+      "fields": [
+        {
+          "key": "left",
+          "label": "Value",
+          "kind": "text",
+          "templated": true
+        },
+        {
+          "key": "operator",
+          "label": "Condition",
+          "kind": "select",
+          "options": [
+            "equals",
+            "not-equals",
+            "contains",
+            "not-contains",
+            "starts-with",
+            "ends-with",
+            "matches",
+            "greater",
+            "greater-equal",
+            "less",
+            "less-equal",
+            "empty",
+            "not-empty",
+            "true",
+            "false"
+          ]
+        },
+        {
+          "key": "right",
+          "label": "Compare to",
+          "kind": "text",
+          "templated": true,
+          "help": "Ignored by \"is empty\", \"is true\" and similar. For a pattern, write /text/i."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, unchanged, out of \"true\" or \"false\"."
+        }
+      ]
+    },
+    {
+      "type": "set-variable",
+      "label": "Set Variable",
+      "description": "Add a value to the data flowing through.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "name": "",
+        "value": ""
+      },
+      "fields": [
+        {
+          "key": "name",
+          "label": "Name",
+          "kind": "text",
+          "required": true
+        },
+        {
+          "key": "value",
+          "label": "Value",
+          "kind": "text",
+          "templated": true
+        }
+      ],
+      "outputs": [
+        {
+          "key": "name",
+          "description": "Whatever you named it."
+        }
+      ]
+    },
+    {
+      "type": "run-workflow",
+      "label": "Run Workflow",
+      "description": "Run another workflow with this data, and continue with what it returns.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 300,
+      "defaultConfig": {
+        "workflow": ""
+      },
+      "fields": [
+        {
+          "key": "workflow",
+          "label": "Workflow",
+          "kind": "workflow",
+          "required": true,
+          "help": "Its start blocks receive this data. It does not need to be On."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(its data)",
+          "description": "Whatever the called workflow's last block produced."
+        }
+      ]
+    },
+    {
+      "type": "manual-step",
+      "label": "Manual Step",
+      "description": "Pause until you press Continue: solve a CAPTCHA, type a 2FA code, take a look.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 600,
+      "defaultConfig": {
+        "message": "Solve the CAPTCHA in the open tab, then press Continue."
+      },
+      "fields": [
+        {
+          "key": "message",
+          "label": "What to do",
+          "kind": "text",
+          "required": true,
+          "templated": true
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on after you continue."
+        }
+      ]
+    },
+    {
+      "type": "stop",
+      "label": "Stop",
+      "description": "End this path here: as passed, or as failed with a message.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "outcome": "fail",
+        "message": ""
+      },
+      "fields": [
+        {
+          "key": "outcome",
+          "label": "End as",
+          "kind": "select",
+          "options": [
+            "fail",
+            "pass"
+          ]
+        },
+        {
+          "key": "message",
+          "label": "Message",
+          "kind": "text",
+          "templated": true
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "type": "log",
+      "label": "Log",
+      "description": "Write a line to the run log, e.g. a value you want to see.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "message": "{{value}}",
+        "level": "info"
+      },
+      "fields": [
+        {
+          "key": "message",
+          "label": "Message",
+          "kind": "text",
+          "required": true,
+          "templated": true
+        },
+        {
+          "key": "level",
+          "label": "Level",
+          "kind": "select",
+          "options": [
+            "info",
+            "warn",
+            "error",
+            "debug"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on."
+        }
+      ]
+    },
+    {
+      "type": "http-request",
+      "label": "HTTP Request",
+      "description": "Call an API or webhook and use the response.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "url": "",
+        "method": "GET",
+        "headers": "",
+        "body": "",
+        "failOnError": true
+      },
+      "fields": [
+        {
+          "key": "url",
+          "label": "URL",
+          "kind": "url",
+          "required": true,
+          "templated": true
+        },
+        {
+          "key": "method",
+          "label": "Method",
+          "kind": "select",
+          "options": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        {
+          "key": "headers",
+          "label": "Headers",
+          "kind": "text",
+          "templated": true,
+          "help": "One per line, as  Name: value"
+        },
+        {
+          "key": "body",
+          "label": "Body",
+          "kind": "text",
+          "templated": true,
+          "help": "Sent for POST, PUT, PATCH and DELETE."
+        },
+        {
+          "key": "failOnError",
+          "label": "Stop the flow on HTTP errors (4xx, 5xx)",
+          "kind": "boolean"
+        }
+      ],
+      "outputs": [
+        {
+          "key": "status",
+          "description": "HTTP status code."
+        },
+        {
+          "key": "ok",
+          "description": "True for 2xx responses."
+        },
+        {
+          "key": "body",
+          "description": "Response text."
+        },
+        {
+          "key": "data",
+          "description": "Parsed JSON, when the body is JSON."
+        }
+      ]
+    },
+    {
+      "type": "notify",
+      "label": "Notify",
+      "description": "Show a desktop notification.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "title": "BlockFlow",
+        "message": ""
+      },
+      "fields": [
+        {
+          "key": "title",
+          "label": "Title",
+          "kind": "text",
+          "required": true,
+          "templated": true
+        },
+        {
+          "key": "message",
+          "label": "Message",
+          "kind": "text",
+          "templated": true
+        }
+      ],
+      "outputs": [
+        {
+          "key": "notified",
+          "description": "Always true once the notification was shown."
+        }
+      ]
+    }
+  ]
+}

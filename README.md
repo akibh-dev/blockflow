@@ -3,8 +3,12 @@
 Build small browser automations by connecting blocks, like n8n or AutoHotkey, but inside your browser.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
 
-**Status: prototype 1.** Seventeen blocks, a canvas editor, and a background engine. See
+**Status: prototype 1.** 22 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
 [What has been verified](#what-has-been-verified) before you rely on it.
+
+**Using BlockFlow, or asking an AI to build workflows for you?** Read the
+[usage guide](docs/guide/README.md) and the generated [block reference](docs/guide/blocks.md)
+(`llms.txt` points AI tools there).
 
 ## The idea
 
@@ -20,6 +24,9 @@ other block's input. The data a block produces becomes available to the next blo
 | 🔽 **Select Option** · ☑️ **Check** · ⏎ **Press Key** | Dropdowns by text or value; tick/untick; Enter, Tab, Control+A… | |
 | ⏳ **Wait For** | Element visible/hidden/gone/enabled, text appears/disappears, URL matches (also SPA route changes), page load, network quiet. | `url` |
 | 🧭 **Navigate** · ✖️ **Close Tab** | Go to URL, back, forward, reload; close a tab of the run. | `url` |
+| ✅ **Assert** | The test step: text, input value, attribute, count, visible, checked, enabled, URL, title, or any `{{value}}`. Page checks retry until they pass. **Soft** mode records the failure and goes on. | `actual` |
+| 🧩 **Run Workflow** | Calls another workflow like a function (e.g. a reusable "Log in"), in the same tab; continues with its result. | its data |
+| ✋ **Manual Step** · ⏹ **Stop** · 📝 **Log** | Pause until you press Continue (CAPTCHA, 2FA); end a path as passed/failed; write to the log. | |
 | ⏱ **Timer** | Nothing connected to it: starts the flow every N seconds (or once). After another block: **delays** the flow by N seconds. | `tick`, `firedAt` |
 | 🔀 **If** | Two outputs, **true** and **false**: the data goes one way or the other (equals, contains, starts with, regex, greater/at least, empty, is true…). | passes input through |
 | 📝 **Set Variable** | Adds a named value to the data, usable as `{{name}}` later. | your `name` |
@@ -83,6 +90,10 @@ Open Tab (https://shop.test/login)
 - **Step settings** on every block: On error (stop / continue / send to an **error** output), Retries,
   Timeout (default 60s), Disabled, Note.
 - If the browser stops the background worker in the middle of a run, the run is marked **interrupted**.
+- **Reports** (header): every run with its steps, errors and **screenshots** (taken when a step fails,
+  of the run's tab), exportable as a self-contained **HTML** report, **JUnit XML** for CI, or JSON.
+- **Secrets** (header): passwords and tokens used as `{{secret.name}}`, shown as `•••` everywhere and
+  never exported with workflows.
 
 ## Managing workflows
 
@@ -145,7 +156,9 @@ src/
     library.ts           duplicate, export and import of workflows
     ports.ts             block outputs (out / true / false / error) and routeTo()
     runs.ts              run and step records
-    condition.ts         comparisons shared by If (and later Assert, Wait For…)
+    condition.ts         comparisons shared by If and Assert
+    report.ts            JUnit XML and HTML reports from runs
+    session.ts, page.ts  the run's named tabs; requests to the page agent
     workflow.ts          diffWorkflows() decides what the background must start/stop
   dom/                   Code that runs inside web pages
     selector.ts          CSS selector generation + widen/narrow navigation
@@ -164,6 +177,8 @@ tests/                   Vitest. core/ and editor/ run in Node, dom/ runs in jsd
 docs/ARCHITECTURE.md     how it fits together and why
 docs/manual-test/        a page that changes on every load, for end-to-end testing
 docs/learning/           hand-coding course: build your own extension step by step (start at its README)
+docs/guide/              usage guide for people and AI tools, generated block reference, example workflows
+scripts/guide.ts         generates docs/guide/blocks.md, blocks.json, workflow.schema.json (npm run guide:sync)
 ```
 
 ## Adding a block
@@ -190,6 +205,7 @@ needed.
 | 2026-10-23, Brave Origin 155 against the live akibh.dev and blog.akibh.dev: Read Element (class `dark` on `<html>`, `aria-pressed` on the theme button, post-link count) → If → Notify. Flipping the theme between two reads gave `changed=true` and a notification; a local page whose post count grows 3→5→7 notified only on increases; unchanged reads stayed quiet | Run, passing. |
 | 2026-10-23, Brave Origin 155, Phase A (runs, ports, step settings) through the real editor: If true/false branches, dragging a new connection from the "false" output, inspector input/output, error output + retries (2 attempts), switching back to "stop" removes the error output and its edge, Stop button cancels before the next block, killing the service worker mid-run marks the run interrupted (18 checks) | Run, passing. |
 | 2026-10-23, `npm run e2e` (Brave Origin 155, 20 checks, 3 runs in a row): classic login with Fill Form + submit + Wait For URL + Read + If; wrong password routed to the error output with a readable timeout; SPA with a cookie overlay ("covered by" reason), React-style controlled inputs, typed email, select, custom checkbox under its label, disabled-until-valid button, pushState route, text appearing, shadow DOM button; strict-mode and missing-element errors; Detect fields in the editor on a real form. Unit tests: 212 incl. a React 19 form filled in jsdom | Run, passing. |
+| 2026-10-23, `npm run e2e` Phase C (30 checks in all): Run Workflow reusing a login in the same tab, Assert text/title passing, a soft Assert failing the run while the flow continues, its screenshot in the Reports page and in the HTML export, JUnit export, the secret password absent from all run records, Manual Step continued from the editor banner | Run, passing. |
 | Firefox host permission grant, Safari conversion, Chrome Web Store upload | **Not run.** |
 
 ## Known limitations

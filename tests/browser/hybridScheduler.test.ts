@@ -386,6 +386,10 @@ describe('with the workflow engine', () => {
       page: base.page,
       scheduler,
       state: base.state,
+      workflows: base.workflows,
+      secrets: base.secrets,
+      screenshots: base.screenshots,
+      prompt: base.prompt,
       now: () => base.now(),
     };
     const runner = new WorkflowRunner({ workflow, registry: createDefaultRegistry(), host });

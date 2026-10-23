@@ -1,0 +1,89 @@
+{
+  "format": "blockflow-workflows",
+  "version": 1,
+  "workflows": [
+    {
+      "schemaVersion": 1,
+      "id": "api-uptime",
+      "name": "API uptime check",
+      "enabled": false,
+      "nodes": [
+        {
+          "id": "every",
+          "type": "timer",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "config": {
+            "seconds": 60,
+            "repeat": true
+          }
+        },
+        {
+          "id": "call",
+          "type": "http-request",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "config": {
+            "url": "https://api.example.com/health",
+            "method": "GET",
+            "headers": "Authorization: Bearer {{secret.apiToken}}",
+            "body": "",
+            "failOnError": false
+          }
+        },
+        {
+          "id": "ok",
+          "type": "assert",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "config": {
+            "subject": "value",
+            "value": "{{status}}",
+            "operator": "equals",
+            "expected": "200",
+            "message": "Health check returned {{status}}"
+          },
+          "step": {
+            "onError": "port"
+          }
+        },
+        {
+          "id": "down",
+          "type": "notify",
+          "position": {
+            "x": 780,
+            "y": 160
+          },
+          "config": {
+            "title": "API is down",
+            "message": "{{error}}"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "every",
+          "target": "call"
+        },
+        {
+          "id": "e1",
+          "source": "call",
+          "target": "ok"
+        },
+        {
+          "id": "e2",
+          "source": "ok",
+          "target": "down",
+          "sourcePort": "error"
+        }
+      ]
+    }
+  ]
+}

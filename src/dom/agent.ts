@@ -421,6 +421,10 @@ export function createAgent(win: PageWindow = window as PageWindow): Agent {
     if (request.kind === 'count') return { found: true, text: String(count), count };
     if (request.kind === 'exists') return { found: true, text: String(count > 0), count };
     const element = found[0];
+    // Yes/no questions: a missing element is a valid "false", not something to wait for.
+    if (request.kind === 'visible') return { found: true, text: String(found.some(isVisible)), count };
+    if (request.kind === 'checked') return { found: true, text: String(element ? checkedState(element) === true : false), count };
+    if (request.kind === 'enabled') return { found: true, text: String(element ? isEnabled(element) && isVisible(element) : false), count };
     if (!element) throw new Pending(`waiting for ${request.locator}: no element matches`);
     const name = request.name ?? '';
     let text: string;

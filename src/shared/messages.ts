@@ -58,6 +58,13 @@ export interface StopRunMessage {
   runId: string;
 }
 
+/** Editor → background: answer a Manual Step. */
+export interface AnswerPromptMessage {
+  type: 'bf:answer-prompt';
+  runId: string;
+  ok: boolean;
+}
+
 export type ExtensionMessage =
   | StartPickMessage
   | PickedMessage
@@ -65,7 +72,8 @@ export type ExtensionMessage =
   | PickResultMessage
   | PickErrorMessage
   | RunWorkflowMessage
-  | StopRunMessage;
+  | StopRunMessage
+  | AnswerPromptMessage;
 
 const TYPES = new Set<string>([
   'bf:start-pick',
@@ -75,6 +83,7 @@ const TYPES = new Set<string>([
   'bf:pick-error',
   'bf:run-workflow',
   'bf:stop-run',
+  'bf:answer-prompt',
 ]);
 
 export function isExtensionMessage(value: unknown): value is ExtensionMessage {

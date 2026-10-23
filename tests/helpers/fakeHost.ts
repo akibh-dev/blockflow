@@ -157,13 +157,66 @@ export class FakeHost implements Host {
     },
   };
 
-  /** Every sleep the engine asked for (timeouts, retry backoff). Resolves on the next macrotask. */
-  readonly sleeps: number[] = [];
-
-  sleep = (ms: number): Promise<void> => {
-    this.sleeps.push(ms);
-    return new Promise((resolve) => setTimeout(resolve, 0));
+  /** Saved workflows, for Run Workflow. */
+  readonly savedWorkflows = new Map<string, Workflow>();
+  workflows = {
+    get: async (id: string) => this.savedWorkflows.get(id),
   };
+
+  secretValues: Record<string, string> = {};
+  secrets = {
+    all: async () => ({ ...this.secretValues }),
+  };
+
+  /** Screenshots taken: tab ids, in order. Return null from `screenshotResult` to simulate failure. */
+  readonly screenshotsTaken: { tabId: number; runId: string }[] = [];
+  screenshots = {
+    capture: async (tabId: number, runId: string) => {
+      this.screenshotsTaken.push({ tabId, runId });
+      return `shot-${this.screenshotsTaken.length}`;
+    },
+  };
+
+  /** What the "user" answers to Manual Step (default: continue). */
+  readonly prompts: string[] = [];
+  promptAnswer = true;
+  prompt = {
+    ask: async (options: { message: string }) => {
+      this.prompts.push(options.message);
+      return this.promptAnswer;
+    },
+  };
+
+  /** Every sleep asked for (timeouts, retry backoff, Assert polling), in ms. */
+  readonly sleeps: number[] = [];
+  private sleepers: { at: number; resolve: () => void }[] = [];
+  private virtualMs = 0;
+  private pumping = false;
+
+  /**
+   * Virtual time: sleeps finish in the order they would in real time (a 250 ms poll before a 10 s
+   * timeout), one per macrotask, without actually waiting.
+   */
+  sleep = (ms: number): Promise<void> =>
+    new Promise((resolve) => {
+      this.sleeps.push(ms);
+      this.sleepers.push({ at: this.virtualMs + ms, resolve });
+      this.pump();
+    });
+
+  private pump(): void {
+    if (this.pumping) return;
+    this.pumping = true;
+    setTimeout(() => {
+      this.pumping = false;
+      this.sleepers.sort((a, b) => a.at - b.at);
+      const next = this.sleepers.shift();
+      if (!next) return;
+      this.virtualMs = Math.max(this.virtualMs, next.at);
+      next.resolve();
+      if (this.sleepers.length > 0) this.pump();
+    }, 0);
+  }
 
   now(): Date {
     return new Date(this.clock);

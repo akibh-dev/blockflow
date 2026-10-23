@@ -1,0 +1,84 @@
+{
+  "format": "blockflow-workflows",
+  "version": 1,
+  "workflows": [
+    {
+      "schemaVersion": 1,
+      "id": "price-watch",
+      "name": "Price drop alert",
+      "enabled": false,
+      "nodes": [
+        {
+          "id": "every5min",
+          "type": "timer",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "config": {
+            "seconds": 300,
+            "repeat": true
+          }
+        },
+        {
+          "id": "price",
+          "type": "read-element",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "config": {
+            "url": "https://shop.example.com/item/42",
+            "selector": ".price",
+            "read": "text",
+            "name": "",
+            "reload": true
+          }
+        },
+        {
+          "id": "dropped",
+          "type": "if",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "config": {
+            "left": "{{value}}",
+            "operator": "less",
+            "right": "{{previous}}"
+          }
+        },
+        {
+          "id": "alert",
+          "type": "notify",
+          "position": {
+            "x": 780,
+            "y": 0
+          },
+          "config": {
+            "title": "Price dropped",
+            "message": "{{previous}} \u2192 {{value}}"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "every5min",
+          "target": "price"
+        },
+        {
+          "id": "e1",
+          "source": "price",
+          "target": "dropped"
+        },
+        {
+          "id": "e2",
+          "source": "dropped",
+          "target": "alert",
+          "sourcePort": "true"
+        }
+      ]
+    }
+  ]
+}

@@ -5,7 +5,8 @@ import type { Payload } from './types';
  * until every path has finished. Runs are what the editor shows step by step.
  */
 
-export type RunTrigger = 'manual' | 'start' | 'timer';
+/** call = started by a Run Workflow block; event = a page visit or context menu. */
+export type RunTrigger = 'manual' | 'start' | 'timer' | 'call' | 'event';
 export type RunStatus = 'running' | 'passed' | 'failed' | 'cancelled' | 'interrupted';
 /** handled = failed, but the failure was dealt with (continue / error output). */
 export type StepStatus = 'running' | 'passed' | 'failed' | 'handled' | 'skipped';
@@ -23,6 +24,10 @@ export interface StepRecord {
   /** The output the result was sent from. */
   port?: string;
   error?: string;
+  /** Id of a screenshot taken for this step (see Host.screenshots). */
+  screenshot?: string;
+  /** For Run Workflow steps: the run of the called workflow. */
+  childRunId?: string;
 }
 
 export interface RunRecord {
@@ -38,6 +43,8 @@ export interface RunRecord {
   droppedSteps?: number;
   /** Why the run failed or stopped, in one line. */
   error?: string;
+  /** Set when a Run Workflow block started this run. */
+  parentRunId?: string;
 }
 
 /** Receives a fresh copy of a run after every change. The background stores it; tests collect it. */
@@ -75,4 +82,22 @@ export function markInterrupted(runs: RunRecord[], liveIds: Set<string>, now: st
         }
       : run,
   );
+}
+
+const MASK = '•••';
+
+/** Replaces every secret value in `text`. Very short values are left alone (they would mask everything). */
+export function maskText(text: string, secrets: string[]): string {
+  let out = text;
+  for (const secret of secrets) if (secret.length >= 3) out = out.split(secret).join(MASK);
+  return out;
+}
+
+export function maskPayload<T>(value: T, secrets: string[]): T {
+  if (secrets.length === 0 || value === undefined) return value;
+  try {
+    return JSON.parse(maskText(JSON.stringify(value), secrets.map((secret) => JSON.stringify(secret).slice(1, -1)))) as T;
+  } catch {
+    return value;
+  }
 }

@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../fixtures/site');
 
+/** The fixture login accepts this password (e2e passes it as a secret). */
+export const PASSWORD = 'Op3n-Sesame!';
+
 export function startServer() {
   let orders = 1000;
   const server = http.createServer(async (req, res) => {
@@ -14,7 +17,7 @@ export function startServer() {
       let body = '';
       for await (const chunk of req) body += chunk;
       const form = new URLSearchParams(body);
-      const ok = form.get('password') === 'secret' && form.get('email');
+      const ok = form.get('password') === PASSWORD && form.get('email');
       const next = ok
         ? `/welcome.html?name=${encodeURIComponent(form.get('email').split('@')[0])}&country=${form.get('country')}&remember=${form.get('remember') ?? 'off'}`
         : '/login.html?error=1';

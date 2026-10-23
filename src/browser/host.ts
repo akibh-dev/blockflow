@@ -1,6 +1,10 @@
 import { browser } from 'wxt/browser';
+import { uid } from '../core/id';
 import { STORAGE_KEYS } from '../shared/keys';
+import { saveScreenshot } from './blobStore';
 import { tabInfo, waitForLoad, waitForUrl } from './navigation';
+import { askUser } from './prompts';
+import { loadWorkflows } from './stores';
 import { actInTab } from './pageDriver';
 import { readElement } from './pageReader';
 import { requireTabId, sleep } from './tabs';
@@ -75,6 +79,22 @@ async function notify({ title, message }: NotifyOptions): Promise<void> {
   });
 }
 
+async function capture(tabId: number, runId: string): Promise<string | null> {
+  const tab = await browser.tabs.get(tabId);
+  // captureVisibleTab only sees the tab that is showing in its window. Runs in a background tab
+  // get no screenshot (use Open Tab "in a new window" for tests).
+  if (!tab.active || tab.windowId === undefined) return null;
+  const dataUrl = await browser.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 60 });
+  const id = uid();
+  await saveScreenshot({ id, runId, ts: Date.now(), dataUrl });
+  return id;
+}
+
+async function allSecrets(): Promise<Record<string, string>> {
+  const stored = await browser.storage.local.get(STORAGE_KEYS.secrets);
+  return (stored[STORAGE_KEYS.secrets] as Record<string, string> | undefined) ?? {};
+}
+
 /** The real Host: connects the engine to the browser. */
 export function createExtensionHost(scheduler: Scheduler): Host {
   return {
@@ -94,6 +114,10 @@ export function createExtensionHost(scheduler: Scheduler): Host {
     page: { readElement, act: actInTab },
     scheduler,
     state: new StorageState(),
+    workflows: { get: async (id) => (await loadWorkflows()).find((workflow) => workflow.id === id) },
+    secrets: { all: allSecrets },
+    screenshots: { capture },
+    prompt: { ask: askUser },
     now: () => new Date(),
   };
 }

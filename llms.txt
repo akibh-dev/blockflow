@@ -1,0 +1,19 @@
+# BlockFlow
+
+> Browser extension (Chrome/Brave/Edge, Firefox) for building browser automations from connected
+> blocks, n8n style: form filling, end-to-end tests, monitoring, scraping. Workflows are JSON
+> (nodes + edges) that users import into the extension.
+
+To generate or explain workflows, read in this order:
+
+- [Usage guide](docs/guide/README.md): concepts, workflow file format, templates, locators, waiting, branching, step settings, rules for AI tools
+- [Block reference](docs/guide/blocks.md): every block type, its config keys, defaults and outputs (generated from the code)
+- [Block reference, JSON](docs/guide/blocks.json)
+- [Workflow JSON Schema](docs/guide/workflow.schema.json)
+- [Example workflows](docs/guide/examples/): importable, checked by tests
+
+To change BlockFlow's code:
+
+- [CLAUDE.md](CLAUDE.md): commands and codebase rules
+- [Architecture](docs/ARCHITECTURE.md)
+- [Plan and status](docs/PLAN-automation.md)

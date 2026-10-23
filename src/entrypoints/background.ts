@@ -2,6 +2,7 @@ import { browser } from 'wxt/browser';
 import { createExtensionHost } from '../browser/host';
 import { createBrowserScheduler } from '../browser/scheduler';
 import { cancelPicking, finishPicking, startPicking } from '../browser/picking';
+import { answerPrompt, clearStalePrompts, promptRunId } from '../browser/prompts';
 import { appendLog, loadWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
 import { createDefaultRegistry } from '../core/blocks';
 import { WorkflowRunner } from '../core/engine';
@@ -55,6 +56,7 @@ export default defineBackground(() => {
 
   // A run still marked "running" from a previous worker can never finish: say so.
   void updateRuns((runs) => markInterrupted(runs, new Set(liveRuns.keys()), new Date().toISOString()));
+  void clearStalePrompts().catch(() => {});
 
   async function startWorkflow(id: string): Promise<void> {
     const workflow = (await loadWorkflows()).find((candidate) => candidate.id === id);
@@ -143,6 +145,16 @@ export default defineBackground(() => {
     })().catch(report('workflow change'));
   });
 
+  // Manual Step answers from the notification (Chrome has buttons; Firefox: a click means Continue).
+  browser.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+    const runId = promptRunId(notificationId);
+    if (runId) answerPrompt(runId, buttonIndex === 0);
+  });
+  browser.notifications.onClicked.addListener((notificationId) => {
+    const runId = promptRunId(notificationId);
+    if (runId) answerPrompt(runId, true);
+  });
+
   browser.action.onClicked.addListener(() => {
     void openEditor().catch(report('open editor'));
   });
@@ -164,6 +176,10 @@ export default defineBackground(() => {
         break;
       case 'bf:stop-run':
         cancelRequests.add(message.runId);
+        answerPrompt(message.runId, false);
+        break;
+      case 'bf:answer-prompt':
+        answerPrompt(message.runId, message.ok);
         break;
       default:
         break; // pick-result / pick-error are for the editor

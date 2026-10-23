@@ -3,7 +3,8 @@ import { browser } from 'wxt/browser';
 import { hasTemplate } from '../../../core/template';
 import { DEFAULT_TIMEOUT_SECONDS, MAX_RETRIES } from '../../../core/engine';
 import type { StepRecord } from '../../../core/runs';
-import type { FieldSpec, Row, RowsField, StepSettings, TextField } from '../../../core/types';
+import type { FieldSpec, Row, RowsField, StepSettings, TextField, WorkflowField } from '../../../core/types';
+import { Screenshot } from './Screenshot';
 import { isExtensionMessage } from '../../../shared/messages';
 import { registry } from '../registry';
 import type { BlockFlowNode } from './BlockNode';
@@ -16,6 +17,8 @@ interface ConfigPanelProps {
   onDelete(nodeId: string): void;
   /** What this block did in the run being inspected, if it ran. */
   lastStep: StepRecord | undefined;
+  /** For "workflow" fields (Run Workflow). */
+  workflows: { id: string; name: string }[];
 }
 
 interface PickState {
@@ -29,7 +32,7 @@ type PickTarget =
   | { kind: 'cell'; nodeId: string; field: RowsField; row: number; column: string }
   | { kind: 'form'; nodeId: string; field: RowsField };
 
-export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, lastStep }: ConfigPanelProps) {
+export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, lastStep, workflows }: ConfigPanelProps) {
   const [pick, setPick] = useState<PickState & { fieldKey?: string }>({ status: 'idle' });
   const pending = useRef<PickTarget | null>(null);
   const configRef = useRef<Record<string, unknown>>({});
@@ -156,7 +159,18 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
         ) : (
           <label key={field.key} className="bf-field">
             <span>{field.label}</span>
-            <FieldInput field={field} value={config[field.key]} onChange={(value) => onChange(node.id, { [field.key]: value })} />
+            {field.kind === 'workflow' ? (
+              <select value={String(config[field.key] ?? '')} onChange={(event) => onChange(node.id, { [field.key]: event.target.value })}>
+                <option value="">Choose a workflow…</option>
+                {workflows.map((workflow) => (
+                  <option key={workflow.id} value={workflow.id}>
+                    {workflow.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <FieldInput field={field} value={config[field.key]} onChange={(value) => onChange(node.id, { [field.key]: value })} />
+            )}
             {(field.kind === 'selector' || field.kind === 'locator') && (
               <>
                 <button type="button" onClick={() => startPick({ kind: 'field', nodeId: node.id, field }, config)}>
@@ -274,7 +288,7 @@ function FieldInput({
   value,
   onChange,
 }: {
-  field: Exclude<FieldSpec, RowsField>;
+  field: Exclude<FieldSpec, RowsField | WorkflowField>;
   value: unknown;
   onChange(value: unknown): void;
 }) {
@@ -303,6 +317,17 @@ function FieldInput({
         </select>
       );
     default:
+      if (field.multiline) {
+        return (
+          <textarea
+            rows={4}
+            value={typeof value === 'string' ? value : ''}
+            placeholder={field.placeholder}
+            spellCheck={false}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        );
+      }
       return (
         <input
           type="text"
@@ -324,7 +349,7 @@ function StepSettingsEditor({
   onChange(patch: Partial<StepSettings>): void;
   defaultTimeout: number;
 }) {
-  const configured = Boolean(step.timeoutSeconds || step.retries || (step.onError && step.onError !== 'stop') || step.disabled || step.note);
+  const configured = Boolean(step.timeoutSeconds || step.retries || (step.onError && step.onError !== 'stop') || step.disabled || step.note || step.screenshot);
   return (
     <details className="bf-step-settings" open={configured}>
       <summary>Step settings{configured ? ' (changed)' : ''}</summary>
@@ -357,6 +382,15 @@ function StepSettingsEditor({
           onChange={(event) => onChange({ timeoutSeconds: event.target.value === '' ? undefined : Number(event.target.value) })}
         />
       </label>
+      <label className="bf-field">
+        <span>Screenshot of the tab</span>
+        <select value={step.screenshot ?? 'error'} onChange={(event) => onChange({ screenshot: event.target.value as StepSettings['screenshot'] })}>
+          <option value="error">when something goes wrong</option>
+          <option value="always">after every run of this block</option>
+          <option value="never">never</option>
+        </select>
+        <small className="bf-muted">Only possible while the tab is showing in its window (Open Tab “in a new window” works best).</small>
+      </label>
       <label className="bf-field bf-inline">
         <input type="checkbox" checked={step.disabled === true} onChange={(event) => onChange({ disabled: event.target.checked })} />
         <span>Disabled (skip it, pass the data through)</span>
@@ -379,6 +413,7 @@ function StepResult({ step }: { step: StepRecord }) {
         {step.port && step.port !== 'out' && ` · → ${step.port}`}
       </summary>
       {step.error && <p className="bf-error">{step.error}</p>}
+      {step.screenshot && <Screenshot id={step.screenshot} />}
       <div className="bf-json-label">Input</div>
       <pre className="bf-json">{json(step.input)}</pre>
       <div className="bf-json-label">Output</div>

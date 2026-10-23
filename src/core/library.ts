@@ -111,6 +111,22 @@ export function parseImport(text: string, existing: Workflow[]): ImportResult {
     imported.push(copy);
   }
   if (imported.length === 0) return { ok: false, error: 'No workflows found in this file.' };
+
+  // Run Workflow blocks point at workflows by id; imported ones got new ids.
+  const newIds = new Map<string, string>();
+  rawList.forEach((raw, index) => {
+    const id = isObject(raw) && typeof raw.id === 'string' ? raw.id : undefined;
+    const target = imported[index];
+    if (id && target) newIds.set(id, target.id);
+  });
+  for (const workflow of imported) {
+    for (const node of workflow.nodes) {
+      const called = node.config.workflow;
+      if (node.type === 'run-workflow' && typeof called === 'string' && newIds.has(called)) {
+        node.config = { ...node.config, workflow: newIds.get(called) };
+      }
+    }
+  }
   return { ok: true, workflows: imported };
 }
 
