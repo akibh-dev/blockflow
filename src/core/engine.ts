@@ -1,4 +1,8 @@
 import { resolveConfig } from './config';
+import { uid } from './id';
+import { DEFAULT_PORT, ERROR_PORT, Routed, edgePort, nodePorts } from './ports';
+import { MAX_STEPS_KEPT, compactPayload } from './runs';
+import type { RunObserver, RunRecord, RunTrigger, StepRecord } from './runs';
 import { makeTimerKey, parseTimerKey, stateKey, workflowTimerPrefix } from './timerKey';
 import type { BlockRegistry } from './registry';
 import type {
@@ -9,28 +13,49 @@ import type {
   LogSink,
   NodeDef,
   Payload,
+  RunOutput,
   Workflow,
 } from './types';
 
-/** Longest chain of blocks one payload may pass through. Stops accidental infinite loops. */
-export const DEFAULT_MAX_DEPTH = 25;
+/** Most blocks one run may pass through. Stops accidental infinite loops. */
+export const DEFAULT_MAX_STEPS = 1000;
+/** A step that takes longer than this fails, unless its step settings say otherwise. */
+export const DEFAULT_TIMEOUT_SECONDS = 60;
+export const MAX_RETRIES = 5;
 
 export interface RunnerOptions {
   workflow: Workflow;
   registry: BlockRegistry;
   host: Host;
   log?: LogSink;
-  maxDepth?: number;
+  maxSteps?: number;
+  /** Called with a copy of a run after every change (step started, step finished, run ended). */
+  onRun?: RunObserver;
+  /** Asked before every step; true stops the run (the Stop button). */
+  isCancelled?: (runId: string) => boolean;
 }
+
+/** Book-keeping for one run while it is going. */
+interface ActiveRun {
+  record: RunRecord;
+  steps: number;
+  failed: boolean;
+  cancelled: boolean;
+  budgetHit: boolean;
+}
+
+type Invoke = (ctx: BlockContext<never>, input: Payload) => Promise<RunOutput>;
 
 /**
  * Runs one workflow.
  *
  * Model (same idea as n8n / node-RED):
- *  - Blocks are nodes, connections are edges. A block's output goes to every block it is
- *    connected to, and becomes that block's input.
+ *  - Blocks are nodes, connections are edges. A block's result goes out of one of its outputs
+ *    ("out", or "true"/"false" on If, or "error") to every block connected to that output.
  *  - Blocks with nothing connected to their input are "root" blocks. They start the flow
- *    when the workflow is enabled (`start()`).
+ *    when the workflow is enabled (`start()`), or once when the user presses Run (`runOnce()`).
+ *  - Each trip of data through the workflow is a run. Every block it passes is a step, with
+ *    timeout, retries and error handling applied here, not in the blocks.
  *  - Anything time-based goes through the host scheduler, never through setTimeout, so a
  *    freshly created runner (after the background worker slept) can pick the flow back up
  *    via `handleTimer()`.
@@ -40,7 +65,9 @@ export class WorkflowRunner {
   private readonly registry: BlockRegistry;
   private readonly host: Host;
   private readonly sink: LogSink | undefined;
-  private readonly maxDepth: number;
+  private readonly maxSteps: number;
+  private readonly observer: RunObserver | undefined;
+  private readonly isCancelled: (runId: string) => boolean;
   private readonly nodesById = new Map<string, NodeDef>();
   private readonly hasIncoming = new Set<string>();
   private stopped = false;
@@ -50,7 +77,9 @@ export class WorkflowRunner {
     this.registry = options.registry;
     this.host = options.host;
     this.sink = options.log;
-    this.maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH;
+    this.maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
+    this.observer = options.onRun;
+    this.isCancelled = options.isCancelled ?? (() => false);
     for (const node of this.workflow.nodes) this.nodesById.set(node.id, node);
     for (const edge of this.workflow.edges) this.hasIncoming.add(edge.target);
   }
@@ -64,7 +93,7 @@ export class WorkflowRunner {
     return this.workflow.nodes.filter((node) => !this.hasIncoming.has(node.id));
   }
 
-  /** (Re)starts the workflow: clears old timers, then starts every root block. */
+  /** (Re)starts the workflow in the background: clears old timers, then starts every root block. */
   async start(): Promise<void> {
     this.stopped = false;
     await this.host.scheduler.clearPrefix(workflowTimerPrefix(this.workflow.id));
@@ -82,6 +111,31 @@ export class WorkflowRunner {
     this.stopped = true;
     await this.host.scheduler.clearPrefix(workflowTimerPrefix(this.workflow.id));
     this.log('info', undefined, `Workflow "${this.workflow.name}" stopped`);
+  }
+
+  /**
+   * Runs the workflow once, now (the Run button). Works whether or not the workflow is on, and
+   * schedules nothing: a Timer start block fires once immediately instead of starting its schedule.
+   */
+  async runOnce(): Promise<RunRecord> {
+    this.stopped = false;
+    return this.inRun('manual', async (run) => {
+      const roots = this.rootNodes();
+      if (roots.length === 0) {
+        run.failed = true;
+        run.record.error = 'Nothing to start: every block has an input.';
+        return;
+      }
+      for (const node of roots) {
+        const def = this.registry.get(node.type);
+        if (def?.trigger) {
+          const trigger = def.trigger;
+          await this.runStep(node, {}, run, (ctx) => trigger(ctx));
+        } else {
+          await this.runStep(node, {}, run);
+        }
+      }
+    });
   }
 
   /** Called by the host when a scheduled timer fires. Safe on a runner that was never started. */
@@ -102,13 +156,14 @@ export class WorkflowRunner {
       this.log('error', node.id, `${def.label}: ${resolved.errors.join('; ')}`);
       return;
     }
-    const ctx = this.makeContext(node, resolved.config, 0);
+    const ctx = this.makeContext(node, resolved.config, undefined, 'timer');
     await this.guard(node, def, async () => {
       await def.onTimer?.(ctx, parsed.name, record.data);
     });
   }
 
   // -------------------------------------------------------------------------
+  // Starting
 
   private async startRoot(node: NodeDef): Promise<void> {
     const def = this.registry.get(node.type);
@@ -116,83 +171,285 @@ export class WorkflowRunner {
       this.log('error', node.id, `Unknown block type "${node.type}"`);
       return;
     }
+    if (!def.start) {
+      // A plain block at the start (e.g. HTTP Request) runs once when the workflow is turned on.
+      if (def.run) await this.inRun('start', (run) => this.runStep(node, {}, run));
+      return;
+    }
     const resolved = resolveConfig(def, node.config, {});
     if (resolved.errors.length > 0) {
       this.log('error', node.id, `${def.label}: ${resolved.errors.join('; ')}`);
       return;
     }
-    const ctx = this.makeContext(node, resolved.config, 0);
+    const ctx = this.makeContext(node, resolved.config, undefined, 'start');
     await this.guard(node, def, async () => {
-      if (def.start) {
-        await def.start(ctx);
-      } else if (def.run) {
-        const output = await def.run(ctx, {});
-        if (output) await this.emitFrom(node.id, output, 0);
+      await def.start?.(ctx);
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Runs and steps
+
+  private async inRun(trigger: RunTrigger, body: (run: ActiveRun) => Promise<void>): Promise<RunRecord> {
+    const run: ActiveRun = {
+      record: {
+        id: uid(),
+        workflowId: this.workflow.id,
+        workflowName: this.workflow.name,
+        trigger,
+        status: 'running',
+        startedAt: this.host.now().toISOString(),
+        steps: [],
+      },
+      steps: 0,
+      failed: false,
+      cancelled: false,
+      budgetHit: false,
+    };
+    this.publish(run);
+    try {
+      await body(run);
+    } catch (error) {
+      run.failed = true;
+      run.record.error ??= errorMessage(error);
+    }
+    if (run.cancelled || this.isCancelled(run.record.id)) {
+      run.record.status = 'cancelled';
+      run.record.error ??= 'Stopped by the user.';
+    } else {
+      run.record.status = run.failed ? 'failed' : 'passed';
+    }
+    run.record.endedAt = this.host.now().toISOString();
+    this.publish(run);
+    return snapshot(run.record);
+  }
+
+  /**
+   * Runs one block as one step of `run`: disabled check, settings, timeout, retries, error
+   * handling, then passes the result on. `invoke` defaults to the block's `run`.
+   */
+  private async runStep(node: NodeDef, input: Payload, run: ActiveRun, invoke?: Invoke): Promise<void> {
+    if (this.stopped || run.cancelled || this.isCancelled(run.record.id)) {
+      run.cancelled = true;
+      return;
+    }
+    if (run.steps >= this.maxSteps) {
+      if (!run.budgetHit) {
+        run.budgetHit = true;
+        run.failed = true;
+        run.record.error = `Stopped: this run went through more than ${this.maxSteps} blocks. Is there a loop?`;
+        this.log('error', node.id, run.record.error);
       }
-    });
-  }
+      return;
+    }
+    run.steps += 1;
 
-  private async execute(node: NodeDef, input: Payload, depth: number): Promise<void> {
     const def = this.registry.get(node.type);
+    const step = this.beginStep(run, node, input);
     if (!def) {
-      this.log('error', node.id, `Unknown block type "${node.type}"`);
+      this.failStep(run, step, node, `Unknown block type "${node.type}"`);
       return;
     }
-    if (!def.run) {
+    const blockRun = def.run;
+    const call: Invoke | undefined = invoke ?? (blockRun ? (ctx, data) => blockRun(ctx, data) : undefined);
+    if (!call) {
       this.log('warn', node.id, `${def.label} cannot take input, so it was skipped`);
+      this.endStep(run, step, 'skipped');
       return;
     }
-    const resolved = resolveConfig(def, node.config, input);
-    if (resolved.errors.length > 0) {
-      this.log('error', node.id, `${def.label}: ${resolved.errors.join('; ')}`);
+
+    const settings = node.step ?? {};
+    const ports = nodePorts(def, node);
+    if (settings.disabled) {
+      this.endStep(run, step, 'skipped', { output: input, port: ports[0] });
+      await this.emitFrom(node.id, input, ports[0] ?? DEFAULT_PORT, run);
       return;
     }
-    const ctx = this.makeContext(node, resolved.config, depth);
-    await this.guard(node, def, async () => {
-      const output = await def.run?.(ctx, input);
-      if (output) await this.emitFrom(node.id, output, depth);
-    });
+
+    const outcome = await this.attempt(node, def, input, run, call, step);
+    if (!outcome.ok) {
+      await this.handleFailure(run, step, node, def, input, outcome.error, ports);
+      return;
+    }
+
+    const { output } = outcome;
+    if (!output) {
+      this.endStep(run, step, 'passed');
+      return;
+    }
+    const port = output instanceof Routed ? output.port : (ports[0] ?? DEFAULT_PORT);
+    const payload = output instanceof Routed ? output.payload : output;
+    if (!ports.includes(port)) {
+      await this.handleFailure(run, step, node, def, input, `sent data to an output it does not have: "${port}"`, ports);
+      return;
+    }
+    this.endStep(run, step, 'passed', { output: payload, port });
+    await this.emitFrom(node.id, payload, port, run);
   }
 
-  /** Sends `payload` to every block connected to `nodeId`'s output. */
-  private async emitFrom(nodeId: string, payload: Payload, depth: number): Promise<void> {
-    if (this.stopped) return;
-    const targets = this.workflow.edges.filter((edge) => edge.source === nodeId);
-    if (targets.length === 0) return;
-    if (depth >= this.maxDepth) {
-      this.log(
-        'error',
-        nodeId,
-        `Stopped: the flow passed through more than ${this.maxDepth} blocks in a row. Is there a loop?`,
-      );
-      return;
+  /** Resolves settings and calls the block, with timeout and retries. */
+  private async attempt(
+    node: NodeDef,
+    def: AnyBlockDefinition,
+    input: Payload,
+    run: ActiveRun,
+    call: Invoke,
+    step: StepRecord,
+  ): Promise<{ ok: true; output: RunOutput } | { ok: false; error: string }> {
+    const resolved = resolveConfig(def, node.config, input);
+    if (resolved.errors.length > 0) return { ok: false, error: resolved.errors.join('; ') };
+
+    const settings = node.step ?? {};
+    const retries = clamp(settings.retries ?? 0, 0, MAX_RETRIES);
+    const timeoutSeconds = settings.timeoutSeconds && settings.timeoutSeconds > 0 ? settings.timeoutSeconds : DEFAULT_TIMEOUT_SECONDS;
+    const ctx = this.makeContext(node, resolved.config, run);
+
+    for (let attempt = 1; ; attempt += 1) {
+      step.attempts = attempt;
+      try {
+        const output = await this.withTimeout(call(ctx, input), timeoutSeconds);
+        return { ok: true, output };
+      } catch (error) {
+        const message = errorMessage(error);
+        if (attempt > retries || run.cancelled || this.stopped || this.isCancelled(run.record.id)) {
+          return { ok: false, error: message };
+        }
+        const waitMs = Math.min(1000 * 2 ** (attempt - 1), 10_000);
+        this.log('warn', node.id, `${def.label}: ${message}. Retrying in ${waitMs / 1000}s (attempt ${attempt + 1} of ${retries + 1})`);
+        this.publish(run);
+        await this.host.sleep(waitMs);
+      }
     }
-    for (const edge of targets) {
+  }
+
+  private async handleFailure(
+    run: ActiveRun,
+    step: StepRecord,
+    node: NodeDef,
+    def: AnyBlockDefinition,
+    input: Payload,
+    error: string,
+    ports: string[],
+  ): Promise<void> {
+    const message = `${def.label}: ${error}`;
+    switch (node.step?.onError) {
+      case 'continue': {
+        this.log('warn', node.id, `${message} (continuing)`);
+        const port = ports[0] ?? DEFAULT_PORT;
+        this.endStep(run, step, 'handled', { error: message, output: input, port });
+        await this.emitFrom(node.id, input, port, run);
+        return;
+      }
+      case 'port': {
+        this.log('warn', node.id, `${message} (sent to the error output)`);
+        const payload = { ...input, error, errorBlock: def.label };
+        this.endStep(run, step, 'handled', { error: message, output: payload, port: ERROR_PORT });
+        await this.emitFrom(node.id, payload, ERROR_PORT, run);
+        return;
+      }
+      default:
+        this.failStep(run, step, node, message);
+    }
+  }
+
+  private failStep(run: ActiveRun, step: StepRecord, node: NodeDef, message: string): void {
+    this.log('error', node.id, message);
+    run.failed = true;
+    run.record.error ??= message;
+    this.endStep(run, step, 'failed', { error: message });
+  }
+
+  /** Sends `payload` out of `port` of `nodeId`, to every block connected there. */
+  private async emitFrom(nodeId: string, payload: Payload, port: string, run: ActiveRun): Promise<void> {
+    if (this.stopped) return;
+    const source = this.nodesById.get(nodeId);
+    const ports = nodePorts(source ? this.registry.get(source.type) : undefined, source ?? {});
+    for (const edge of this.workflow.edges) {
+      if (edge.source !== nodeId || edgePort(edge, ports) !== port) continue;
       const target = this.nodesById.get(edge.target);
       if (!target) continue;
       // Each branch gets its own copy so one block cannot change another's input.
-      await this.execute(target, { ...payload }, depth + 1);
+      await this.runStep(target, { ...payload }, run);
     }
   }
+
+  private withTimeout<T>(promise: Promise<T>, seconds: number): Promise<T> {
+    const timeout = this.host.sleep(seconds * 1000).then(() => {
+      throw new Error(`Timed out after ${seconds}s`);
+    });
+    return Promise.race([promise, timeout]);
+  }
+
+  private beginStep(run: ActiveRun, node: NodeDef, input: Payload): StepRecord {
+    const step: StepRecord = {
+      nodeId: node.id,
+      blockType: node.type,
+      status: 'running',
+      startedAt: this.host.now().toISOString(),
+      attempts: 0,
+      input: compactPayload(input),
+    };
+    if (run.record.steps.length < MAX_STEPS_KEPT) run.record.steps.push(step);
+    else run.record.droppedSteps = (run.record.droppedSteps ?? 0) + 1;
+    this.publish(run);
+    return step;
+  }
+
+  private endStep(
+    run: ActiveRun,
+    step: StepRecord,
+    status: StepRecord['status'],
+    extra: { output?: Payload; port?: string; error?: string } = {},
+  ): void {
+    step.status = status;
+    step.durationMs = this.host.now().getTime() - Date.parse(step.startedAt);
+    if (extra.output) step.output = compactPayload(extra.output);
+    if (extra.port) step.port = extra.port;
+    if (extra.error) step.error = extra.error;
+    this.publish(run);
+  }
+
+  private publish(run: ActiveRun): void {
+    this.observer?.(snapshot(run.record));
+  }
+
+  // -------------------------------------------------------------------------
 
   private async guard(node: NodeDef, def: AnyBlockDefinition, fn: () => Promise<void>): Promise<void> {
     try {
       await fn();
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.log('error', node.id, `${def.label}: ${message}`);
+      this.log('error', node.id, `${def.label}: ${errorMessage(error)}`);
     }
   }
 
-  private makeContext(node: NodeDef, config: object, depth: number): BlockContext<never> {
+  /**
+   * `run` is set for blocks running as a step. Start blocks (start / onTimer) have none: their
+   * `emit` begins a new run, with `trigger` saying what started it.
+   */
+  private makeContext(node: NodeDef, config: object, run: ActiveRun | undefined, trigger: RunTrigger = 'start'): BlockContext<never> {
     const workflowId = this.workflow.id;
+    const emit = async (payload: Payload, port: string = DEFAULT_PORT): Promise<void> => {
+      if (run) {
+        await this.emitFrom(node.id, payload, port, run);
+        return;
+      }
+      await this.inRun(trigger, async (fresh) => {
+        // The start block's firing is the run's first step, so the run shows what it sent.
+        fresh.steps += 1;
+        const step = this.beginStep(fresh, node, {});
+        step.attempts = 1;
+        this.endStep(fresh, step, 'passed', { output: payload, port });
+        await this.emitFrom(node.id, payload, port, fresh);
+      });
+    };
     const ctx: BlockContext<object> = {
       workflowId,
       nodeId: node.id,
       config,
       isRoot: !this.hasIncoming.has(node.id),
       host: this.host,
-      emit: (payload) => this.emitFrom(node.id, payload, depth),
+      emit,
       log: (level, message) => this.log(level, node.id, message),
       timers: {
         set: (name, options, data) =>
@@ -218,4 +475,16 @@ export class WorkflowRunner {
       message,
     });
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.floor(Number.isFinite(value) ? value : min)));
+}
+
+function snapshot(record: RunRecord): RunRecord {
+  return { ...record, steps: record.steps.map((step) => ({ ...step })) };
 }

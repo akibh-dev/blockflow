@@ -2,9 +2,11 @@ import { browser } from 'wxt/browser';
 import { createExtensionHost } from '../browser/host';
 import { createBrowserScheduler } from '../browser/scheduler';
 import { cancelPicking, finishPicking, startPicking } from '../browser/picking';
-import { appendLog, loadWorkflows, saveWorkflows } from '../browser/stores';
+import { appendLog, loadWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
 import { createDefaultRegistry } from '../core/blocks';
 import { WorkflowRunner } from '../core/engine';
+import { markInterrupted } from '../core/runs';
+import type { RunRecord } from '../core/runs';
 import { sampleWorkflows } from '../core/samples';
 import { parseTimerKey, workflowTimerPrefix } from '../core/timerKey';
 import { diffWorkflows } from '../core/workflow';
@@ -27,8 +29,32 @@ export default defineBackground(() => {
   const host = createExtensionHost(scheduler);
   const registry = createDefaultRegistry();
 
+  // Runs going on in this worker, and the ones the user asked to stop.
+  const liveRuns = new Map<string, Pick<RunRecord, 'workflowId' | 'trigger'>>();
+  const cancelRequests = new Set<string>();
+
+  const onRun = (run: RunRecord) => {
+    if (run.status === 'running') {
+      liveRuns.set(run.id, { workflowId: run.workflowId, trigger: run.trigger });
+    } else {
+      liveRuns.delete(run.id);
+      cancelRequests.delete(run.id);
+    }
+    saveRun(run);
+  };
+
   const newRunner = (workflow: Workflow) =>
-    new WorkflowRunner({ workflow, registry, host, log: (entry) => void appendLog(entry) });
+    new WorkflowRunner({
+      workflow,
+      registry,
+      host,
+      log: (entry) => void appendLog(entry),
+      onRun,
+      isCancelled: (runId) => cancelRequests.has(runId),
+    });
+
+  // A run still marked "running" from a previous worker can never finish: say so.
+  void updateRuns((runs) => markInterrupted(runs, new Set(liveRuns.keys()), new Date().toISOString()));
 
   async function startWorkflow(id: string): Promise<void> {
     const workflow = (await loadWorkflows()).find((candidate) => candidate.id === id);
@@ -37,6 +63,10 @@ export default defineBackground(() => {
 
   async function stopWorkflow(id: string): Promise<void> {
     await host.scheduler.clearPrefix(workflowTimerPrefix(id));
+    // Turning a workflow off also stops its background runs (not a run started with the Run button).
+    for (const [runId, run] of liveRuns) {
+      if (run.workflowId === id && run.trigger !== 'manual') cancelRequests.add(runId);
+    }
   }
 
   async function startAllEnabled(): Promise<void> {
@@ -128,6 +158,12 @@ export default defineBackground(() => {
         break;
       case 'bf:pick-cancelled':
         void cancelPicking().catch(report('cancel picking'));
+        break;
+      case 'bf:run-workflow':
+        void newRunner(message.workflow).runOnce().catch(report('run'));
+        break;
+      case 'bf:stop-run':
+        cancelRequests.add(message.runId);
         break;
       default:
         break; // pick-result / pick-error are for the editor

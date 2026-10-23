@@ -318,7 +318,7 @@ describe('Composing blocks in any order', () => {
     expect(h.messages('error')).toHaveLength(1);
   });
 
-  it('stops a loop after maxDepth blocks instead of running forever', async () => {
+  it('stops a loop after maxSteps blocks instead of running forever', async () => {
     const wf = flow(
       [
         { id: 't', type: 'timer', config: { seconds: 5 } },
@@ -334,8 +334,10 @@ describe('Composing blocks in any order', () => {
     const h = harness(wf, new FakeHost(), 6);
     await h.runner.start();
     await h.fire('tick');
-    expect(h.host.opened.length).toBe(6);
-    expect(h.messages('error')[0]).toContain('more than 6 blocks in a row');
+    // 6 steps: the timer firing, then a, b, a, b, a
+    expect(h.host.opened.length).toBe(5);
+    expect(h.messages('error')[0]).toContain('more than 6 blocks');
+    expect(h.lastRun()?.status).toBe('failed');
   });
 });
 

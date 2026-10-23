@@ -39,11 +39,11 @@ async function ensureWatchTab(url: string, reload: boolean): Promise<number> {
   return tabId;
 }
 
-async function readOnce(tabId: number, selector: string): Promise<ReadElementResult> {
+async function readOnce(tabId: number, options: ReadElementOptions): Promise<ReadElementResult> {
   const [injection] = await browser.scripting.executeScript({
     target: { tabId },
     func: readSelectorInPage,
-    args: [selector],
+    args: [options.selector, options.read?.kind ?? 'text', options.read?.name ?? ''],
   });
   return (injection?.result as ReadElementResult | undefined) ?? { found: false, text: '' };
 }
@@ -52,7 +52,7 @@ export async function readElement(options: ReadElementOptions): Promise<ReadElem
   const tabId = await ensureWatchTab(options.url, options.reload);
   const deadline = Date.now() + ELEMENT_WAIT_MS;
   for (;;) {
-    const result = await readOnce(tabId, options.selector);
+    const result = await readOnce(tabId, options);
     if (result.found || result.error || Date.now() >= deadline) return result;
     await sleep(RETRY_EVERY_MS);
   }

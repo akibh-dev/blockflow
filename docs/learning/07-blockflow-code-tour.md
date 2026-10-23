@@ -33,12 +33,18 @@ editor, because the editor renders whatever the registry contains.
 
 ## 3. The engine: `src/core/engine.ts`
 
-`WorkflowRunner` wires blocks together. Find `start`, `handleTimer`, the function that passes a payload to
-each outgoing connection, and `maxDepth` (loop guard). Read `tests/core/engine.test.ts` next to it; the
-tests are the specification.
+`WorkflowRunner` wires blocks together. Find `start`, `runOnce` (the Run button), `handleTimer`,
+`emitFrom` (passes a payload to every connection of one output) and `runStep` (one block as one step:
+timeout, retries, "on error", then pass the result on). Read `tests/core/engine.test.ts` and
+`tests/core/runs.test.ts` next to it; the tests are the specification.
+
+Two ideas to notice. **Ports**: If returns `routeTo('true', input)` instead of a payload, and the engine
+only follows edges whose `sourcePort` is `true` (`src/core/ports.ts`). **Cross-cutting rules live in one
+place**: no block implements retries or timeouts; the engine wraps every block the same way, like
+middleware in an Express or Next.js app.
 
 Key idea: **the engine never talks to the browser.** It talks to `Host` (`src/core/types.ts`):
-`tabs.open`, `page.readElement`, `scheduler`, `state`, `now`. In tests that is `tests/helpers/fakeHost.ts`;
+`tabs.open`, `page.readElement`, `http.fetch`, `notify`, `scheduler`, `state`, `sleep`, `now`. In tests that is `tests/helpers/fakeHost.ts`;
 in the extension it is `src/browser/host.ts`. This is dependency inversion, and it is what let us test the
 whole engine without a browser.
 
@@ -86,7 +92,7 @@ can already read this directory.
 1. **Delay-free logger block.** New block `log` that writes `{{message}}` to the run log and passes the
    payload on. Steps: `src/core/blocks/log.ts` → register in `index.ts` → a test using `fakeHost.ts`.
    The editor needs no change.
-2. **Notification block.** Needs the `notifications` permission and a new `Host` method (`notify`). Touch
+2. **Notification block** (already built in `notify.ts`: read it, then add a different Host method, e.g. clipboard). Needs the `notifications` permission and a new `Host` method (`notify`). Touch
    `types.ts`, `fakeHost.ts`, `host.ts`, `wxt.config.ts`. This is how you extend the Host.
 3. **IF block** with two outputs ("true"/"false"). The engine currently sends a payload to every outgoing
    connection; you must teach connections a "port". Read `convert.ts`, `types.ts` and `engine.ts` first and

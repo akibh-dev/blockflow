@@ -60,6 +60,11 @@ export const timerBlock: BlockDefinition<TimerConfig> = {
     );
   },
 
+  // Run button: fire once now instead of starting the schedule.
+  async trigger(ctx) {
+    return { tick: 0, firedAt: ctx.host.now().toISOString() };
+  },
+
   async run(ctx, input) {
     const name = `${DELAY_PREFIX}${uid()}`;
     await ctx.timers.set(name, { delayMs: ctx.config.seconds * 1000 }, input);

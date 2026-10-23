@@ -1,8 +1,11 @@
+import type { Workflow } from '../core/types';
+
 /**
  * Messages between the editor page, the background worker and the element picker.
  *
  *   editor ──start-pick──▶ background ──(opens page, injects picker)──▶ picker
  *   picker ──picked──────▶ background ──pick-result──▶ editor
+ *   editor ──run-workflow / stop-run──▶ background (progress comes back through storage: bf:runs)
  */
 
 /** Editor → background: let the user pick an element. `url` is the page to open first (optional). */
@@ -38,12 +41,26 @@ export interface PickErrorMessage {
   message: string;
 }
 
+/** Editor → background: run this workflow once, now (the Run button). Sends what is on the canvas. */
+export interface RunWorkflowMessage {
+  type: 'bf:run-workflow';
+  workflow: Workflow;
+}
+
+/** Editor → background: the Stop button. */
+export interface StopRunMessage {
+  type: 'bf:stop-run';
+  runId: string;
+}
+
 export type ExtensionMessage =
   | StartPickMessage
   | PickedMessage
   | PickCancelledMessage
   | PickResultMessage
-  | PickErrorMessage;
+  | PickErrorMessage
+  | RunWorkflowMessage
+  | StopRunMessage;
 
 const TYPES = new Set<string>([
   'bf:start-pick',
@@ -51,6 +68,8 @@ const TYPES = new Set<string>([
   'bf:pick-cancelled',
   'bf:pick-result',
   'bf:pick-error',
+  'bf:run-workflow',
+  'bf:stop-run',
 ]);
 
 export function isExtensionMessage(value: unknown): value is ExtensionMessage {

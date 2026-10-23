@@ -15,21 +15,37 @@ in-memory fakes. The **background worker** loads enabled workflows and lets the 
                                start/stop affected workflows
                                WorkflowRunner ──▶ Host ──▶ tabs.create / scripting.executeScript ──▶ page
  run log  ◀── storage ◀──────  log sink                      alarms ──▶ onAlarm → runner.handleTimer()
+ runs     ◀── storage ◀──────  onRun (bf:runs)
+ Run/Stop ──message──────────▶ runner.runOnce() / cancel
  "Pick on page" ──message──▶ picking.ts ──inject──▶ picker (content script) ──message──▶ editor
 ```
 
 ## Engine model (`src/core/engine.ts`)
 
-- Blocks are nodes, connections are edges. A block's **output payload** is passed to every connected block
-  as its **input payload**. Each branch gets its own copy.
+- Blocks are nodes, connections are edges. A block's **output payload** is passed to every block connected
+  to that output as its **input payload**. Each branch gets its own copy.
+- **Outputs (ports, `src/core/ports.ts`).** Most blocks have one output, `out`. A block can declare more
+  (`ports: ['true', 'false']` on If) and choose one by returning `routeTo(port, payload)`. An edge stores
+  its `sourcePort`; edges saved before ports existed have none and belong to the block's first output.
 - A block with nothing connected to its input is a **root**. `start()` calls `def.start(ctx)` on each
   root, or `def.run(ctx, {})` once if the block has no `start`.
 - A non-root block's `run(ctx, input)` is called when an upstream block emits. Returning a payload
   continues the flow; returning `null` ends it. Blocks that emit later (timers, watchers) call
   `ctx.emit(payload)` from `start` or `onTimer`.
 - Settings marked `templated` are rendered against the input payload (`{{url}}`) right before the block
-  runs, then validated. A failing block logs an error and stops **its** branch only.
-- A flow stops after 25 blocks in a row (`DEFAULT_MAX_DEPTH`), so accidental loops end.
+  runs, then validated.
+- **Runs (`src/core/runs.ts`).** Each trip of data through the workflow is a run: one per start-block
+  firing, or one per press of **Run** (`runOnce()`, which calls a start block's `trigger()` instead of
+  starting its schedule). Every block it passes is a **step**. The runner reports a copy of the run after
+  every change to `onRun`; the background stores it in `bf:runs` (last 40, big payloads replaced by a
+  preview) and the editor reads it from there to colour blocks and fill the step inspector.
+- **Step settings** (`NodeDef.step`) are applied by the engine in `runStep()`, never by blocks: timeout
+  (default 60s, via `Host.sleep`), retries with 1s/2s/4s backoff, disabled (pass the input through), and
+  on error: `stop` (this path stops, the run fails), `continue` (pass the input on), or `port` (send
+  `{...input, error}` out of an extra `error` output).
+- **Stop button**: the runner asks `isCancelled(runId)` before every step. **Worker death**: on every
+  worker start, runs still marked `running` that this worker does not own become `interrupted`.
+- A run stops after 1000 steps (`DEFAULT_MAX_STEPS`), so accidental loops end.
 
 This is why any block can feed any other: a block only ever sees "a payload came in" or "I was started",
 never which block sent it.

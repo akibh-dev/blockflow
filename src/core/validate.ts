@@ -1,4 +1,6 @@
 import { validateConfig, withDefaults } from './config';
+import { DEFAULT_MAX_STEPS } from './engine';
+import { edgePort, nodePorts } from './ports';
 import type { BlockRegistry } from './registry';
 import type { Workflow } from './types';
 
@@ -46,7 +48,21 @@ export function validateWorkflow(workflow: Workflow, registry: BlockRegistry): I
       issues.push({ level: 'error', edgeId: edge.id, message: 'A block cannot connect to itself' });
       continue;
     }
-    const pair = `${edge.source}->${edge.target}`;
+    const sourceNode = workflow.nodes.find((node) => node.id === edge.source);
+    const sourceDef = sourceNode ? registry.get(sourceNode.type) : undefined;
+    if (sourceNode && sourceDef) {
+      const ports = nodePorts(sourceDef, sourceNode);
+      const port = edgePort(edge, ports);
+      if (!ports.includes(port)) {
+        issues.push({
+          level: 'warning',
+          nodeId: edge.source,
+          edgeId: edge.id,
+          message: `The "${port}" output is not in use, so its connection never runs`,
+        });
+      }
+    }
+    const pair = `${edge.source}:${edge.sourcePort ?? ''}->${edge.target}`;
     if (seenEdges.has(pair)) {
       issues.push({ level: 'warning', edgeId: edge.id, message: 'Duplicate connection' });
     }
@@ -86,7 +102,7 @@ export function validateWorkflow(workflow: Workflow, registry: BlockRegistry): I
   if (hasCycle(workflow)) {
     issues.push({
       level: 'warning',
-      message: 'This workflow contains a loop. It will stop after 25 blocks in a row.',
+      message: `This workflow contains a loop. A run stops after ${DEFAULT_MAX_STEPS} blocks.`,
     });
   }
 

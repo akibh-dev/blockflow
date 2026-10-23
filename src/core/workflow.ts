@@ -8,16 +8,16 @@ export function createWorkflow(name = 'Untitled workflow'): Workflow {
 }
 
 /**
- * Identity of a workflow's behaviour: block types, settings and connections.
+ * Identity of a workflow's behaviour: block types, settings, step settings and connections.
  * Positions and names are excluded, so dragging a block or renaming the workflow does not
  * restart it.
  */
 export function behaviourSignature(workflow: Workflow): string {
   const nodes = [...workflow.nodes]
     .sort((a, b) => a.id.localeCompare(b.id))
-    .map((node: NodeDef) => [node.id, node.type, node.config]);
+    .map((node: NodeDef) => [node.id, node.type, node.config, node.step ?? null]);
   const edges = workflow.edges
-    .map((edge: EdgeDef) => `${edge.source}->${edge.target}`)
+    .map((edge: EdgeDef) => `${edge.source}:${edge.sourcePort ?? ''}->${edge.target}`)
     .sort();
   return JSON.stringify({ nodes, edges });
 }

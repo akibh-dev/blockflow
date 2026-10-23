@@ -27,9 +27,9 @@ Prototype 1 was written where npm was blocked, so it was verified only partially
    before suspecting the code.
 3. `npm run build` and `npm run build:firefox`.
 4. `npm run dev`, then walk through "Try it end to end" in the README using `docs/manual-test/clock.html`.
-5. Confirm what was only run through a shim, not a real WXT build: the picker injection path
-   (`/content-scripts/picker.js`), Watch Element, short and long timers (all passed in unpacked Chromium 141 with a
-   thin `wxt/browser` shim). Still never run: Firefox host permission grant, Safari conversion, a worker restart mid-run.
+5. Done 2026-10-20 on the real WXT Chrome build (see README "What has been verified"): picker injection,
+   Watch Element, short/long timers, worker restart mid-run. Still never run: Firefox host permission grant,
+   Safari conversion.
 
 ## Rules of the codebase
 

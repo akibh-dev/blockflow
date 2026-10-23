@@ -19,7 +19,7 @@ interface LastRead {
 /** Checks that are currently running, so a slow page never gets two overlapping checks. */
 const inFlight = new Set<string>();
 
-async function check(ctx: BlockContext<WatchElementConfig>): Promise<Payload | null> {
+async function check(ctx: BlockContext<WatchElementConfig>, always = false): Promise<Payload | null> {
   const flightKey = `${ctx.workflowId}/${ctx.nodeId}`;
   if (inFlight.has(flightKey)) {
     ctx.log('warn', 'Skipped: the previous check is still running');
@@ -51,6 +51,11 @@ async function check(ctx: BlockContext<WatchElementConfig>): Promise<Payload | n
       changedAt: ctx.host.now().toISOString(),
     });
 
+    if (always) {
+      const known = previous && previous.signature === signature ? previous.value : null;
+      ctx.log('info', `Current value: "${truncate(value)}"`);
+      return payload(known);
+    }
     if (!previous || previous.signature !== signature) {
       ctx.log('info', `Watching. Current value: "${truncate(value)}"`);
       return ctx.config.emitOnFirstRead ? payload(null) : null;
@@ -142,6 +147,11 @@ export const watchElementBlock: BlockDefinition<WatchElementConfig> = {
     ctx.log('info', `Watching "${ctx.config.selector}" every ${ctx.config.intervalSeconds}s`);
     const result = await check(ctx);
     if (result) await ctx.emit(result);
+  },
+
+  // Run button: read once and pass the current value on, changed or not.
+  async trigger(ctx) {
+    return check(ctx, true);
   },
 
   async run(ctx, input) {

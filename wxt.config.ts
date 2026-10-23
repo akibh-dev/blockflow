@@ -11,13 +11,21 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: 'BlockFlow',
     description: 'Build small browser automations by connecting blocks: timers, open a URL, watch part of a page.',
-    permissions: ['alarms', 'storage', 'tabs', 'scripting', 'activeTab'],
+    permissions: ['alarms', 'storage', 'tabs', 'scripting', 'activeTab', 'notifications'],
     // Prototype: broad host access so "watch element" works on any site.
     // Later: switch to optional_host_permissions and ask per workflow.
     host_permissions: ['<all_urls>'],
     action: { default_title: 'Open BlockFlow editor' },
     ...(browser === 'firefox'
-      ? { browser_specific_settings: { gecko: { id: 'blockflow@akibh-dev' } } }
+      ? {
+          browser_specific_settings: {
+            gecko: {
+              id: 'blockflow@akibh-dev',
+              // Required for new AMO listings. BlockFlow sends nothing off the device.
+              data_collection_permissions: { required: ['none'] },
+            },
+          },
+        }
       : {}),
   }),
 });

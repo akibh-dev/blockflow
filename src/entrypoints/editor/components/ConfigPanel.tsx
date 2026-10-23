@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { hasTemplate } from '../../../core/template';
-import type { FieldSpec, TextField } from '../../../core/types';
+import { DEFAULT_TIMEOUT_SECONDS, MAX_RETRIES } from '../../../core/engine';
+import type { StepRecord } from '../../../core/runs';
+import type { FieldSpec, StepSettings, TextField } from '../../../core/types';
 import { isExtensionMessage } from '../../../shared/messages';
 import { registry } from '../registry';
 import type { BlockFlowNode } from './BlockNode';
@@ -10,7 +12,10 @@ interface ConfigPanelProps {
   node: BlockFlowNode | undefined;
   problems: string[];
   onChange(nodeId: string, patch: Record<string, unknown>): void;
+  onStepChange(nodeId: string, patch: Partial<StepSettings>): void;
   onDelete(nodeId: string): void;
+  /** What this block did in the run being inspected, if it ran. */
+  lastStep: StepRecord | undefined;
 }
 
 interface PickState {
@@ -18,7 +23,7 @@ interface PickState {
   text?: string;
 }
 
-export function ConfigPanel({ node, problems, onChange, onDelete }: ConfigPanelProps) {
+export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, lastStep }: ConfigPanelProps) {
   const [pick, setPick] = useState<PickState>({ status: 'idle' });
   const pending = useRef<{ nodeId: string; field: TextField } | null>(null);
 
@@ -119,6 +124,10 @@ export function ConfigPanel({ node, problems, onChange, onDelete }: ConfigPanelP
         </label>
       ))}
 
+      {lastStep && <StepResult step={lastStep} />}
+
+      <StepSettingsEditor step={node.data.step ?? {}} onChange={(patch) => onStepChange(node.id, patch)} />
+
       <details className="bf-outputs">
         <summary>Data this block passes on</summary>
         <ul>
@@ -182,4 +191,76 @@ function FieldInput({
         />
       );
   }
+}
+
+function StepSettingsEditor({ step, onChange }: { step: StepSettings; onChange(patch: Partial<StepSettings>): void }) {
+  const configured = Boolean(step.timeoutSeconds || step.retries || (step.onError && step.onError !== 'stop') || step.disabled || step.note);
+  return (
+    <details className="bf-step-settings" open={configured}>
+      <summary>Step settings{configured ? ' (changed)' : ''}</summary>
+      <label className="bf-field">
+        <span>On error</span>
+        <select value={step.onError ?? 'stop'} onChange={(event) => onChange({ onError: event.target.value as StepSettings['onError'] })}>
+          <option value="stop">Stop this path (run fails)</option>
+          <option value="continue">Continue with the same data</option>
+          <option value="port">Send to the “error” output</option>
+        </select>
+      </label>
+      <label className="bf-field">
+        <span>Retries</span>
+        <input
+          type="number"
+          min={0}
+          max={MAX_RETRIES}
+          value={step.retries ?? 0}
+          onChange={(event) => onChange({ retries: Number(event.target.value) || 0 })}
+        />
+        <small className="bf-muted">Try again after 1s, 2s, 4s… before giving up.</small>
+      </label>
+      <label className="bf-field">
+        <span>Timeout (seconds)</span>
+        <input
+          type="number"
+          min={1}
+          placeholder={String(DEFAULT_TIMEOUT_SECONDS)}
+          value={step.timeoutSeconds ?? ''}
+          onChange={(event) => onChange({ timeoutSeconds: event.target.value === '' ? undefined : Number(event.target.value) })}
+        />
+      </label>
+      <label className="bf-field bf-inline">
+        <input type="checkbox" checked={step.disabled === true} onChange={(event) => onChange({ disabled: event.target.checked })} />
+        <span>Disabled (skip it, pass the data through)</span>
+      </label>
+      <label className="bf-field">
+        <span>Note</span>
+        <input type="text" value={step.note ?? ''} onChange={(event) => onChange({ note: event.target.value })} />
+      </label>
+    </details>
+  );
+}
+
+function StepResult({ step }: { step: StepRecord }) {
+  return (
+    <details className={`bf-step-result ${step.status}`} open>
+      <summary>
+        Last run: <strong>{step.status}</strong>
+        {step.durationMs !== undefined && ` · ${formatMs(step.durationMs)}`}
+        {step.attempts > 1 && ` · ${step.attempts} attempts`}
+        {step.port && step.port !== 'out' && ` · → ${step.port}`}
+      </summary>
+      {step.error && <p className="bf-error">{step.error}</p>}
+      <div className="bf-json-label">Input</div>
+      <pre className="bf-json">{json(step.input)}</pre>
+      <div className="bf-json-label">Output</div>
+      <pre className="bf-json">{step.output ? json(step.output) : step.status === 'passed' ? '(nothing: the flow stops here)' : '—'}</pre>
+    </details>
+  );
+}
+
+function json(value: unknown): string {
+  return value === undefined ? '—' : JSON.stringify(value, null, 2);
+}
+
+export function formatMs(ms: number): string {
+  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
 }

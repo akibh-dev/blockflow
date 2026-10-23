@@ -378,6 +378,9 @@ describe('with the workflow engine', () => {
       ping: () => {},
     });
     const host: Host = {
+      sleep: base.sleep,
+      http: base.http,
+      notify: base.notify,
       tabs: base.tabs,
       page: base.page,
       scheduler,

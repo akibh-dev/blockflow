@@ -3,7 +3,7 @@
 Build small browser automations by connecting blocks, like n8n or AutoHotkey, but inside your browser.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
 
-**Status: prototype 1.** Three blocks, a canvas editor, and a background engine. See
+**Status: prototype 1.** Eight blocks, a canvas editor, and a background engine. See
 [What has been verified](#what-has-been-verified) before you rely on it.
 
 ## The idea
@@ -15,6 +15,11 @@ other block's input. The data a block produces becomes available to the next blo
 | --- | --- | --- |
 | ⏱ **Timer** | Nothing connected to it: starts the flow every N seconds (or once). After another block: **delays** the flow by N seconds. | `tick`, `firedAt` |
 | 🔗 **Open URL** | Opens a page in a tab. | `url`, `tabId` |
+| 🔀 **If** | Two outputs, **true** and **false**: the data goes one way or the other (equals, contains, starts with, regex, greater/at least, empty, is true…). | passes input through |
+| 📝 **Set Variable** | Adds a named value to the data, usable as `{{name}}` later. | your `name` |
+| 🌐 **HTTP Request** | Calls an API or webhook (GET/POST/…, headers, body). | `status`, `ok`, `body`, `data` (parsed JSON) |
+| 🔔 **Notify** | Shows a desktop notification. | `notified` |
+| 🔎 **Read Element** | Reads one value from a page each time the flow reaches it: text, an attribute (`aria-pressed`), whether it has a class (`dark`), whether it exists, or how many match. | `value`, `previous`, `changed`, `count`, `url` |
 | 👁 **Watch Element** | Watches one element of a page and fires when its text changes. Pick the element by clicking it, like uBlock Origin's picker. | `value`, `previous`, `url`, `selector`, `changedAt` |
 
 Blocks that nothing feeds are **start blocks**. They begin running when you switch the workflow **On**.
@@ -28,11 +33,32 @@ Things you can build with just these three:
 ```text
 Timer ──▶ Open URL                              open a page every 5 minutes
 Watch Element ──▶ Open URL                      open the page when a price changes
+Timer ──▶ Read Element ──▶ If ──▶ Notify        notify when dark mode is on, or the post count grew
+                                                (If: {{value}} greater than {{previous}})
 Timer ──▶ Watch Element ──▶ Open URL            Timer decides how often to check
 Watch Element ──▶ Timer (delay) ──▶ Open URL    wait 20s after a change, then open
 Timer ──▶ Open URL A
       └─▶ Open URL B                            one block feeds several
 ```
+
+## Running and debugging
+
+- **▶ Run** runs the workflow once, now, even when it is Off. A Timer at the start fires immediately; a
+  Watch Element reads the page once. **■ Stop** stops it before the next block.
+- Blocks light up with how they did in the last run (✓ passed, ✕ failed, ↪ error handled). Click a block to
+  see its **input and output** from that run. The **Runs** tab under the canvas lists past runs (Run
+  button and scheduled ones); click one to show it on the canvas.
+- **Step settings** on every block: On error (stop / continue / send to an **error** output), Retries,
+  Timeout (default 60s), Disabled, Note.
+- If the browser stops the background worker in the middle of a run, the run is marked **interrupted**.
+
+## Managing workflows
+
+- **Sidebar** (file-manager style): click a row to open it, the dot turns it on/off, hover for rename (or double-click),
+  duplicate, export to a `.blockflow.json` file and delete. `+ New` and `Import` sit on top, plus search.
+- **All workflows** tab: a table with on/off switches, block icons, last activity, Edit / Duplicate / Export / Delete,
+  select several to export together, Turn all on / off.
+- Imported and duplicated workflows always arrive **off** with fresh ids. Turning on a workflow with errors is refused with the reason.
 
 ## Getting started
 
@@ -80,10 +106,14 @@ src/
   core/                  The engine. Plain TypeScript, no browser APIs, fully unit-tested.
     types.ts             Workflow model, block definition, Host interface
     engine.ts            WorkflowRunner: start blocks, pass data along connections, timers
-    blocks/              timer.ts, openUrl.ts, watchElement.ts, index.ts (registry of built-ins)
+    blocks/              timer, openUrl, watchElement, ifBlock, setVariable, httpRequest, notify, index.ts (registry of built-ins)
     template.ts          {{value}} templating
     config.ts            defaults, templating and validation of block settings
     validate.ts          checks a whole workflow (used by the editor)
+    library.ts           duplicate, export and import of workflows
+    ports.ts             block outputs (out / true / false / error) and routeTo()
+    runs.ts              run and step records
+    condition.ts         comparisons shared by If (and later Assert, Wait For…)
     workflow.ts          diffWorkflows() decides what the background must start/stop
   dom/                   Code that runs inside web pages
     selector.ts          CSS selector generation + widen/narrow navigation
@@ -113,21 +143,18 @@ needed.
 
 ## What has been verified
 
-Prototype 1 was written in an environment where the npm registry was blocked, so `npm install` and the
-WXT build were **not** run there. What was checked, and how:
-
 | Area | Status |
 | --- | --- |
-| Engine, blocks, templating, validation, workflow diffing (81 tests) | Run, passing. Mutation-checked: a deliberate bug in change detection is caught. |
-| Strict TypeScript on core, dom, shared, browser, background, tests | Passing, with `wxt/browser` stubbed (so calls into browser APIs are not type-checked against real types). |
-| Selector generator and element picker (29 tests) | Run in real Chromium 141, passing. Not yet run under jsdom. |
-| React editor (state sync, autosave, validation, picker round trip, logs) | Driven in Chromium with React 19 in dev mode: 39 checks, no warnings, no render loops. React Flow itself was **faked**, so dragging, connecting and visuals are untested. |
-| `npm install`, `wxt build`, `tsc` against real WXT/React Flow types | **Not run.** First thing to do. |
-| Real extension in Chromium 141 (unpacked MV3, bundled background + picker, local test server): 5s Timer → Open URL and Watch Element every 5s for 50s, disable stops everything, element picker round trip (15 checks) | Run, passing. Used the real background code with a thin `wxt/browser` shim, not a WXT build. |
-| Same on Firefox / Safari, Chrome Web Store build, a worker restart mid-run in a real browser | **Not run.** |
-
-Expect small fixes on first contact with real dependencies, most likely type errors in `src/browser` and
-the editor, or dependency version bumps.
+| `npm install`, `tsc` against real WXT/React Flow types, `npm run check` (131 tests incl. jsdom) | Run, passing (WXT 0.20.27, Vite 8, Vitest 3). |
+| `wxt build` for Chrome and Firefox | Run, passing. `web-ext lint` on the Firefox build: 0 errors (innerHTML warnings come from React DOM and the picker's static template). |
+| Engine, blocks, templating, validation, workflow diffing | Unit tested. Mutation-checked: a deliberate bug in change detection is caught. |
+| React editor (state sync, autosave, validation, picker round trip, logs) | Driven in Chromium with React 19 in dev mode: 39 checks, no warnings, no render loops (React Flow faked). The real build renders the canvas and samples without errors, but dragging and connecting by hand is untested. |
+| Real WXT Chrome build in Playwright Chromium 131 (headless, local test server): editor loads, samples seeded, picker injected from `/content-scripts/picker.js` and round trip to editor, 3s repeating Timer → Open URL, short timer keeps firing after the service worker is stopped (resumes via the heartbeat alarm, so expect a gap of up to 30s), disable stops it, Watch Element in a background tab fires on change with `{{url}}`, a stable element never fires, 30s alarm timer fires once (12 checks) | Run, passing. |
+| 2026-10-23, Brave Origin 155 (temp profile, real WXT Chrome build, local server): Timer → HTTP Request (POST, header, body) → If → Set Variable → Notify → Open URL ran end to end with `{{data.price}}` templating; a second flow with a false If stopped and sent no notification | Run, passing. |
+| 2026-10-23, Brave Origin 155: workflow manager UI driven through the real editor (new, rename, duplicate, enable/disable, turn all off, export, import, bad import, refuse empty, delete) | Run, passing (13 checks). |
+| 2026-10-23, Brave Origin 155 against the live akibh.dev and blog.akibh.dev: Read Element (class `dark` on `<html>`, `aria-pressed` on the theme button, post-link count) → If → Notify. Flipping the theme between two reads gave `changed=true` and a notification; a local page whose post count grows 3→5→7 notified only on increases; unchanged reads stayed quiet | Run, passing. |
+| 2026-10-23, Brave Origin 155, Phase A (runs, ports, step settings) through the real editor: If true/false branches, dragging a new connection from the "false" output, inspector input/output, error output + retries (2 attempts), switching back to "stop" removes the error output and its edge, Stop button cancels before the next block, killing the service worker mid-run marks the run interrupted (18 checks) | Run, passing. |
+| Firefox host permission grant, Safari conversion, Chrome Web Store upload | **Not run.** |
 
 ## Known limitations
 
@@ -139,10 +166,12 @@ the editor, or dependency version bumps.
 - **Watch Element uses its own background tab** per watched URL (never your own tabs) and reloads it on each
   check by default. Pages that need a login work if you are signed in in the same browser profile.
 - Broad site access (`<all_urls>`) for now. Later: ask for access per workflow with optional permissions.
-- No import/export, templates or undo yet.
-- Only three blocks, and a block's output goes to every connection (no conditions or branching yet).
+- No templates or undo yet.
+- No "Resume" for an interrupted run yet, and If has one condition (several joined with and/or come later).
 
 ## Roadmap ideas
 
-Notification block, IF/condition, HTTP request, extract-text/set-variable, import/export workflows,
+The full plan for form filling, testing and scraping is in [docs/PLAN-automation.md](docs/PLAN-automation.md).
+
+IF with true/false outputs, extract-text block, folders for workflows,
 a recorder that turns your clicks into blocks, per-workflow permissions, Web Store packaging.

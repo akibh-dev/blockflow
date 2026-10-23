@@ -70,7 +70,7 @@ describe('validateWorkflow', () => {
     );
     const result = messages(wf);
     expect(result).toContain('warning: This block can never run: no start block leads to it');
-    expect(result).toContain('warning: This workflow contains a loop. It will stop after 25 blocks in a row.');
+    expect(result).toContain('warning: This workflow contains a loop. A run stops after 1000 blocks.');
   });
 
   it('warns about duplicate connections', () => {

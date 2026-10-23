@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fromFlow, sameGraph, toFlow } from '../../src/entrypoints/editor/flow/convert';
 import { sampleWorkflows } from '../../src/core/samples';
+import type { Workflow } from '../../src/core/types';
 
 describe('workflow ⇄ canvas conversion', () => {
   it('round-trips a workflow without losing anything', () => {
@@ -48,5 +49,46 @@ describe('workflow ⇄ canvas conversion', () => {
     expect(sameGraph(workflow!, fromFlow(workflow!, nodes, edges))).toBe(true);
     nodes[0] = { ...nodes[0]!, position: { x: 999, y: 0 } };
     expect(sameGraph(workflow!, fromFlow(workflow!, nodes, edges))).toBe(false);
+  });
+});
+
+describe('ports and step settings', () => {
+  it('round-trips the output an edge leaves from and the step settings', () => {
+    const workflow: Workflow = {
+      schemaVersion: 1,
+      id: 'w',
+      name: 'W',
+      enabled: false,
+      nodes: [
+        { id: 'i', type: 'if', position: { x: 0, y: 0 }, config: {}, step: { retries: 2 } },
+        { id: 'a', type: 'notify', position: { x: 1, y: 0 }, config: {} },
+        { id: 'b', type: 'notify', position: { x: 2, y: 0 }, config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 'i', target: 'a', sourcePort: 'true' },
+        { id: 'e2', source: 'i', target: 'b', sourcePort: 'false' },
+      ],
+    };
+    const flowed = toFlow(workflow);
+    expect(flowed.edges.map((edge) => edge.sourceHandle)).toEqual(['true', 'false']);
+    expect(flowed.nodes[0]?.data.step).toEqual({ retries: 2 });
+    expect(fromFlow(workflow, flowed.nodes, flowed.edges)).toEqual(workflow);
+  });
+
+  it('does not write the default "out" port, so old workflows stay identical', () => {
+    const workflow: Workflow = {
+      schemaVersion: 1,
+      id: 'w',
+      name: 'W',
+      enabled: false,
+      nodes: [
+        { id: 'a', type: 'timer', position: { x: 0, y: 0 }, config: {} },
+        { id: 'b', type: 'notify', position: { x: 1, y: 0 }, config: {} },
+      ],
+      edges: [{ id: 'e', source: 'a', target: 'b' }],
+    };
+    const flowed = toFlow(workflow);
+    expect(flowed.edges[0]?.sourceHandle).toBe('out');
+    expect(sameGraph(workflow, fromFlow(workflow, flowed.nodes, flowed.edges))).toBe(true);
   });
 });

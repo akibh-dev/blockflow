@@ -1,4 +1,5 @@
-import type { EdgeDef, NodeDef, Workflow } from '../../../core/types';
+import { DEFAULT_PORT } from '../../../core/ports';
+import type { EdgeDef, NodeDef, StepSettings, Workflow } from '../../../core/types';
 
 /**
  * Conversion between the saved workflow model and what React Flow draws.
@@ -10,6 +11,7 @@ import type { EdgeDef, NodeDef, Workflow } from '../../../core/types';
 export type BlockNodeData = {
   blockType: string;
   config: Record<string, unknown>;
+  step?: StepSettings;
 };
 
 export interface FlowNode {
@@ -24,17 +26,35 @@ export interface FlowEdge {
   id: string;
   source: string;
   target: string;
+  /** The output (port) the edge leaves from; React Flow calls it the source handle. */
+  sourceHandle?: string | null;
 }
 
-export function toFlow(workflow: Workflow): { nodes: FlowNode[]; edges: FlowEdge[] } {
+/**
+ * `portOf` says which output an edge leaves from (edges saved before ports existed have none);
+ * React Flow needs it to attach the edge to the right dot.
+ */
+export function toFlow(
+  workflow: Workflow,
+  portOf: (edge: EdgeDef) => string = (edge) => edge.sourcePort ?? DEFAULT_PORT,
+): { nodes: FlowNode[]; edges: FlowEdge[] } {
   return {
     nodes: workflow.nodes.map((node) => ({
       id: node.id,
       type: 'block',
       position: { ...node.position },
-      data: { blockType: node.type, config: { ...node.config } },
+      data: {
+        blockType: node.type,
+        config: { ...node.config },
+        ...(node.step ? { step: { ...node.step } } : {}),
+      },
     })),
-    edges: workflow.edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target })),
+    edges: workflow.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: portOf(edge),
+    })),
   };
 }
 
@@ -48,9 +68,18 @@ export function fromFlow(base: Workflow, nodes: FlowNode[], edges: FlowEdge[]): 
         type: node.data.blockType,
         position: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
         config: { ...node.data.config },
+        ...(node.data.step && Object.keys(node.data.step).length > 0 ? { step: { ...node.data.step } } : {}),
       }),
     ),
-    edges: edges.map((edge): EdgeDef => ({ id: edge.id, source: edge.source, target: edge.target })),
+    edges: edges.map(
+      (edge): EdgeDef => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        // "out" is the default, so it is not written: workflows from before ports stay identical.
+        ...(edge.sourceHandle && edge.sourceHandle !== DEFAULT_PORT ? { sourcePort: edge.sourceHandle } : {}),
+      }),
+    ),
   };
 }
 
