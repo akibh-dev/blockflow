@@ -3,7 +3,7 @@ import { PAGE_ACCENT, PAGE_TIMEOUT_SECONDS, inPage, locatorField, pageWaitMs, ta
 import type { WaitState } from '../page';
 import type { BlockDefinition } from '../types';
 
-export type WaitMode = WaitState | 'url' | 'load' | 'networkidle';
+export type WaitMode = WaitState | 'url' | 'load' | 'networkidle' | 'response';
 
 export interface WaitForConfig {
   tab: string;
@@ -11,7 +11,11 @@ export interface WaitForConfig {
   locator: string;
   text: string;
   url: string;
+  status: string;
 }
+
+/** Wait For "response" also accepts a response that finished just before (during the Click before it). */
+const RESPONSE_LOOK_BACK_MS = 10_000;
 
 const NEEDS_ELEMENT: WaitMode[] = ['visible', 'hidden', 'attached', 'detached', 'enabled'];
 
@@ -25,7 +29,7 @@ export const waitForBlock: BlockDefinition<WaitForConfig> = {
   description: 'Wait until an element appears or goes, some text shows, the URL changes, or the page settles.',
   icon: '⏳',
   accent: PAGE_ACCENT,
-  defaultConfig: { tab: 'main', mode: 'visible', locator: '', text: '', url: '' },
+  defaultConfig: { tab: 'main', mode: 'visible', locator: '', text: '', url: '', status: '' },
   timeoutSeconds: PAGE_TIMEOUT_SECONDS,
   fields: [
     {
@@ -43,6 +47,7 @@ export const waitForBlock: BlockDefinition<WaitForConfig> = {
         { value: 'url', label: 'the URL matches (new page or SPA route)' },
         { value: 'load', label: 'the page has loaded' },
         { value: 'networkidle', label: 'the network is quiet' },
+        { value: 'response', label: 'a network request finishes (API call)' },
       ],
     },
     { ...locatorField('locator', 'Element', false), help: 'For the element modes. For text: only look inside this element (optional).' },
@@ -53,17 +58,22 @@ export const waitForBlock: BlockDefinition<WaitForConfig> = {
       kind: 'text',
       templated: true,
       placeholder: '/welcome  ·  https://shop.test/order/*  ·  /\\/order\\/\\d+/',
-      help: 'Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression.',
+      help: 'Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression. Also the request address for "a network request finishes".',
     },
+    { key: 'status', label: 'Status (optional)', kind: 'text', placeholder: '200  ·  2xx  ·  200,201', help: 'For "a network request finishes".' },
     tabField,
   ],
   summary: (config) => {
     if (config.mode === 'url') return `URL ~ ${config.url || '…'}`;
+    if (config.mode === 'response') return `response ${config.url || '…'}${config.status ? ` ${config.status}` : ''}`;
     if (config.mode === 'text' || config.mode === 'no-text') return `${config.mode === 'text' ? '' : 'no '}text "${config.text}"`;
     if (config.mode === 'load' || config.mode === 'networkidle') return config.mode === 'load' ? 'page loaded' : 'network quiet';
     return `${config.mode}: ${config.locator || 'pick an element'}`;
   },
-  outputs: [{ key: 'url', description: 'The tab\'s URL when the wait ended.' }],
+  outputs: [
+    { key: 'url', description: "The tab's URL when the wait ended." },
+    { key: 'response', description: 'For "a network request finishes": {url, status, method}.' },
+  ],
 
   async run(ctx, input) {
     const { mode, locator, text, url } = ctx.config;
@@ -75,6 +85,12 @@ export const waitForBlock: BlockDefinition<WaitForConfig> = {
       const now = await ctx.host.tabs.waitForUrl(tabId, url, timeoutMs);
       ctx.log('info', `URL is ${now}`);
       return { ...input, url: now };
+    }
+    if (mode === 'response') {
+      if (!url.trim()) throw new Error('URL pattern is required for "a network request finishes"');
+      const response = await ctx.host.tabs.waitForResponse(tabId, url, ctx.config.status, RESPONSE_LOOK_BACK_MS, timeoutMs);
+      ctx.log('info', `${response.method} ${response.url} → ${response.status}`);
+      return { ...input, response };
     }
     if (mode === 'load' || mode === 'networkidle') {
       await ctx.host.tabs.waitForLoad(tabId, mode, timeoutMs);

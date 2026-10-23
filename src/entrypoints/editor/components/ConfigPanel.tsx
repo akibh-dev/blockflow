@@ -6,6 +6,7 @@ import type { StepRecord } from '../../../core/runs';
 import type { FieldSpec, Row, RowsField, StepSettings, TextField, WorkflowField } from '../../../core/types';
 import { Screenshot } from './Screenshot';
 import { TemplateInput } from './TemplateInput';
+import { PermissionNote, requestPermission } from './PermissionNote';
 import { isExtensionMessage } from '../../../shared/messages';
 import { registry } from '../registry';
 import type { BlockFlowNode } from './BlockNode';
@@ -166,6 +167,8 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
         {def.icon} {def.label}
       </h2>
       <p className="bf-muted">{def.description}</p>
+
+      {def.permissions && <PermissionNote permissions={def.permissions} />}
 
       {problems.length > 0 && (
         <ul className="bf-problems">
@@ -397,7 +400,7 @@ function StepSettingsEditor({
   onChange(patch: Partial<StepSettings>): void;
   defaultTimeout: number;
 }) {
-  const configured = Boolean(step.timeoutSeconds || step.retries || (step.onError && step.onError !== 'stop') || step.disabled || step.note || step.screenshot);
+  const configured = Boolean(step.timeoutSeconds || step.retries || (step.onError && step.onError !== 'stop') || step.disabled || step.note || step.screenshot || step.realInput);
   return (
     <details className="bf-step-settings" open={configured}>
       <summary>Step settings{configured ? ' (changed)' : ''}</summary>
@@ -438,6 +441,17 @@ function StepSettingsEditor({
           <option value="never">never</option>
         </select>
         <small className="bf-muted">Only possible while the tab is showing in its window (Open Tab “in a new window” works best).</small>
+      </label>
+      <label className="bf-field bf-inline" title="For sites that ignore synthetic clicks and typing. Chromium browsers only.">
+        <input
+          type="checkbox"
+          checked={step.realInput === true}
+          onChange={(event) => {
+            if (!event.target.checked) onChange({ realInput: false });
+            else void requestPermission('debugger').then((granted) => onChange({ realInput: granted }));
+          }}
+        />
+        <span>Use real mouse and keyboard (debugger)</span>
       </label>
       <label className="bf-field bf-inline">
         <input type="checkbox" checked={step.disabled === true} onChange={(event) => onChange({ disabled: event.target.checked })} />

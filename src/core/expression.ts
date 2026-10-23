@@ -270,7 +270,7 @@ function list(value: unknown): unknown[] {
 }
 
 function regex(pattern: string): RegExp {
-  const literal = /^\/([\s\S]*)\/([a-z]*)$/.exec(pattern);
+  const literal = /^\/([\s\S]*)\/([dgimsuyv]*)$/.exec(pattern);
   try {
     return literal ? new RegExp(literal[1] as string, literal[2]) : new RegExp(pattern);
   } catch {
@@ -311,7 +311,7 @@ const FUNCTIONS: Record<string, (...args: unknown[]) => unknown> = {
   split: (x, separator = ',') => toText(x).split(toText(separator)).map((part) => part.trim()),
   replace: (x, find, replacement = '') => {
     const pattern = toText(find);
-    if (!/^\/[\s\S]*\/[a-z]*$/.test(pattern)) return toText(x).split(pattern).join(toText(replacement));
+    if (!/^\/[\s\S]*\/[dgimsuyv]*$/.test(pattern)) return toText(x).split(pattern).join(toText(replacement));
     const re = regex(pattern);
     return toText(x).replace(new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`), toText(replacement));
   },

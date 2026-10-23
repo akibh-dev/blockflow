@@ -459,6 +459,57 @@
       ]
     },
     {
+      "type": "wait-for-popup",
+      "label": "Wait for Popup",
+      "category": "browser",
+      "description": "Catch a new tab or window the page opened, and name it for the next blocks.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "name": "popup",
+        "waitUntil": "load"
+      },
+      "fields": [
+        {
+          "key": "tab",
+          "label": "Opened by tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        },
+        {
+          "key": "name",
+          "label": "Call the new tab",
+          "kind": "text",
+          "required": true
+        },
+        {
+          "key": "waitUntil",
+          "label": "Continue when",
+          "kind": "select",
+          "options": [
+            "load",
+            "networkidle",
+            "none"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "key": "popupUrl",
+          "description": "The address of the new tab."
+        },
+        {
+          "key": "popupTabId",
+          "description": "Its tab id."
+        }
+      ]
+    },
+    {
       "type": "close-tab",
       "label": "Close Tab",
       "category": "browser",
@@ -797,6 +848,85 @@
       ]
     },
     {
+      "type": "upload-file",
+      "label": "Upload File",
+      "category": "page",
+      "description": "Choose a file for a file input, without the file dialog: text you write, or a file from a URL.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "locator": "input[type=file]",
+        "source": "text",
+        "content": "",
+        "url": "",
+        "filename": "upload.txt",
+        "mime": "text/plain"
+      },
+      "fields": [
+        {
+          "key": "locator",
+          "label": "File input",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "The <input type=\"file\"> (hidden ones work too), or its label."
+        },
+        {
+          "key": "source",
+          "label": "File",
+          "kind": "select",
+          "options": [
+            "text",
+            "url"
+          ]
+        },
+        {
+          "key": "content",
+          "label": "Content",
+          "kind": "text",
+          "templated": true,
+          "help": "For \"text\"."
+        },
+        {
+          "key": "url",
+          "label": "URL",
+          "kind": "text",
+          "templated": true,
+          "help": "For \"download\"."
+        },
+        {
+          "key": "filename",
+          "label": "File name",
+          "kind": "text",
+          "templated": true,
+          "help": "Empty with a URL = the name in the URL."
+        },
+        {
+          "key": "mime",
+          "label": "Type",
+          "kind": "text",
+          "help": "For \"text\". With a URL the server says."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "uploaded",
+          "description": "The file name."
+        }
+      ]
+    },
+    {
       "type": "scroll",
       "label": "Scroll",
       "category": "page",
@@ -860,6 +990,57 @@
       ]
     },
     {
+      "type": "dialogs",
+      "label": "Dialogs",
+      "category": "page",
+      "description": "Answer alert / confirm / prompt boxes automatically, or read what they said.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 15,
+      "defaultConfig": {
+        "tab": "main",
+        "action": "accept",
+        "text": ""
+      },
+      "fields": [
+        {
+          "key": "action",
+          "label": "From now on",
+          "kind": "select",
+          "options": [
+            "accept",
+            "dismiss",
+            "read"
+          ]
+        },
+        {
+          "key": "text",
+          "label": "Text for prompts",
+          "kind": "text",
+          "templated": true
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "dialogs",
+          "description": "Dialogs shown in this page so far: {type, message}."
+        },
+        {
+          "key": "lastDialog",
+          "description": "The message of the latest one."
+        }
+      ]
+    },
+    {
       "type": "wait-for",
       "label": "Wait For",
       "category": "page",
@@ -875,7 +1056,8 @@
         "mode": "visible",
         "locator": "",
         "text": "",
-        "url": ""
+        "url": "",
+        "status": ""
       },
       "fields": [
         {
@@ -892,7 +1074,8 @@
             "no-text",
             "url",
             "load",
-            "networkidle"
+            "networkidle",
+            "response"
           ]
         },
         {
@@ -913,7 +1096,13 @@
           "label": "URL pattern",
           "kind": "text",
           "templated": true,
-          "help": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression."
+          "help": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression. Also the request address for \"a network request finishes\"."
+        },
+        {
+          "key": "status",
+          "label": "Status (optional)",
+          "kind": "text",
+          "help": "For \"a network request finishes\"."
         },
         {
           "key": "tab",
@@ -926,6 +1115,53 @@
         {
           "key": "url",
           "description": "The tab's URL when the wait ended."
+        },
+        {
+          "key": "response",
+          "description": "For \"a network request finishes\": {url, status, method}."
+        }
+      ]
+    },
+    {
+      "type": "run-script",
+      "label": "Run Script",
+      "category": "page",
+      "description": "Run your own JavaScript in the page; its return value is saved. Chrome 135+.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "code": "return document.querySelectorAll('a').length;",
+        "into": "result"
+      },
+      "fields": [
+        {
+          "key": "code",
+          "label": "JavaScript",
+          "kind": "text",
+          "required": true,
+          "help": "An async function body: use await, read `data`, and `return` a JSON value."
+        },
+        {
+          "key": "into",
+          "label": "Save the result as",
+          "kind": "text"
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "result",
+          "description": "What the code returned (or the name you chose)."
         }
       ]
     },

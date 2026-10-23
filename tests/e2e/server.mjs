@@ -29,6 +29,19 @@ export function startServer() {
       res.setHeader('content-type', 'application/json');
       return res.end(JSON.stringify({ order: (orders += 1) }));
     }
+    if (url.pathname === '/api/save' && req.method === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      res.writeHead(201, { 'content-type': 'application/json' });
+      return res.end('{"saved":true}');
+    }
+    // One same-origin frame, and one from another origin (localhost vs 127.0.0.1, same server).
+    if (url.pathname === '/frames.html') {
+      const port = server.address().port;
+      res.setHeader('content-type', 'text/html; charset=utf-8');
+      return res.end(`<!doctype html><title>Fixture: frames</title><h1>Checkout</h1>
+        <iframe id="same" src="/frame-inner.html" width="400" height="160"></iframe>
+        <iframe id="other" src="http://localhost:${port}/frame-inner.html" width="400" height="160"></iframe>`);
+    }
     // Three pages of products, 3 per page, with a Next link except on the last page.
     if (url.pathname === '/products') {
       const page = Number(url.searchParams.get('page') ?? '1');

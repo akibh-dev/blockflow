@@ -98,6 +98,7 @@ export class FakeHost implements Host {
       this.requests.push(options);
       return this.httpHandler(options);
     },
+    download: async (url: string) => ({ base64: btoa(`file at ${url}`), mime: 'image/png', name: url.split('/').pop() ?? 'file' }),
   };
 
   notify = async (options: NotifyOptions) => {
@@ -106,6 +107,18 @@ export class FakeHost implements Host {
 
   /** Open tabs: id → current URL. Closed tabs are removed. */
   readonly tabUrls = new Map<number, string>();
+  /** Popups pages "opened", for Wait for Popup. */
+  readonly popups: { openerTabId: number; tabId: number; url: string }[] = [];
+  /** Network responses tabs "received", for Wait For response. */
+  readonly responses: { tabId: number; url: string; status: number }[] = [];
+  /** Dialog settings sent per tab, and what dialogs "were shown". */
+  readonly dialogSettings: { tabId: number; options: unknown }[] = [];
+  shownDialogs: { type: string; message: string }[] = [];
+  /** Scripts run (Run Script); `scriptResult` is what they return. */
+  readonly scripts: { tabId: number; code: string; data: Payload }[] = [];
+  scriptResult: unknown = null;
+  /** realInput flags seen by page.act, in order. */
+  readonly realInputs: boolean[] = [];
   /** The tab "the user is looking at" (Run button on Page Visited / Context Menu). */
   currentTab: { tabId: number; url: string } | null = null;
   /** Every request sent to the page agent. */
@@ -141,6 +154,18 @@ export class FakeHost implements Host {
     waitForLoad: async (tabId: number, until: WaitUntil) => {
       this.loads.push({ tabId, until });
     },
+    waitForPopup: async (openerTabId: number) => {
+      const popup = this.popups.find((candidate) => candidate.openerTabId === openerTabId);
+      if (!popup) throw new Error('Timed out: no new tab was opened by this page');
+      this.popups.splice(this.popups.indexOf(popup), 1);
+      this.tabUrls.set(popup.tabId, popup.url);
+      return popup.tabId;
+    },
+    waitForResponse: async (tabId: number, pattern: string, status: string) => {
+      const found = this.responses.find((response) => response.tabId === tabId && urlMatches(response.url, pattern) && (!status || String(response.status) === status));
+      if (!found) throw new Error(`Timed out waiting for a response from ${pattern}`);
+      return { url: found.url, status: found.status, method: 'GET' };
+    },
     waitForUrl: async (tabId: number, pattern: string, timeoutMs: number) => {
       const url = this.tabUrls.get(tabId) ?? '';
       if (!urlMatches(url, pattern)) throw new Error(`Timed out after ${timeoutMs / 1000}s waiting for the URL to match ${pattern} (it is ${url})`);
@@ -153,10 +178,19 @@ export class FakeHost implements Host {
       this.reads.push(options);
       return this.pageReader(options);
     },
-    act: async (tabId: number, request: AgentRequest, timeoutMs: number) => {
+    act: async (tabId: number, request: AgentRequest, timeoutMs: number, options?: { realInput?: boolean }) => {
       this.actions.push({ tabId, request, timeoutMs });
+      this.realInputs.push(options?.realInput === true);
       if (!this.tabUrls.has(tabId)) throw new Error('The tab was closed');
       return this.agent(tabId, request);
+    },
+    dialogs: async (tabId: number, options: unknown) => {
+      this.dialogSettings.push({ tabId, options });
+      return this.shownDialogs;
+    },
+    runScript: async (tabId: number, code: string, data: Payload) => {
+      this.scripts.push({ tabId, code, data });
+      return this.scriptResult;
     },
   };
 

@@ -143,7 +143,16 @@ The recorder (`src/dom/recorder.ts`) is event delegation, like a React synthetic
 capture-phase listener per event type on `window`, deciding what each event means. Read its test
 (`tests/dom/recorder.test.ts`) and then `src/core/recording.ts`, which turns the raw steps into blocks.
 
-## 12. The editor: `src/entrypoints/editor/`
+## 12. Where an extension meets its limits
+
+- `src/browser/cdp.ts`: the same protocol Playwright and Puppeteer use, but reached through the
+  `debugger` extension API. Compare an untrusted `dispatchEvent` click with a debugger click on
+  `tests/fixtures/site/trusted.html`.
+- Frames: `FrameBoundaryError` in `src/dom/locator.ts` and how `pageDriver.ts` continues in another frame
+  is the extension version of the same-origin policy you know from `postMessage` and iframes.
+- `src/core/playwright.ts` writes code from data: a small compiler. `npm run e2e` runs its output.
+
+## 13. The editor: `src/entrypoints/editor/`
 
 An ordinary React app (React Flow for the canvas). The interesting file is `flow/convert.ts`: it converts
 between the saved `Workflow` and React Flow's nodes/edges. Everything else is UI. If you know React you

@@ -106,6 +106,9 @@ export function Sidebar({ workflows, activeId, onAddBlock, ...actions }: Sidebar
                 <button type="button" title="Export to file" onClick={() => actions.onExport([workflow.id])}>
                   ⬇
                 </button>
+                <button type="button" title="Download as a Playwright test" onClick={() => actions.onExportPlaywright(workflow.id)}>
+                  🎭
+                </button>
                 <button type="button" className="bf-danger" title="Delete" onClick={() => actions.onDelete(workflow.id)}>
                   🗑
                 </button>

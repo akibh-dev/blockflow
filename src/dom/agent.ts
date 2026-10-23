@@ -1,5 +1,5 @@
 import { accessibleName, checkedState, getRole } from './aria';
-import { LocatorError, describeElement, resolveLocator, textMatcher } from './locator';
+import { FrameBoundaryError, LocatorError, describeElement, resolveLocator, textMatcher } from './locator';
 import { bestLocator } from './bestLocator';
 import type { AgentCall, AgentRequest, AgentResponse, FormFieldRow } from '../core/page';
 
@@ -49,6 +49,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     try {
       return resolveLocator(locator, doc);
     } catch (error) {
+      if (error instanceof FrameBoundaryError) throw error;
       if (error instanceof LocatorError) throw new Fatal(error.message);
       throw error;
     }
@@ -73,7 +74,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   function hiddenByStyle(element: Element): boolean {
     if (element.closest('[hidden]')) return true;
     for (let current: Element | null = element; current; current = current.parentElement) {
-      const style = win.getComputedStyle(current);
+      const style = (current.ownerDocument.defaultView ?? win).getComputedStyle(current);
       if (style.display === 'none') return true;
       if (current === element && (style.visibility === 'hidden' || style.visibility === 'collapse')) return true;
     }
@@ -115,9 +116,11 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   /** What a real click at the element's center would hit. Null = fine. */
   function coveredBy(element: Element): Element | null {
-    if (!hasLayout() || typeof doc.elementFromPoint !== 'function') return null;
+    // Inside a same-origin iframe, coordinates and hit-testing belong to the frame's own document.
+    const own = element.ownerDocument;
+    if (!hasLayout() || typeof own.elementFromPoint !== 'function') return null;
     const { x, y } = center(element);
-    let hit = doc.elementFromPoint(x, y);
+    let hit = own.elementFromPoint(x, y);
     // Step into shadow roots, so a hit on a web component's internals counts.
     while (hit?.shadowRoot) {
       const inner = hit.shadowRoot.elementFromPoint(x, y);
@@ -130,7 +133,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     const label = hit.closest('label') as HTMLLabelElement | null;
     if (label && (label.control === element || label.contains(element))) return null;
     let root: Node = hit.getRootNode();
-    while (root instanceof win.ShadowRoot) {
+    while (root instanceof (own.defaultView ?? win).ShadowRoot) {
       if (root.host === element || element.contains(root.host)) return null;
       root = root.host.getRootNode();
     }
@@ -144,7 +147,8 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     if (needs.editable && !isEditable(element)) throw new Pending(`waiting for ${describeElement(element)} to be editable (it is read-only)`);
     if (typeof (element as HTMLElement).scrollIntoView === 'function' && hasLayout()) {
       const rect = element.getBoundingClientRect();
-      if (rect.top < 0 || rect.left < 0 || rect.bottom > win.innerHeight || rect.right > win.innerWidth) {
+      const view = element.ownerDocument.defaultView ?? win;
+      if (rect.top < 0 || rect.left < 0 || rect.bottom > view.innerHeight || rect.right > view.innerWidth) {
         (element as HTMLElement).scrollIntoView({ block: 'center', inline: 'center' });
       }
     }
@@ -590,6 +594,34 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return { height: scroller.scrollHeight, y: win.scrollY };
   }
 
+  function upload(locator: string, files: { name: string; type: string; base64: string }[]): Done {
+    const found = one(locator);
+    const input = (found.localName === 'input' ? found : (found as HTMLLabelElement).control ?? found.querySelector('input[type="file"]')) as HTMLInputElement | null;
+    if (!input || input.localName !== 'input' || input.type !== 'file') throw new Fatal(`${describeElement(found)} is not a file input. Point at the <input type="file"> (it may be hidden).`);
+    if (!isEnabled(input)) throw new Pending(`waiting for ${describeElement(input)} to be enabled`);
+    if (files.length > 1 && !input.multiple) throw new Fatal(`${describeElement(input)} takes one file, got ${files.length}`);
+    if (typeof win.DataTransfer !== 'function') throw new Fatal('This page cannot receive files (no DataTransfer)');
+    const transfer = new win.DataTransfer();
+    for (const file of files) {
+      const binary = win.atob(file.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      transfer.items.add(new win.File([bytes], file.name, { type: file.type }));
+    }
+    input.files = transfer.files;
+    inputEvent(input, null, 'insertReplacementText');
+    changeEvent(input);
+    return { files: files.map((file) => file.name) };
+  }
+
+  function locate(request: Extract<AgentRequest, { op: 'locate' }>): Done {
+    const element = one(request.locator);
+    const kind = element.localName === 'select' ? 'select' : checkedState(element) !== null ? 'check' : textKind(element) ? 'text' : 'other';
+    ready(element, { enabled: true, editable: request.purpose === 'fill' || (request.purpose === 'set-field' && kind === 'text'), hit: true });
+    const { x, y } = center(element);
+    return { x, y, kind };
+  }
+
   // --- forms ----------------------------------------------------------------
 
   function hint(element: Element): string {
@@ -677,6 +709,10 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
         return storage(request);
       case 'scroll':
         return scroll(request);
+      case 'upload':
+        return upload(request.locator, request.files);
+      case 'locate':
+        return locate(request);
     }
   }
 
@@ -687,6 +723,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
         try {
           return { status: 'done', result: attempt(request) };
         } catch (error) {
+          if (error instanceof FrameBoundaryError) return { status: 'frame', src: error.src, rest: error.rest };
           if (error instanceof Fatal) return { status: 'error', message: error.message };
           if (!(error instanceof Pending)) {
             return { status: 'error', message: error instanceof Error ? error.message : String(error) };

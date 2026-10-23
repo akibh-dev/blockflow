@@ -535,6 +535,62 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "wait-for-popup"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Catch a new tab or window the page opened, and name it for the next blocks.",
+                    "properties": {
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      },
+                      "name": {
+                        "description": "Call the new tab",
+                        "type": "string"
+                      },
+                      "waitUntil": {
+                        "description": "Continue when",
+                        "enum": [
+                          "load",
+                          "networkidle",
+                          "none"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "close-tab"
                   },
                   "position": {
@@ -922,6 +978,77 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "upload-file"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Choose a file for a file input, without the file dialog: text you write, or a file from a URL.",
+                    "properties": {
+                      "locator": {
+                        "description": "The <input type=\"file\"> (hidden ones work too), or its label.",
+                        "type": "string"
+                      },
+                      "source": {
+                        "description": "File",
+                        "enum": [
+                          "text",
+                          "url"
+                        ]
+                      },
+                      "content": {
+                        "description": "For \"text\".",
+                        "type": "string"
+                      },
+                      "url": {
+                        "description": "For \"download\".",
+                        "type": "string"
+                      },
+                      "filename": {
+                        "description": "Empty with a URL = the name in the URL.",
+                        "type": "string"
+                      },
+                      "mime": {
+                        "description": "For \"text\". With a URL the server says.",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "locator"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "scroll"
                   },
                   "position": {
@@ -987,6 +1114,60 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "dialogs"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Answer alert / confirm / prompt boxes automatically, or read what they said.",
+                    "properties": {
+                      "action": {
+                        "description": "From now on",
+                        "enum": [
+                          "accept",
+                          "dismiss",
+                          "read"
+                        ]
+                      },
+                      "text": {
+                        "description": "Text for prompts",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": []
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "wait-for"
                   },
                   "position": {
@@ -1016,7 +1197,8 @@
                           "no-text",
                           "url",
                           "load",
-                          "networkidle"
+                          "networkidle",
+                          "response"
                         ]
                       },
                       "locator": {
@@ -1028,7 +1210,11 @@
                         "type": "string"
                       },
                       "url": {
-                        "description": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression.",
+                        "description": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression. Also the request address for \"a network request finishes\".",
+                        "type": "string"
+                      },
+                      "status": {
+                        "description": "For \"a network request finishes\".",
                         "type": "string"
                       },
                       "tab": {
@@ -1037,6 +1223,58 @@
                       }
                     },
                     "required": []
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "run-script"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Run your own JavaScript in the page; its return value is saved. Chrome 135+.",
+                    "properties": {
+                      "code": {
+                        "description": "An async function body: use await, read `data`, and `return` a JSON value.",
+                        "type": "string"
+                      },
+                      "into": {
+                        "description": "Save the result as",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code"
+                    ]
                   },
                   "step": {
                     "$ref": "#/$defs/step"

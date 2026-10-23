@@ -25,6 +25,7 @@ export const DEFAULT_TIMEOUT_SECONDS = 60;
 export const MAX_RETRIES = 5;
 /** Run Workflow inside Run Workflow inside…: stop at this depth (a workflow calling itself). */
 export const MAX_CALL_DEPTH = 8;
+const SCREENSHOT_TIMEOUT_MS = 8_000;
 
 export interface RunnerOptions {
   workflow: Workflow;
@@ -437,7 +438,8 @@ export class WorkflowRunner {
     const tabId = sessionTab(payload, tabName);
     if (tabId === undefined) return;
     try {
-      const id = await this.host.screenshots.capture(tabId, run.record.id);
+      // A tab that is not rendering can make a capture hang: never let that hold up the run.
+      const id = await Promise.race([this.host.screenshots.capture(tabId, run.record.id), this.host.sleep(SCREENSHOT_TIMEOUT_MS).then(() => null)]);
       if (id) {
         step.screenshot = id;
         this.publish(run);
@@ -574,6 +576,7 @@ export class WorkflowRunner {
       config,
       isRoot: !this.hasIncoming.has(node.id),
       timeoutMs,
+      realInput: node.step?.realInput === true,
       runId: run?.record.id ?? '',
       softFail,
       callWorkflow: async (id, input) => {

@@ -261,3 +261,46 @@ describe('scraping', () => {
     expect(response).toMatchObject({ result: { columns: ['link'], values: [['https://shop.test/p/kettle']] } });
   });
 });
+
+describe('frames', () => {
+  it('frame= reaches into same-origin iframes', async () => {
+    page('<iframe id="f"></iframe>');
+    const frame = $<HTMLIFrameElement>('#f');
+    frame.contentDocument?.open();
+    frame.contentDocument?.write('<button id="inner">Pay</button>');
+    frame.contentDocument?.close();
+    let clicked = 0;
+    frame.contentDocument?.getElementById('inner')?.addEventListener('click', () => (clicked += 1));
+    expect(await run({ op: 'click', locator: 'frame=#f >> role=button[name="Pay"]', action: 'click' })).toMatchObject({ status: 'done' });
+    expect(clicked).toBe(1);
+  });
+
+  it('reports a frame from another site, with the rest of the locator', async () => {
+    page('<iframe id="pay" src="https://pay.example.com/card"></iframe>');
+    // jsdom cannot load it; like a cross-origin frame, its document is not reachable.
+    Object.defineProperty($('#pay'), 'contentDocument', { get: () => null });
+    expect(await run({ op: 'fill', locator: 'frame=#pay >> label=Card number', value: '4242', mode: 'fill' })).toEqual({
+      status: 'frame',
+      src: 'https://pay.example.com/card',
+      rest: 'label=Card number',
+    });
+  });
+});
+
+describe('upload and locate', () => {
+  // Setting files needs DataTransfer, which jsdom lacks: the success path runs in npm run e2e.
+  it('finds a hidden file input by its label, and refuses other elements', async () => {
+    page('<label for="f">Upload CV</label><input id="f" type="file" hidden><button id="b">x</button>');
+    expect(await run({ op: 'upload', locator: 'label=Upload CV', files: [{ name: 'cv.txt', type: 'text/plain', base64: btoa('hello') }] })).toEqual({
+      status: 'error',
+      message: 'This page cannot receive files (no DataTransfer)',
+    });
+    expect(await run({ op: 'upload', locator: '#b', files: [] })).toMatchObject({ status: 'error', message: expect.stringContaining('is not a file input') });
+  });
+
+  it('locate says what kind of field it found (geometry needs a real browser)', async () => {
+    page('<select id="s"><option>a</option></select><input id="t">');
+    expect(await run({ op: 'locate', locator: '#s', purpose: 'set-field' })).toMatchObject({ status: 'done', result: { kind: 'select' } });
+    expect(await run({ op: 'locate', locator: '#t', purpose: 'fill' })).toMatchObject({ status: 'done', result: { kind: 'text' } });
+  });
+});

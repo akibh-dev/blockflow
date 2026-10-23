@@ -8,6 +8,8 @@ export interface WorkflowActions {
   onToggle(id: string, enabled: boolean): void;
   onDuplicate(id: string): void;
   onExport(ids: string[]): void;
+  /** Download the workflow as a Playwright test (.spec.ts). */
+  onExportPlaywright(id: string): void;
   onDelete(id: string): void;
   onImport(files: FileList | null): void;
 }

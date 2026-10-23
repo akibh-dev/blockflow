@@ -1,3 +1,5 @@
+import { LocatorSyntaxError, parseLocatorSteps } from '../core/locatorSyntax';
+import type { LocatorStep as Step } from '../core/locatorSyntax';
 import { accessibleName, checkedState, getRole, isHiddenForAria } from './aria';
 
 /**
@@ -19,51 +21,29 @@ import { accessibleName, checkedState, getRole, isHiddenForAria } from './aria';
 
 export class LocatorError extends Error {}
 
-interface Step {
-  engine: string;
-  body: string;
+/**
+ * The locator goes into an iframe this page cannot look into (another origin). The extension then
+ * runs `rest` inside that frame itself (src/browser/pageDriver.ts).
+ */
+export class FrameBoundaryError extends LocatorError {
+  constructor(
+    readonly src: string,
+    readonly rest: string,
+  ) {
+    super(`The element is inside a frame from another site (${src})`);
+  }
 }
 
-const ENGINES = new Set(['css', 'text', 'role', 'label', 'placeholder', 'testid', 'alt', 'title', 'xpath', 'nth']);
 const TEST_ID_ATTRIBUTES = ['data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-qa'];
 const SKIP_TEXT = new Set(['script', 'style', 'noscript', 'template', 'head', 'title', 'meta', 'link']);
 
-/** Splits on `>>` outside quotes and brackets, leaving the shadow-piercing `>>>` alone. */
-function splitSteps(source: string): string[] {
-  const parts: string[] = [];
-  let quote: string | null = null;
-  let depth = 0;
-  let start = 0;
-  for (let i = 0; i < source.length; i += 1) {
-    const char = source[i];
-    if (quote) {
-      if (char === '\\') i += 1;
-      else if (char === quote) quote = null;
-      continue;
-    }
-    if (char === '"' || char === "'") quote = char;
-    else if (char === '[' || char === '(') depth += 1;
-    else if (char === ']' || char === ')') depth -= 1;
-    else if (depth === 0 && char === '>' && source[i + 1] === '>' && source[i - 1] !== '>' && source[i + 2] !== '>') {
-      parts.push(source.slice(start, i));
-      start = i + 2;
-      i += 1;
-    }
-  }
-  parts.push(source.slice(start));
-  return parts.map((part) => part.trim());
-}
-
 export function parseLocator(source: string): Step[] {
-  if (!source.trim()) throw new LocatorError('The locator is empty');
-  return splitSteps(source.trim()).map((part) => {
-    if (!part) throw new LocatorError(`Invalid locator: ${source}`);
-    const match = /^([a-z]+)\s*=([\s\S]*)$/.exec(part);
-    if (match && ENGINES.has(match[1] as string)) return { engine: match[1] as string, body: (match[2] as string).trim() };
-    if (part.startsWith('//') || part.startsWith('(//')) return { engine: 'xpath', body: part };
-    if (/^".*"$/s.test(part)) return { engine: 'text', body: part };
-    return { engine: 'css', body: part };
-  });
+  try {
+    return parseLocatorSteps(source);
+  } catch (error) {
+    if (error instanceof LocatorSyntaxError) throw new LocatorError(error.message);
+    throw error;
+  }
 }
 
 function normalize(text: string): string {
@@ -80,7 +60,7 @@ function unquote(body: string): { value: string; quoted: boolean } {
  * substring. `exact` forces an exact match for unquoted text too.
  */
 export function textMatcher(body: string, exact = false): (text: string) => boolean {
-  const regex = /^\/([\s\S]+)\/([a-z]*)$/.exec(body.trim());
+  const regex = /^\/([\s\S]+)\/([dgimsuyv]*)$/.exec(body.trim());
   if (regex) {
     let pattern: RegExp;
     try {
@@ -164,7 +144,7 @@ function parseRole(body: string): RoleQuery {
   const query: RoleQuery = { role: (match[1] as string).toLowerCase(), includeHidden: false };
   let exact = false;
   let nameBody: string | undefined;
-  const attributes = /\[\s*([a-z-]+)\s*(?:=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/(?:[^/\\]|\\.)+\/[a-z]*|[^\]]*?))?\s*\]/gi;
+  const attributes = /\[\s*([a-z-]+)\s*(?:=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/(?:[^/\\]|\\.)+\/[dgimsuyv]*|[^\]]*?))?\s*\]/gi;
   let rest = match[2] as string;
   for (const attr of rest.matchAll(attributes)) {
     const key = (attr[1] as string).toLowerCase();
@@ -181,7 +161,7 @@ function parseRole(body: string): RoleQuery {
   if (nameBody !== undefined) {
     // Unlike text=, a quoted role name is still a case-insensitive substring unless [exact] is set.
     const { value } = unquote(nameBody);
-    query.name = /^\/[\s\S]+\/[a-z]*$/.test(nameBody.trim()) ? textMatcher(nameBody) : textMatcher(value, exact);
+    query.name = /^\/[\s\S]+\/[dgimsuyv]*$/.test(nameBody.trim()) ? textMatcher(nameBody) : textMatcher(value, exact);
   }
   return query;
 }
@@ -288,17 +268,40 @@ function inDocumentOrder(elements: Element[]): Element[] {
 
 /** Every element the locator matches, in document order. Throws LocatorError for invalid locators. */
 export function resolveLocator(source: string, root: ParentNode = document): Element[] {
+  const steps = parseLocator(source);
   let current: Element[] | null = null;
-  for (const step of parseLocator(source)) {
+  let scopes: ParentNode[] = [root];
+  for (const [index, step] of steps.entries()) {
     if (step.engine === 'nth') {
-      const index = Number(step.body);
-      if (!Number.isInteger(index)) throw new LocatorError(`nth needs a whole number: nth=${step.body}`);
+      const position = Number(step.body);
+      if (!Number.isInteger(position)) throw new LocatorError(`nth needs a whole number: nth=${step.body}`);
       const list: Element[] = current ?? [];
-      const picked: Element | undefined = index < 0 ? list[list.length + index] : list[index];
+      const picked: Element | undefined = position < 0 ? list[list.length + position] : list[position];
       current = picked ? [picked] : [];
+      scopes = current;
       continue;
     }
-    const scopes: ParentNode[] = current ?? [root];
+    if (step.engine === 'frame') {
+      // frame=<css of the iframe>: the following steps search inside that frame's document.
+      const frames = inDocumentOrder(scopes.flatMap((scope) => queryCss(step.body, scope))).filter((element) => element.localName === 'iframe' || element.localName === 'frame');
+      const documents: ParentNode[] = [];
+      for (const frame of frames) {
+        let inner: Document | null = null;
+        try {
+          inner = (frame as HTMLIFrameElement).contentDocument;
+        } catch {
+          inner = null;
+        }
+        if (inner) documents.push(inner);
+        else {
+          const rest = steps.slice(index + 1).map((next) => `${next.engine}=${next.body}`).join(' >> ');
+          throw new FrameBoundaryError((frame as HTMLIFrameElement).src, rest);
+        }
+      }
+      current = frames;
+      scopes = documents;
+      continue;
+    }
     const found: Element[] = [];
     for (const scope of scopes) {
       for (const element of queryStep(step, scope)) {
@@ -308,6 +311,7 @@ export function resolveLocator(source: string, root: ParentNode = document): Ele
       }
     }
     current = inDocumentOrder(found);
+    scopes = current;
   }
   return current ?? [];
 }

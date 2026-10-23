@@ -197,3 +197,10 @@ describe('urlMatches', () => {
     expect(() => urlMatches('x', '/(/')).toThrow('Invalid URL pattern');
   });
 });
+
+describe('regex or plain text', () => {
+  it('only real regex flags make /…/ a regex', () => {
+    expect(urlMatches('https://shop.test/api/cart?x', '/api/cart')).toBe(true);
+    expect(urlMatches('https://shop.test/WELCOME', '/welcome/i')).toBe(true);
+  });
+});

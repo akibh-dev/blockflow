@@ -44,6 +44,6 @@ export async function inPage(
   request: AgentRequest,
 ): Promise<{ tabId: number; result: Record<string, unknown> }> {
   const tabId = requireSessionTab(input, ctx.config.tab ?? DEFAULT_TAB);
-  const result = await ctx.host.page.act(tabId, request, pageWaitMs(ctx as BlockContext<object>));
+  const result = await ctx.host.page.act(tabId, request, pageWaitMs(ctx as BlockContext<object>), ctx.realInput ? { realInput: true } : undefined);
   return { tabId, result };
 }

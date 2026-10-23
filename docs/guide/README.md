@@ -167,6 +167,7 @@ Every "Element"/"Field" setting is a locator, Playwright style:
 | `xpath=//form//button`, `//form//button` | XPath |
 | `#cart >> text=Remove` | the second inside the first |
 | `li >> nth=0`, `li >> nth=-1` | first / last match |
+| `frame=#pay >> label=Card number` | inside an iframe (same site or another site) |
 
 Common roles: `button`, `link`, `textbox`, `checkbox`, `radio`, `combobox` (a `<select>`), `heading`,
 `listitem`, `row`, `cell`, `dialog`, `switch`, `tab`, `img`.
@@ -270,7 +271,20 @@ any templated setting. Their values are replaced by `•••` in the run log, 
 and reports, and are never part of exported workflows. They are stored unencrypted in the browser
 profile's extension storage.
 
-## 12. Testing patterns
+## 12. Harder pages
+
+| Situation | Use |
+| --- | --- |
+| A site ignores synthetic clicks/typing (checks `event.isTrusted`) | step setting `"realInput": true` on Click / Fill / Fill Form / Check / Press Key. Uses the browser's debugger (Chrome, Edge, Brave; optional permission, asked when ticked; a "debugging" bar shows while it acts). Also lets failed steps in background tabs get screenshots |
+| Payment / login widget in an iframe | `frame=<iframe css> >> <locator>` in any locator; cross-origin frames work too |
+| "Sign in with…" popup, `target=_blank` link | Click, then **Wait for Popup** (`name: "popup"`), then blocks with `"tab": "popup"` |
+| `alert` / `confirm` / `prompt` | **Dialogs** (`accept` + prompt `text`, or `dismiss`) **before** the click that opens them; `read` returns `{{dialogs}}` / `{{lastDialog}}` |
+| File chooser | **Upload File** on the `<input type="file">` (hidden ones too, or its label): text you write, or a file from a URL |
+| Wait for an API call instead of the UI | **Wait For** `mode: "response"`, `url` pattern, optional `status` (`201`, `2xx`). A response that finished during the previous block counts |
+| Anything no block does | **Run Script**: async JS body, sees `data`, `return` a JSON value. Needs Chrome 135+, the userScripts permission (Grant button) and "Allow User Scripts" / developer mode for BlockFlow |
+| Run the same test in CI | 🎭 **Playwright** export (sidebar row or All workflows): a `.spec.ts` for `npx playwright test`; secrets become environment variables (`{{secret.loginPassword}}` → `LOGINPASSWORD`); Run Workflow calls become functions; BlockFlow-only blocks become comments |
+
+## 13. Testing patterns
 
 - **Test = workflow** starting with Open Tab, ending with Asserts. Run with ▶ Run; read the result in
   Reports.
@@ -285,7 +299,7 @@ profile's extension storage.
 - **Data-driven tests**: Data Table (CSV/JSON) → For Each (`each` output) → the test steps using
   `{{row.email}}`. Use `step.onError: "continue"` or soft Asserts so one bad row does not stop the rest.
 
-## 13. Scraping and data
+## 14. Scraping and data
 
 - **One page**: `Open Tab → Extract List` with an item locator (`.product-card`) and fields
   (`name`, `locator` inside the item, optional `attribute` such as `href`). Result: `{{items}}`, a list
@@ -303,7 +317,7 @@ profile's extension storage.
 - **The page itself**: `Page Info` (title, meta, canonical, JSON-LD) or its localStorage /
   sessionStorage / cookies.
 
-## 14. Monitoring patterns
+## 15. Monitoring patterns
 
 - `Timer (repeat) → Read Element (Page URL) → If → Notify`: Read Element with a Page URL uses
   BlockFlow's own background tab and reloads it each time. `{{previous}}` and `{{changed}}` compare
@@ -311,7 +325,7 @@ profile's extension storage.
 - `Watch Element → Notify`: fires only when the text changes.
 - `Timer → HTTP Request → Assert {{status}} equals 200 (onError: port) → Notify`: uptime check.
 
-## 15. Examples
+## 16. Examples
 
 | File | Shows |
 | --- | --- |
@@ -324,12 +338,12 @@ profile's extension storage.
 | [`data-driven-login`](examples/data-driven-login.blockflow.json) | Data Table + For Each + soft Assert, a secret chosen by an expression |
 | [`api-to-dataset`](examples/api-to-dataset.blockflow.json) | HTTP Request + Transform + dataset history + If |
 
-## 16. Limits (what a browser extension cannot do, or BlockFlow does not do yet)
+## 17. Limits (what a browser extension cannot do, or BlockFlow does not do yet)
 
-- Page events are synthetic (`isTrusted: false`); a few sites (anti-bot checks, some payment
-  widgets) ignore them.
-- Not reachable yet: iframes, closed shadow roots, native file pickers (file upload), browser dialogs
-  (`alert`/`confirm`).
+- Page events are synthetic (`isTrusted: false`) unless `realInput` is on (Chromium only). Real input
+  inside cross-origin iframes is not supported (coordinates are the frame's own).
+- Closed shadow roots, drag and drop, and file *drop zones* (not inputs) are not supported.
+- Run Script needs Chrome 135+ with user scripts allowed; Firefox and older Chrome explain that.
 - Pages browsers protect: `chrome://`, the extension stores, other extensions, PDF viewer. `file://`
   only after the user enables "Allow access to file URLs".
 - CAPTCHAs and 2FA are not bypassed: use Manual Step.

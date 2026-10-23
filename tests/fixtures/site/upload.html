@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Fixture: upload</title></head>
+<body>
+  <!-- A custom upload button: the real file input is hidden. -->
+  <label for="cv">Upload CV</label><input id="cv" type="file" hidden>
+  <button type="button" onclick="document.getElementById('cv').click()">Choose file</button>
+  <pre id="out"></pre>
+  <script>
+    document.getElementById('cv').addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      document.getElementById('out').textContent = `${file.name}|${file.type}|${await file.text()}`;
+    });
+  </script>
+</body></html>

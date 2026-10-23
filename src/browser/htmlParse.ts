@@ -15,7 +15,9 @@ export async function runOnHtml(html: string, baseUrl: string, request: AgentReq
   const doc = new DOMParser().parseFromString(base + html, 'text/html');
   const response = await createAgent(window as PageWindow, doc).run({ request, budgetMs: 0 });
   if (response.status === 'done') return response.result;
-  throw new Error(response.status === 'error' ? response.message : response.reason.replace(/^waiting for /, 'Nothing matches: '));
+  if (response.status === 'error') throw new Error(response.message);
+  if (response.status === 'frame') throw new Error('Frames cannot be read from HTML in the data; open the page in a tab instead');
+  throw new Error(response.reason.replace(/^waiting for /, 'Nothing matches: '));
 }
 
 const OFFSCREEN_URL = '/offscreen.html';

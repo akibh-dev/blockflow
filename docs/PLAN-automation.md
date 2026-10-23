@@ -1,7 +1,7 @@
 # Plan: browser automation, testing and scraping
 
-Status (2026-10-23): **Phases A to E built** (see the table in section 6 for what is in and what moved).
-Phase F is a plan. Usage guide for people and AI tools: docs/guide/README.md. Today BlockFlow has 8 blocks
+Status (2026-10-23): **all phases (A to F) built** (see the table in section 6 for what is in and what moved).
+What was left out is listed per phase in section 6. Usage guide for people and AI tools: docs/guide/README.md. Today BlockFlow has 8 blocks
 (Timer, Open URL, Watch Element, Read Element, If, Set Variable, HTTP Request, Notify), a workflow
 manager and a run log.
 
@@ -373,7 +373,7 @@ the matching learning lesson updated (CLAUDE.md rule).
 | **C. Testing** ✅ built 2026-10-23. Expect Page folded into Assert (chain Asserts; soft mode for a checklist). Runs stay in storage.local (40); screenshots in IndexedDB. Secrets are not encrypted (a passphrase is a later option) | Assert, Expect Page, screenshots on failure, run history in IndexedDB, reports page, JUnit/HTML export, Manual Step, Run Workflow (sub-flows), secrets | "Login" sub-flow reused by 3 tests; a broken selector gives a red step with a screenshot and a readable message |
 | **D. Scraping and data** ✅ built 2026-10-23. Plus Scroll and Page Info (with storage/cookies). Data tables are a Data Table block feeding For Each rather than a per-row Manual trigger. Loop "until a condition" is not built (Repeat has a count) | Extract List, Extract Table, For Each, Loop, Paginate, Filter, Transform + expression language, datasets, Export CSV/JSON, data tables, Fetch & Parse (offscreen) | scrape a 3-page fixture list into a CSV; data-driven test runs once per CSV row |
 | **E. Recorder and productivity** ✅ built 2026-10-23. Plus a Start block with starting values and a Schedule block. Context Menu passes url/selection/link/image, not the right-clicked element's locator. Block groups/comments on the canvas are not built | recorder, assert-from-page toolbar, picker candidates, `{{` autocomplete, undo/redo, copy/paste, templates, Page Visited and Context Menu triggers | recording the fixture login produces a flow that replays green without edits |
-| **F. Power features** | CDP driver (real input, full-page screenshot, response bodies, closed shadow DOM), dialogs, popups, iframes, Upload File, userScripts Run Script, Export as Playwright, per-workflow optional permissions | a flow with an iframe payment field and a popup login passes; exported `.spec.ts` passes under `npx playwright test` |
+| **F. Power features** ✅ built 2026-10-23. Not built: closed shadow roots, response bodies (status only), real input inside cross-origin frames, per-workflow host permissions (only debugger/userScripts are optional). Run Script verified only for its "not available" message (Chromium 131 lacks userScripts.execute) | CDP driver (real input, full-page screenshot, response bodies, closed shadow DOM), dialogs, popups, iframes, Upload File, userScripts Run Script, Export as Playwright, per-workflow optional permissions | a flow with an iframe payment field and a popup login passes; exported `.spec.ts` passes under `npx playwright test` |
 
 Order matters: A is needed by everything; B is the heart of form filling; C and D can swap.
 

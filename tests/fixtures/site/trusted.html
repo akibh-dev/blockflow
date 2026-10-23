@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Fixture: trusted events only</title></head>
+<body>
+  <!-- Like some anti-bot checks: only real (trusted) events count. -->
+  <button type="button" id="press">Press</button>
+  <input id="name" aria-label="Name">
+  <p id="result"></p>
+  <script>
+    document.getElementById('press').addEventListener('click', (event) => {
+      document.getElementById('result').textContent = event.isTrusted ? 'trusted' : 'untrusted';
+    });
+    document.getElementById('name').addEventListener('keydown', (event) => {
+      if (event.isTrusted) document.getElementById('name').dataset.trusted = 'yes';
+    });
+  </script>
+</body></html>

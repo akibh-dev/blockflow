@@ -3,7 +3,7 @@
 Build small browser automations by connecting blocks, like n8n or AutoHotkey, but inside your browser.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
 
-**Status: prototype 1.** 38 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
+**Status: prototype 1.** 42 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
 [What has been verified](#what-has-been-verified) before you rely on it.
 
 **Using BlockFlow, or asking an AI to build workflows for you?** Read the
@@ -31,6 +31,7 @@ other block's input. The data a block produces becomes available to the next blo
 | 📄 **Paginate** · 🖱️ **Scroll** · ℹ️ **Page Info** | Click Next through pages; scroll infinite lists to the end; title/meta/JSON-LD, localStorage, cookies. | `page`; `page`/`value` |
 | 🔁 **For Each** · 🔂 **Repeat** · 🧹 **Filter** · 🧮 **Transform** | Loop over a list (`each`/`done` outputs), N times; keep matching items; compute values with expressions (`sum(pluck(items,'price'))`). | `item`, `index` |
 | 🗂️ **Data Table** · 💾 **Save to Dataset** · ⬇️ **Download** | Paste CSV/JSON test data; keep rows between runs (Data page); save CSV/JSON files. | `rows`; `datasetSize`; `file` |
+| 📎 **Upload File** · 💬 **Dialogs** · 🪟 **Wait for Popup** · 🧑‍💻 **Run Script** | Files without the file dialog; answer alert/confirm/prompt; catch new tabs/windows; your own JS (Chrome 135+). | `uploaded`; `dialogs`; `popupUrl`; `result` |
 | ✋ **Manual Step** · ⏹ **Stop** · 📝 **Log** | Pause until you press Continue (CAPTCHA, 2FA); end a path as passed/failed; write to the log. | |
 | ⏱ **Timer** | Nothing connected to it: starts the flow every N seconds (or once). After another block: **delays** the flow by N seconds. | `tick`, `firedAt` |
 | 🔀 **If** | Two outputs, **true** and **false**: the data goes one way or the other (equals, contains, starts with, regex, greater/at least, empty, is true…). | passes input through |
@@ -84,6 +85,14 @@ Open Tab (https://shop.test/login)
   → Wait For (URL matches /account)            ← on error → Notify "login broken"
   → Read Element (#greeting) → If ({{value}} contains "Welcome") → true: Notify "login OK"
 ```
+
+## Harder pages, and CI
+
+- `frame=#pay >> label=Card number` reaches into iframes, also from other sites.
+- Step setting **Use real mouse and keyboard** sends trusted input through the browser debugger
+  (Chromium; asks for the permission when ticked) for sites that ignore synthetic events.
+- **Wait For → a network request finishes** waits for an API call (URL pattern + status).
+- 🎭 exports a workflow as a **Playwright test** (`.spec.ts`) to run in CI with `npx playwright test`.
 
 ## Building faster
 
@@ -222,6 +231,7 @@ needed.
 | 2026-10-23, `npm run e2e` Phase C (30 checks in all): Run Workflow reusing a login in the same tab, Assert text/title passing, a soft Assert failing the run while the flow continues, its screenshot in the Reports page and in the HTML export, JUnit export, the secret password absent from all run records, Manual Step continued from the editor banner | Run, passing. |
 | 2026-10-23, `npm run e2e` Phase D (38 checks in all, Playwright Chromium 131: Brave stopped launching under automation that afternoon, see below): Paginate 3 pages + Extract List + Save to Dataset (9 rows in IndexedDB, absolute links) + Download CSV, HTTP Request + Extract Table/List from HTML through Chrome's offscreen document, Scroll an infinite feed to 40 posts, a CSV-driven For Each login (one good, one bad), Data page preview | Run, passing. |
 | 2026-10-23, `npm run e2e` Phase E (47 checks in all, Chromium 131): recording a real login (typing, select, checkbox, submit, navigation, Assert text from the toolbar) became Open Tab → Fill Form → Wait For → Assert with readable locators and `{{secret.password}}`, and replayed green; pick gives `role=button[name="Forgot password?"]` plus alternatives; undo/redo/copy/paste; a template; `{{` suggestions; Page Visited started a run on a visited tab. Context Menu and Schedule: unit tests only | Run, passing. |
+| 2026-10-23, `npm run e2e` Phase F (57 checks in all, twice in a row, Chromium 131): Upload File on a hidden input, Wait for Popup (window.open and target=_blank from a background tab), Dialogs (confirm dismissed, prompt answered), same-origin and cross-origin iframes, Wait For a POST /api/save 201, synthetic click untrusted vs real input trusted (click and typing), a background-tab screenshot through the debugger, Run Script's message on a browser without userScripts.execute, and a workflow exported from the editor as a .spec.ts passing under `npx playwright test` | Run, passing. |
 | Firefox host permission grant, Safari conversion, Chrome Web Store upload | **Not run.** |
 
 ## Known limitations
@@ -233,7 +243,8 @@ needed.
   particular may still suspend the worker: untested. Timers of 30s or more are alarm-only and cheap.
 - **Watch Element uses its own background tab** per watched URL (never your own tabs) and reloads it on each
   check by default. Pages that need a login work if you are signed in in the same browser profile.
-- Broad site access (`<all_urls>`) for now. Later: ask for access per workflow with optional permissions.
+- Broad site access (`<all_urls>`) for now; only `debugger` and `userScripts` are optional (asked when a block needs
+  them). Per-workflow site permissions are not built: browsers only ask on a click, which scheduled runs cannot give.
 - No templates or undo yet. Two editor tabs open at once overwrite each other's changes.
 - `npm run e2e` picks Brave first. If a browser hangs at launch under automation (Brave did after an update on
   2026-10-23), run `BF_BROWSER=/path/to/chromium npm run e2e`; Playwright's Chromium in

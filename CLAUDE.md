@@ -10,7 +10,9 @@ npm install            # runs `wxt prepare` (generates .wxt/ types)
 npm run typecheck      # tsc --noEmit
 npm test               # vitest run (core + editor in Node, tests/dom in jsdom)
 npm run check          # typecheck + tests + learning examples in sync
-npm run e2e            # build + drive the real extension in Brave/Chromium (tests/e2e, fixtures in tests/fixtures/site)
+npm run e2e            # BF_E2E=1 build into .output-e2e (optional permissions granted) + drive it in Brave/Chromium
+                       # (tests/e2e, fixtures in tests/fixtures/site; BF_BROWSER=/path/to/chrome to choose)
+npm run guide:sync     # regenerate docs/guide/blocks.* from the registry (guide:check is part of npm run check)
 npm run learn:sync     # regenerate docs/learning/examples from the lessons (learn:check verifies)
 npm run dev            # Chrome with hot reload; `npm run dev:firefox` for Firefox
 npm run build / build:firefox / build:safari
@@ -53,7 +55,9 @@ Prototype 1 was written where npm was blocked, so it was verified only partially
 - Blocks that touch a page go through `ctx.host.page.act(tabId, request, …)` (requests in `src/core/page.ts`,
   carried out by `src/dom/agent.ts`), and find their tab with `requireSessionTab(input, ctx.config.tab)`.
   New page abilities: add an op to `page.ts`, implement it in `agent.ts` with a jsdom test, then the block.
-- `src/dom/*` runs inside web pages: DOM only, `import type` from elsewhere.
+- `src/dom/*` runs inside web pages: DOM only; it may import pure `src/core` modules (no browser APIs).
+- New or changed blocks: run `npm run guide:sync` (the usage guide's reference is generated) and keep
+  `docs/guide/README.md` and its examples correct; `npm run check` fails otherwise.
 
 ## Learning material (keep it current)
 

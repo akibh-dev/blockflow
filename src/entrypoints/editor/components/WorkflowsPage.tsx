@@ -126,6 +126,9 @@ export function WorkflowsPage({ workflows, activeId, logs, errorCounts, onSetAll
                   <button type="button" onClick={() => actions.onExport([workflow.id])}>
                     Export
                   </button>
+                  <button type="button" onClick={() => actions.onExportPlaywright(workflow.id)} title="Download as a Playwright test (.spec.ts) to run in CI">
+                    Playwright
+                  </button>
                   <button type="button" className="bf-danger" onClick={() => actions.onDelete(workflow.id)}>
                     Delete
                   </button>

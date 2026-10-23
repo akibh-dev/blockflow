@@ -97,3 +97,75 @@ export async function waitForUrl(tabId: number, pattern: string, timeoutMs: numb
     await sleep(150);
   }
 }
+
+// --- network log for Wait For "response" -----------------------------------------------------
+//
+// Listening to every request of every tab would wake the background worker for all browsing, so
+// only tabs a run uses are watched: from Open Tab on, or from the first wait. In memory: a run
+// keeps the worker awake anyway.
+
+interface Response {
+  url: string;
+  status: number;
+  method: string;
+  at: number;
+  used: boolean;
+}
+
+const logs = new Map<number, Response[]>();
+
+export function watchNetwork(tabId: number): void {
+  if (logs.has(tabId)) return;
+  const entries: Response[] = [];
+  logs.set(tabId, entries);
+  const filter = { urls: ['<all_urls>'], tabId };
+  const done = (details: { url: string; statusCode?: number; method: string; tabId: number }): undefined => {
+    if (details.tabId !== tabId) return undefined;
+    entries.push({ url: details.url, status: details.statusCode ?? 0, method: details.method, at: Date.now(), used: false });
+    if (entries.length > 300) entries.splice(0, entries.length - 300);
+    return undefined;
+  };
+  browser.webRequest.onCompleted.addListener(done, filter);
+  browser.webRequest.onErrorOccurred.addListener(done, filter);
+  const closed = (closedId: number) => {
+    if (closedId !== tabId) return;
+    browser.webRequest.onCompleted.removeListener(done);
+    browser.webRequest.onErrorOccurred.removeListener(done);
+    browser.tabs.onRemoved.removeListener(closed);
+    logs.delete(tabId);
+  };
+  browser.tabs.onRemoved.addListener(closed);
+}
+
+/** "200", "2xx", "200,201", or "" for any. */
+export function statusMatches(status: number, wanted: string): boolean {
+  const options = wanted.split(',').map((part) => part.trim().toLowerCase()).filter(Boolean);
+  if (options.length === 0) return true;
+  return options.some((option) => (/^\dxx$/.test(option) ? Math.floor(status / 100) === Number(option[0]) : Number(option) === status));
+}
+
+export async function waitForResponse(
+  tabId: number,
+  pattern: string,
+  status: string,
+  lookBackMs: number,
+  timeoutMs: number,
+): Promise<{ url: string; status: number; method: string }> {
+  watchNetwork(tabId);
+  const since = Date.now() - lookBackMs;
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const entries = logs.get(tabId) ?? [];
+    const found = entries.find((entry) => !entry.used && entry.at >= since && urlMatches(entry.url, pattern) && statusMatches(entry.status, status));
+    if (found) {
+      found.used = true;
+      return { url: found.url, status: found.status, method: found.method };
+    }
+    if ((await tabInfo(tabId)) === null) throw new Error('The tab was closed');
+    if (Date.now() >= deadline) {
+      const seen = entries.filter((entry) => urlMatches(entry.url, pattern)).map((entry) => entry.status);
+      throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s waiting for a response from ${pattern}${status ? ` with status ${status}` : ''}${seen.length ? ` (saw status ${[...new Set(seen)].join(', ')})` : ''}`);
+    }
+    await sleep(150);
+  }
+}

@@ -38,7 +38,7 @@ function numbers(left: string, right: string, compare: (a: number, b: number) =>
 }
 
 function matches(left: string, pattern: string): boolean {
-  const literal = /^\/(.*)\/([a-z]*)$/s.exec(pattern);
+  const literal = /^\/(.*)\/([dgimsuyv]*)$/s.exec(pattern);
   try {
     return literal ? new RegExp(literal[1] ?? '', literal[2]).test(left) : new RegExp(pattern).test(left);
   } catch {

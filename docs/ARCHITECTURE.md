@@ -166,6 +166,27 @@ need the future CDP driver; iframes and closed shadow roots are not reached yet.
   `src/core/recording.ts` and inserts the blocks. Locators come from `src/dom/bestLocator.ts`, shared
   with the picker and Detect fields.
 
+## Harder pages (phase F)
+
+- **Frames**: `frame=<css>` in a locator moves the search into that iframe's document. A same-origin
+  frame is entered directly; a cross-origin one makes the agent answer `{status: 'frame', src, rest}`,
+  and the driver finds the frame id with `webNavigation.getAllFrames` and runs `rest` there.
+- **Real input**: with `step.realInput`, `pageDriver.act` asks the agent to `locate` the element (same
+  auto-wait), then sends `Input.dispatchMouseEvent` / `insertText` / `dispatchKeyEvent` through
+  `chrome.debugger` (`src/browser/cdp.ts`), attaching for each action only. Optional permission.
+- **Popups** are recorded from `webNavigation.onCreatedNavigationTarget` (not `tabs.onCreated`, whose
+  `openerTabId` is empty for popup windows and wrong for links in background tabs).
+- **Dialogs** are overridden in the page's own JavaScript world (`scripting.executeScript` with
+  `world: 'MAIN'`), since `alert` lives there.
+- **Responses**: tabs opened by Open Tab get a per-tab `webRequest` log (listeners filtered by tab, so
+  normal browsing never wakes the worker); Wait For "response" looks back 10 s, then waits.
+- **Run Script** uses `chrome.userScripts.execute` (Chrome 135+): user code is only allowed through that
+  API in MV3.
+- **Playwright export** (`src/core/playwright.ts`) walks the graph from the start blocks and maps locators
+  step by step to `getByRole` / `getByLabel` / `frameLocator`…; e2e runs an exported spec for real.
+- Screenshots and captures are raced against a timeout: a background tab that does not paint must not
+  hold up a run.
+
 ## Watch Element
 
 `Host.page.readElement({ url, selector, reload })` (see `src/browser/pageReader.ts`):

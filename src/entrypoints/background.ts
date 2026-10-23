@@ -10,6 +10,7 @@ import { markInterrupted } from '../core/runs';
 import { withSessionTab } from '../core/session';
 import { urlMatches } from '../core/urlPattern';
 import { isOwnTab } from '../browser/ownTabs';
+import { recordPopup } from '../browser/popups';
 import { onRecordedTabUpdated, recordStep, startRecording, stopRecording } from '../browser/recording';
 import type { RunRecord } from '../core/runs';
 import { sampleWorkflows } from '../core/samples';
@@ -191,6 +192,13 @@ export default defineBackground(() => {
   });
   browser.webNavigation.onHistoryStateUpdated.addListener((details) => {
     if (details.frameId === 0) void onPageVisited(details.tabId, details.url, 'route').catch(report('page visited'));
+  });
+
+  // Tabs opened by pages (window.open, target=_blank), for Wait for Popup. Not tabs.onCreated:
+  // Chrome leaves openerTabId empty for popup windows, and for a link in a background tab names the
+  // active tab instead. onCreatedNavigationTarget always names the page that opened it.
+  browser.webNavigation.onCreatedNavigationTarget.addListener((details) => {
+    void recordPopup(details.tabId, details.sourceTabId).catch(report('popup'));
   });
 
   browser.tabs.onUpdated.addListener((tabId, change) => {

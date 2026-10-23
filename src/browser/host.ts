@@ -3,11 +3,13 @@ import { uid } from '../core/id';
 import { STORAGE_KEYS } from '../shared/keys';
 import { readDataset, saveScreenshot, writeDataset } from './blobStore';
 import { actOnHtml } from './htmlParse';
-import { tabInfo, waitForLoad, waitForUrl } from './navigation';
+import { tabInfo, waitForLoad, waitForResponse, waitForUrl, watchNetwork } from './navigation';
 import { addOwnTab } from './ownTabs';
 import { askUser } from './prompts';
 import { loadWorkflows } from './stores';
-import { actInTab } from './pageDriver';
+import { act } from './pageDriver';
+import { captureWithDebugger } from './cdp';
+import { waitForPopup } from './popups';
 import { readElement } from './pageReader';
 import { requireTabId, sleep } from './tabs';
 import type { Host, HttpRequestOptions, HttpResult, NavigateOptions, NotifyOptions, OpenTabOptions, TabInfo, Scheduler, StateStore } from '../core/types';
@@ -45,6 +47,7 @@ async function openTab({ url, newTab, active, reuseTabId, newWindow, waitUntil =
     }
   }
   await addOwnTab(tabId).catch(() => {});
+  watchNetwork(tabId);
   // Give the navigation a moment to start, so "complete" is not the previous page's.
   if (waitUntil !== 'none') {
     await sleep(100);
@@ -84,10 +87,13 @@ async function notify({ title, message }: NotifyOptions): Promise<void> {
 
 async function capture(tabId: number, runId: string): Promise<string | null> {
   const tab = await browser.tabs.get(tabId);
-  // captureVisibleTab only sees the tab that is showing in its window. Runs in a background tab
-  // get no screenshot (use Open Tab "in a new window" for tests).
-  if (!tab.active || tab.windowId === undefined) return null;
-  const dataUrl = await browser.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 60 });
+  // captureVisibleTab only sees the tab that is showing in its window. A background tab needs the
+  // debugger permission (granted for real input); without it there is no screenshot.
+  const dataUrl =
+    tab.active && tab.windowId !== undefined
+      ? await browser.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 60 })
+      : await captureWithDebugger(tabId).catch(() => null);
+  if (!dataUrl) return null;
   const id = uid();
   await saveScreenshot({ id, runId, ts: Date.now(), dataUrl });
   return id;
@@ -121,11 +127,71 @@ async function currentTab(): Promise<(TabInfo & { tabId: number }) | null> {
   return { tabId: tab.id, url: tab.url ?? '', title: tab.title ?? '', loading: tab.status === 'loading' };
 }
 
+async function downloadFile(url: string): Promise<{ base64: string; mime: string; name: string }> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Downloading ${url} failed: HTTP ${response.status}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  const name = decodeURIComponent(new URL(url).pathname.split('/').pop() || 'file');
+  return { base64: btoa(binary), mime: response.headers.get('content-type')?.split(';')[0]?.trim() || 'application/octet-stream', name };
+}
+
+/** alert/confirm/prompt live in the page's own JavaScript world, so this runs there (world: MAIN). */
+async function dialogs(tabId: number, options: { mode: 'accept' | 'dismiss'; text: string } | { read: true }): Promise<{ type: string; message: string }[]> {
+  const [injection] = await browser.scripting.executeScript({
+    target: { tabId },
+    world: 'MAIN',
+    func: (mode: string | null, text: string) => {
+      type State = { log: { type: string; message: string }[]; mode: string; text: string; installed?: boolean };
+      const page = window as unknown as { __blockflowDialogs?: State };
+      const state: State = (page.__blockflowDialogs ??= { log: [], mode: 'accept', text: '' });
+      if (mode !== null) {
+        state.mode = mode;
+        state.text = text;
+        if (!state.installed) {
+          state.installed = true;
+          const record = (type: string, message: unknown) => state.log.push({ type, message: String(message ?? '') });
+          window.alert = (message?: unknown) => record('alert', message);
+          window.confirm = (message?: string) => {
+            record('confirm', message);
+            return state.mode === 'accept';
+          };
+          window.prompt = (message?: string, fallback?: string) => {
+            record('prompt', message);
+            return state.mode === 'accept' ? state.text || fallback || '' : null;
+          };
+        }
+      }
+      return state.log;
+    },
+    args: 'read' in options ? [null, ''] : [options.mode, options.text],
+  });
+  return (injection?.result as { type: string; message: string }[] | undefined) ?? [];
+}
+
+async function runScript(tabId: number, code: string, data: Record<string, unknown>): Promise<unknown> {
+  const needs =
+    'Run Script needs Chrome 135 or newer, the "userScripts" permission (press Grant on the block), and "Allow User Scripts" (or developer mode) switched on for BlockFlow in chrome://extensions.';
+  let api: { execute?: (options: unknown) => Promise<{ result?: unknown; error?: string }[]> } | undefined;
+  try {
+    // Reading the property throws while user scripts are not allowed.
+    api = (browser as unknown as { userScripts?: typeof api }).userScripts;
+  } catch (error) {
+    throw new Error(`${needs} (${error instanceof Error ? error.message : String(error)})`);
+  }
+  if (!api?.execute) throw new Error(needs);
+  const wrapped = `(async () => {\nconst data = ${JSON.stringify(data)};\n${code}\n})()`;
+  const [result] = await api.execute({ target: { tabId }, js: [{ code: wrapped }], world: 'USER_SCRIPT' });
+  if (result?.error) throw new Error(result.error);
+  return result?.result;
+}
+
 /** The real Host: connects the engine to the browser. */
 export function createExtensionHost(scheduler: Scheduler): Host {
   return {
     sleep,
-    http: { fetch: httpFetch },
+    http: { fetch: httpFetch, download: downloadFile },
     notify,
     tabs: {
       open: openTab,
@@ -137,8 +203,10 @@ export function createExtensionHost(scheduler: Scheduler): Host {
       current: currentTab,
       waitForLoad,
       waitForUrl,
+      waitForPopup,
+      waitForResponse,
     },
-    page: { readElement, act: actInTab },
+    page: { readElement, act, dialogs, runScript },
     scheduler,
     state: new StorageState(),
     workflows: { get: async (id) => (await loadWorkflows()).find((workflow) => workflow.id === id) },

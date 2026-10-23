@@ -30,6 +30,7 @@ import { downloadText, fileNameFor, readFiles } from './files';
 import { fromFlow, sameGraph, toFlow } from './flow/convert';
 import { useLogs, usePrompts, useRuns, useStorageValue } from './hooks';
 import { recordingToBlocks } from '../../core/recording';
+import { workflowToPlaywright } from '../../core/playwright';
 import { STORAGE_KEYS } from '../../shared/keys';
 import type { RecordingState } from '../../browser/recording';
 import { PromptBanner } from './components/PromptBanner';
@@ -351,6 +352,14 @@ export function Editor() {
     [notice, open],
   );
 
+  const exportPlaywright = useCallback((id: string) => {
+    const all = latest.current ?? [];
+    const workflow = all.find((candidate) => candidate.id === id);
+    if (!workflow) return;
+    const spec = workflowToPlaywright(workflow, { registry, lookup: (other) => all.find((candidate) => candidate.id === other) });
+    downloadText(fileNameFor(workflow.name).replace('.blockflow.json', '.spec.ts'), spec, 'text/plain');
+  }, []);
+
   const createFromTemplate = useCallback(
     (text: string) => {
       const result = parseImport(text, latest.current ?? []);
@@ -373,6 +382,7 @@ export function Editor() {
     onToggle: (id, enabled) => void setEnabledFor(id, enabled),
     onDuplicate: duplicate,
     onExport: exportWorkflowsById,
+    onExportPlaywright: exportPlaywright,
     onDelete: removeWorkflow,
     onImport: (files) => void importFiles(files),
   };

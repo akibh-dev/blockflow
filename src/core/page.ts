@@ -40,7 +40,21 @@ export type AgentRequest =
   /** URL, title, description, canonical, language, meta tags, JSON-LD. */
   | { op: 'page-info' }
   | { op: 'storage'; area: 'local' | 'session' | 'cookies'; key?: string }
-  | { op: 'scroll'; to: 'bottom' | 'top' | 'element'; locator?: string };
+  | { op: 'scroll'; to: 'bottom' | 'top' | 'element'; locator?: string }
+  /** Put files on an <input type=file> (also a hidden one, as custom upload buttons use). */
+  | { op: 'upload'; locator: string; files: UploadFile[] }
+  /**
+   * For real (debugger) input: wait until the element is ready, scroll it into view, and return
+   * its center in viewport pixels plus what kind of field it is.
+   */
+  | { op: 'locate'; locator: string; purpose: 'click' | 'fill' | 'set-field' | 'check' | 'press' };
+
+export interface UploadFile {
+  name: string;
+  type: string;
+  /** File content, base64. */
+  base64: string;
+}
 
 export interface ExtractField {
   name: string;
@@ -59,7 +73,9 @@ export type AgentResponse =
   /** Not possible yet (element missing, hidden, disabled...). The driver asks again until its timeout. */
   | { status: 'pending'; reason: string }
   /** Will never work (bad locator, wrong element type...). */
-  | { status: 'error'; message: string };
+  | { status: 'error'; message: string }
+  /** The locator enters an iframe from another site: run `rest` inside the frame showing `src`. */
+  | { status: 'frame'; src: string; rest: string };
 
 /** One row of a Fill Form block, also what "Detect fields" produces. */
 export interface FormFieldRow {

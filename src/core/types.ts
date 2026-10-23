@@ -41,6 +41,11 @@ export interface StepSettings {
   note?: string;
   /** Screenshot of the run's tab: on error (default), always, or never. */
   screenshot?: 'error' | 'always' | 'never';
+  /**
+   * Page actions with real mouse and keyboard events through the browser's debugger (Chromium only;
+   * shows a "started debugging this browser" bar). For sites that ignore synthetic events.
+   */
+  realInput?: boolean;
 }
 
 export interface NodeDef {
@@ -176,6 +181,8 @@ export interface BlockContext<C extends object = BlockConfig> {
   isRoot: boolean;
   /** How long this step may take (its step settings). Page blocks give their waits a little less. */
   timeoutMs: number;
+  /** Step setting: use real (debugger) input for page actions. */
+  realInput: boolean;
   /** Id of the run this step belongs to ('' for start blocks between runs). */
   runId: string;
   /**
@@ -240,6 +247,9 @@ export interface BlockDefinition<C extends object = BlockConfig> {
 
   /** Default timeout for this kind of block, in seconds (engine default: 60). Page actions use 30. */
   timeoutSeconds?: number;
+
+  /** Optional browser permissions this block needs (the editor offers a Grant button). */
+  permissions?: ('debugger' | 'userScripts')[];
 
   /**
    * Called when the workflow starts, for blocks that nothing else feeds ("root" blocks).
@@ -367,6 +377,8 @@ export interface Host {
   sleep(ms: number): Promise<void>;
   http: {
     fetch(options: HttpRequestOptions): Promise<HttpResult>;
+    /** A file, as base64 (Upload File from a URL). */
+    download(url: string): Promise<{ base64: string; mime: string; name: string }>;
   };
   notify(options: NotifyOptions): Promise<void>;
   tabs: {
@@ -380,6 +392,13 @@ export interface Host {
     waitForLoad(tabId: number, until: WaitUntil, timeoutMs: number): Promise<void>;
     /** Resolves with the URL once it matches `pattern` (see urlPattern.ts). */
     waitForUrl(tabId: number, pattern: string, timeoutMs: number): Promise<string>;
+    /** A tab opened by `openerTabId` (window.open, target=_blank) in the last `lookBackMs`, or the next one. */
+    waitForPopup(openerTabId: number, lookBackMs: number, timeoutMs: number): Promise<number>;
+    /**
+     * A finished network request of the tab whose URL matches `pattern` (and status, if given:
+     * "200", "2xx"), from the last `lookBackMs`, or the next one.
+     */
+    waitForResponse(tabId: number, pattern: string, status: string, lookBackMs: number, timeoutMs: number): Promise<{ url: string; status: number; method: string }>;
   };
   page: {
     /** Watch Element / Read Element without a tab: BlockFlow's own background tab per URL. */
@@ -388,7 +407,14 @@ export interface Host {
      * Runs one request in a tab through the page agent, waiting until it can be done (element
      * present, visible, enabled...) or `timeoutMs` passes. Throws with the reason.
      */
-    act(tabId: number, request: AgentRequest, timeoutMs: number): Promise<Record<string, unknown>>;
+    act(tabId: number, request: AgentRequest, timeoutMs: number, options?: { realInput?: boolean }): Promise<Record<string, unknown>>;
+    /**
+     * alert/confirm/prompt in the tab's current page: answer them from now on (accept or dismiss,
+     * with text for prompt), or read the ones shown so far.
+     */
+    dialogs(tabId: number, options: { mode: 'accept' | 'dismiss'; text: string } | { read: true }): Promise<{ type: string; message: string }[]>;
+    /** Runs the user's own JavaScript in the page (Chrome's userScripts API). Resolves with its return value. */
+    runScript(tabId: number, code: string, data: Payload): Promise<unknown>;
   };
   scheduler: Scheduler;
   state: StateStore;

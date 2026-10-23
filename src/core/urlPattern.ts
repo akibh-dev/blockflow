@@ -7,7 +7,7 @@
 export function urlMatches(url: string, pattern: string): boolean {
   const text = pattern.trim();
   if (!text) return false;
-  const regex = /^\/(.+)\/([a-z]*)$/s.exec(text);
+  const regex = /^\/(.+)\/([dgimsuyv]*)$/s.exec(text);
   if (regex) {
     try {
       return new RegExp(regex[1] ?? '', regex[2]).test(url);
