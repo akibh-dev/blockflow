@@ -4,6 +4,7 @@ import { CATEGORY_LABELS } from '../../../core/types';
 import type { BlockCategory, Workflow } from '../../../core/types';
 import { registry } from '../registry';
 import { ImportButton } from './ImportButton';
+import { NewMenu } from './NewMenu';
 import type { WorkflowActions } from './WorkflowActions';
 
 export const DRAG_MIME = 'application/x-blockflow-block';
@@ -42,9 +43,7 @@ export function Sidebar({ workflows, activeId, onAddBlock, ...actions }: Sidebar
         <div className="bf-section-title">
           <span>Workflows</span>
           <span>
-            <button type="button" className="bf-link" onClick={actions.onCreate}>
-              + New
-            </button>
+            <NewMenu onBlank={actions.onCreate} onTemplate={actions.onCreateFromTemplate} />
             <ImportButton className="bf-link" onFiles={actions.onImport} />
           </span>
         </div>

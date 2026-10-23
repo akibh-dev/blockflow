@@ -3,7 +3,7 @@
 Build small browser automations by connecting blocks, like n8n or AutoHotkey, but inside your browser.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
 
-**Status: prototype 1.** 34 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
+**Status: prototype 1.** 38 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
 [What has been verified](#what-has-been-verified) before you rely on it.
 
 **Using BlockFlow, or asking an AI to build workflows for you?** Read the
@@ -17,6 +17,7 @@ other block's input. The data a block produces becomes available to the next blo
 
 | Block | What it does | Output data |
 | --- | --- | --- |
+| ▶️ **Start** · 📅 **Schedule** · 🌍 **Page Visited** · 🖱 **Context Menu** | Start by hand with starting values; at set times (daily 09:00, weekdays, hourly, every N min); when you open a matching page; from the right-click menu. | your values; `firedAt`; `url`, `title`; `url`, `selection`, `link` |
 | 🔗 **Open Tab** | Opens a page in a new tab, the workflow's own reused tab, a new window or the current tab, waits for load / network idle, and **names the tab** (`main`) for the blocks after it. | `url`, `tabId` |
 | 👆 **Click** | Click, double-click, right-click or hover an element. Waits until it is visible, enabled, still and not covered. | passes input through |
 | ⌨️ **Fill** | Types into a field (all at once, or key by key). Works with React/Vue/Angular forms. | passes input through |
@@ -83,6 +84,13 @@ Open Tab (https://shop.test/login)
   → Wait For (URL matches /account)            ← on error → Notify "login broken"
   → Read Element (#greeting) → If ({{value}} contains "Welcome") → true: Notify "login OK"
 ```
+
+## Building faster
+
+- **● Record** turns what you do on a page into blocks (Fill Form, Click, Select, Check, Wait For URL,
+  and Assert from the on-page toolbar). Passwords are not recorded; the blocks use `{{secret.password}}`.
+- **Pick on page** offers readable locators (`role=button[name="Save"]`, `label=Email`) with alternatives.
+- Typing `{{` suggests data names. **+ New ▾** starts from a template. Ctrl+Z / Ctrl+Shift+Z, Ctrl+C / Ctrl+V.
 
 ## Running and debugging
 
@@ -213,6 +221,7 @@ needed.
 | 2026-10-23, `npm run e2e` (Brave Origin 155, 20 checks, 3 runs in a row): classic login with Fill Form + submit + Wait For URL + Read + If; wrong password routed to the error output with a readable timeout; SPA with a cookie overlay ("covered by" reason), React-style controlled inputs, typed email, select, custom checkbox under its label, disabled-until-valid button, pushState route, text appearing, shadow DOM button; strict-mode and missing-element errors; Detect fields in the editor on a real form. Unit tests: 212 incl. a React 19 form filled in jsdom | Run, passing. |
 | 2026-10-23, `npm run e2e` Phase C (30 checks in all): Run Workflow reusing a login in the same tab, Assert text/title passing, a soft Assert failing the run while the flow continues, its screenshot in the Reports page and in the HTML export, JUnit export, the secret password absent from all run records, Manual Step continued from the editor banner | Run, passing. |
 | 2026-10-23, `npm run e2e` Phase D (38 checks in all, Playwright Chromium 131: Brave stopped launching under automation that afternoon, see below): Paginate 3 pages + Extract List + Save to Dataset (9 rows in IndexedDB, absolute links) + Download CSV, HTTP Request + Extract Table/List from HTML through Chrome's offscreen document, Scroll an infinite feed to 40 posts, a CSV-driven For Each login (one good, one bad), Data page preview | Run, passing. |
+| 2026-10-23, `npm run e2e` Phase E (47 checks in all, Chromium 131): recording a real login (typing, select, checkbox, submit, navigation, Assert text from the toolbar) became Open Tab → Fill Form → Wait For → Assert with readable locators and `{{secret.password}}`, and replayed green; pick gives `role=button[name="Forgot password?"]` plus alternatives; undo/redo/copy/paste; a template; `{{` suggestions; Page Visited started a run on a visited tab. Context Menu and Schedule: unit tests only | Run, passing. |
 | Firefox host permission grant, Safari conversion, Chrome Web Store upload | **Not run.** |
 
 ## Known limitations

@@ -106,6 +106,8 @@ export class FakeHost implements Host {
 
   /** Open tabs: id → current URL. Closed tabs are removed. */
   readonly tabUrls = new Map<number, string>();
+  /** The tab "the user is looking at" (Run button on Page Visited / Context Menu). */
+  currentTab: { tabId: number; url: string } | null = null;
   /** Every request sent to the page agent. */
   readonly actions: { tabId: number; request: AgentRequest; timeoutMs: number }[] = [];
   readonly navigations: { tabId: number; options: NavigateOptions }[] = [];
@@ -135,6 +137,7 @@ export class FakeHost implements Host {
       const url = this.tabUrls.get(tabId);
       return url === undefined ? null : { url, title: '', loading: false };
     },
+    current: async () => (this.currentTab ? { ...this.currentTab, title: '', loading: false } : null),
     waitForLoad: async (tabId: number, until: WaitUntil) => {
       this.loads.push({ tabId, until });
     },

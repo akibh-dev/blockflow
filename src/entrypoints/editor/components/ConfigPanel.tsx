@@ -5,6 +5,7 @@ import { DEFAULT_TIMEOUT_SECONDS, MAX_RETRIES } from '../../../core/engine';
 import type { StepRecord } from '../../../core/runs';
 import type { FieldSpec, Row, RowsField, StepSettings, TextField, WorkflowField } from '../../../core/types';
 import { Screenshot } from './Screenshot';
+import { TemplateInput } from './TemplateInput';
 import { isExtensionMessage } from '../../../shared/messages';
 import { registry } from '../registry';
 import type { BlockFlowNode } from './BlockNode';
@@ -19,11 +20,15 @@ interface ConfigPanelProps {
   lastStep: StepRecord | undefined;
   /** For "workflow" fields (Run Workflow). */
   workflows: { id: string; name: string }[];
+  /** Data names offered after typing {{ in templated settings. */
+  suggestions: string[];
 }
 
 interface PickState {
   status: 'idle' | 'waiting' | 'done' | 'error';
   text?: string;
+  /** Other locators for the picked element, offered as one-click alternatives. */
+  candidates?: string[];
 }
 
 /** What the picker is picking for: a field, one cell of a rows field, or a whole form. */
@@ -32,7 +37,7 @@ type PickTarget =
   | { kind: 'cell'; nodeId: string; field: RowsField; row: number; column: string }
   | { kind: 'form'; nodeId: string; field: RowsField };
 
-export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, lastStep, workflows }: ConfigPanelProps) {
+export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, lastStep, workflows, suggestions }: ConfigPanelProps) {
   const [pick, setPick] = useState<PickState & { fieldKey?: string }>({ status: 'idle' });
   const pending = useRef<PickTarget | null>(null);
   const configRef = useRef<Record<string, unknown>>({});
@@ -47,12 +52,13 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
         pending.current = null;
         const rows = (configRef.current[target.field.key] as Row[] | undefined) ?? [];
         if (target.kind === 'field') {
-          const patch: Record<string, unknown> = { [target.field.key]: message.selector };
+          const readable = target.field.pickPrefers !== 'stable' && message.candidates?.[0];
+          const patch: Record<string, unknown> = { [target.field.key]: readable || message.selector };
           if (target.field.pickerUrlKey) patch[target.field.pickerUrlKey] = message.url;
           onChange(target.nodeId, patch);
         } else if (target.kind === 'cell') {
           const next = [...rows];
-          next[target.row] = { ...next[target.row], [target.column]: message.selector };
+          next[target.row] = { ...next[target.row], [target.column]: message.candidates?.[0] ?? message.selector };
           onChange(target.nodeId, { [target.field.key]: next });
         } else {
           // Keep values already typed for fields that are still there.
@@ -66,7 +72,14 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
           setPick({ status: 'done', fieldKey: target.field.key, text: `Found ${detected.length} field${detected.length === 1 ? '' : 's'}. Fill in the values you need; empty ones are skipped.` });
           return;
         }
-        setPick({ status: 'done', fieldKey: target.field.key, text: message.sample ? `Picked: “${message.sample}”` : 'Element picked' });
+        setPick({
+          status: 'done',
+          fieldKey: target.field.key,
+          text: message.sample ? `Picked: “${message.sample}”` : 'Element picked',
+          ...(target.kind === 'field' && message.candidates && message.candidates.length > 0
+            ? { candidates: [...new Set([...message.candidates, message.selector])] }
+            : {}),
+        });
       } else if (message.type === 'bf:pick-error') {
         pending.current = null;
         setPick({ status: 'error', fieldKey: target.field.key, text: message.message });
@@ -125,7 +138,27 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
   const config = { ...def.defaultConfig, ...node.data.config } as Record<string, unknown>;
   configRef.current = config;
   const pickStatus = (key: string) =>
-    pick.status !== 'idle' && pick.fieldKey === key ? <small className={`bf-pick ${pick.status}`}>{pick.text}</small> : null;
+    pick.status !== 'idle' && pick.fieldKey === key ? (
+      <>
+        <small className={`bf-pick ${pick.status}`}>{pick.text}</small>
+        {pick.candidates && (
+          <span className="bf-candidates">
+            <small className="bf-muted">Other ways to find it:</small>
+            {pick.candidates.map((candidate) => (
+              <button
+                type="button"
+                key={candidate}
+                className={config[key] === candidate ? 'active' : ''}
+                onClick={() => onChange(node.id, { [key]: candidate })}
+                title="Use this locator"
+              >
+                {candidate}
+              </button>
+            ))}
+          </span>
+        )}
+      </>
+    ) : null;
 
   return (
     <aside className="bf-config">
@@ -150,6 +183,7 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
               field={field}
               rows={(config[field.key] as Row[] | undefined) ?? []}
               onChange={(rows) => onChange(node.id, { [field.key]: rows })}
+              suggestions={suggestions}
               onPickCell={(row, column) => startPick({ kind: 'cell', nodeId: node.id, field, row, column }, config)}
               onDetect={() => startPick({ kind: 'form', nodeId: node.id, field }, config)}
             />
@@ -169,7 +203,7 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
                 ))}
               </select>
             ) : (
-              <FieldInput field={field} value={config[field.key]} onChange={(value) => onChange(node.id, { [field.key]: value })} />
+              <FieldInput field={field} value={config[field.key]} suggestions={suggestions} onChange={(value) => onChange(node.id, { [field.key]: value })} />
             )}
             {(field.kind === 'selector' || field.kind === 'locator') && (
               <>
@@ -213,10 +247,12 @@ function RowsInput({
   onChange,
   onPickCell,
   onDetect,
+  suggestions,
 }: {
   field: RowsField;
   rows: Row[];
   onChange(rows: Row[]): void;
+  suggestions: string[];
   onPickCell(row: number, column: string): void;
   onDetect(): void;
 }) {
@@ -242,14 +278,13 @@ function RowsInput({
                 {field.columns.map((column) => (
                   <td key={column.key}>
                     <div className="bf-cell">
-                      <input
-                        type="text"
+                      <TemplateInput
                         value={row[column.key] ?? ''}
+                        suggestions={column.templated ? suggestions : []}
                         placeholder={column.key === 'value' && row.hint ? row.hint : column.placeholder}
                         title={row.hint ?? ''}
-                        spellCheck={false}
-                        aria-label={`${column.label} ${index + 1}`}
-                        onChange={(event) => update(index, column.key, event.target.value)}
+                        ariaLabel={`${column.label} ${index + 1}`}
+                        onChange={(value) => update(index, column.key, value)}
                       />
                       {column.locator && (
                         <button type="button" title="Pick on page" onClick={() => onPickCell(index, column.key)}>
@@ -287,10 +322,12 @@ function FieldInput({
   field,
   value,
   onChange,
+  suggestions,
 }: {
   field: Exclude<FieldSpec, RowsField | WorkflowField>;
   value: unknown;
   onChange(value: unknown): void;
+  suggestions: string[];
 }) {
   switch (field.kind) {
     case 'boolean':
@@ -317,6 +354,17 @@ function FieldInput({
         </select>
       );
     default:
+      if (field.templated) {
+        return (
+          <TemplateInput
+            value={typeof value === 'string' ? value : ''}
+            suggestions={suggestions}
+            placeholder={field.placeholder}
+            multiline={field.multiline}
+            onChange={onChange}
+          />
+        );
+      }
       if (field.multiline) {
         return (
           <textarea

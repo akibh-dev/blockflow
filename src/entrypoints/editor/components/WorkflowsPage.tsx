@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { LogEntry, Workflow } from '../../../core/types';
 import { registry } from '../registry';
 import { ImportButton } from './ImportButton';
+import { NewMenu } from './NewMenu';
 import type { WorkflowActions } from './WorkflowActions';
 
 interface WorkflowsPageProps extends WorkflowActions {
@@ -53,9 +54,7 @@ export function WorkflowsPage({ workflows, activeId, logs, errorCounts, onSetAll
           aria-label="Search workflows"
         />
         <span className="bf-spacer" />
-        <button type="button" onClick={actions.onCreate}>
-          + New
-        </button>
+        <NewMenu onBlank={actions.onCreate} onTemplate={actions.onCreateFromTemplate} plain />
         <ImportButton onFiles={actions.onImport} />
         <button type="button" onClick={() => actions.onExport(pickedIds.length > 0 ? pickedIds : workflows.map((w) => w.id))}>
           Export {pickedIds.length > 0 ? `selected (${pickedIds.length})` : 'all'}

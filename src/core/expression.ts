@@ -48,7 +48,9 @@ function tokenize(source: string): Token[] {
         if (source[j] === '\\' && j + 1 < source.length) {
           j += 1;
           const escaped = source[j] as string;
-          value += escaped === 'n' ? '\n' : escaped === 't' ? '\t' : escaped;
+          // Only \n \t \\ \' \" are escapes; anything else keeps its backslash, so regexes like
+          // '/#(\d+)/' can be typed as they are.
+          value += escaped === 'n' ? '\n' : escaped === 't' ? '\t' : /['"\\]/.test(escaped) ? escaped : `\\${escaped}`;
         } else value += source[j];
       }
       if (j >= source.length) throw new ExpressionError(`Unclosed text in: ${source}`);

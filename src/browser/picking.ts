@@ -111,6 +111,7 @@ export async function finishPicking(message: PickedMessage, pickedTabId: number 
   await tellEditor({
     type: 'bf:pick-result',
     selector: message.selector,
+    ...(message.candidates ? { candidates: message.candidates } : {}),
     url: message.url,
     sample: message.sample,
     ...(fields ? { fields } : {}),

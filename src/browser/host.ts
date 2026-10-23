@@ -4,12 +4,13 @@ import { STORAGE_KEYS } from '../shared/keys';
 import { readDataset, saveScreenshot, writeDataset } from './blobStore';
 import { actOnHtml } from './htmlParse';
 import { tabInfo, waitForLoad, waitForUrl } from './navigation';
+import { addOwnTab } from './ownTabs';
 import { askUser } from './prompts';
 import { loadWorkflows } from './stores';
 import { actInTab } from './pageDriver';
 import { readElement } from './pageReader';
 import { requireTabId, sleep } from './tabs';
-import type { Host, HttpRequestOptions, HttpResult, NavigateOptions, NotifyOptions, OpenTabOptions, Scheduler, StateStore } from '../core/types';
+import type { Host, HttpRequestOptions, HttpResult, NavigateOptions, NotifyOptions, OpenTabOptions, TabInfo, Scheduler, StateStore } from '../core/types';
 
 class StorageState implements StateStore {
   async get(key: string): Promise<unknown> {
@@ -43,6 +44,7 @@ async function openTab({ url, newTab, active, reuseTabId, newWindow, waitUntil =
       tabId = requireTabId(await browser.tabs.create({ url, active }));
     }
   }
+  await addOwnTab(tabId).catch(() => {});
   // Give the navigation a moment to start, so "complete" is not the previous page's.
   if (waitUntil !== 'none') {
     await sleep(100);
@@ -105,6 +107,20 @@ async function saveDownload(filename: string, content: string, mime: string): Pr
   await browser.downloads.download({ url, filename: filename.replace(/[\\/:*?"<>|]+/g, '-'), conflictAction: 'uniquify' });
 }
 
+async function currentTab(): Promise<(TabInfo & { tabId: number }) | null> {
+  const tabs = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+  let tab = tabs.find((candidate) => /^https?:/.test(candidate.url ?? ''));
+  if (!tab) {
+    // The editor itself is focused: take the most recently used web page tab.
+    const all = await browser.tabs.query({});
+    tab = all
+      .filter((candidate) => /^https?:/.test(candidate.url ?? ''))
+      .sort((a, b) => ((b as { lastAccessed?: number }).lastAccessed ?? 0) - ((a as { lastAccessed?: number }).lastAccessed ?? 0))[0];
+  }
+  if (tab?.id === undefined) return null;
+  return { tabId: tab.id, url: tab.url ?? '', title: tab.title ?? '', loading: tab.status === 'loading' };
+}
+
 /** The real Host: connects the engine to the browser. */
 export function createExtensionHost(scheduler: Scheduler): Host {
   return {
@@ -118,6 +134,7 @@ export function createExtensionHost(scheduler: Scheduler): Host {
         if (await tabInfo(tabId)) await browser.tabs.remove(tabId);
       },
       info: tabInfo,
+      current: currentTab,
       waitForLoad,
       waitForUrl,
     },

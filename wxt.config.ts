@@ -21,6 +21,8 @@ export default defineConfig({
       'notifications',
       'webRequest',
       'downloads',
+      'webNavigation',
+      'contextMenus',
       // Chrome parses fetched HTML in an offscreen document; Firefox's background page can do it itself.
       ...(browser === 'firefox' ? [] : ['offscreen']),
     ],

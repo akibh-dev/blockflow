@@ -41,6 +41,7 @@ export const readElementBlock: BlockDefinition<ReadElementConfig> = {
       required: true,
       templated: true,
       pickerUrlKey: 'url',
+      pickPrefers: 'stable',
       placeholder: 'CSS, text=…, role=…, label=…, or use "Pick on page"',
     },
     {

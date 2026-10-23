@@ -68,6 +68,61 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "start"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Start here when you press Run, with some starting values (also defaults for Run Workflow).",
+                    "properties": {
+                      "inputs": {
+                        "description": "Starting values",
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "description": "Name"
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "Value"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "required": []
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "timer"
                   },
                   "position": {
@@ -96,6 +151,177 @@
                       }
                     },
                     "required": []
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "schedule"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Start the flow at set times: daily at 09:00, on weekdays, every hour, every N minutes.",
+                    "properties": {
+                      "every": {
+                        "description": "Every",
+                        "enum": [
+                          "day",
+                          "hour",
+                          "minutes"
+                        ]
+                      },
+                      "at": {
+                        "description": "For \"day\". Local time of this computer.",
+                        "type": "string"
+                      },
+                      "days": {
+                        "description": "For \"day\": every day, weekdays, weekends, or names: mon, wed, fri.",
+                        "type": "string"
+                      },
+                      "minute": {
+                        "description": "For \"hour\": minutes past the hour.",
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 59
+                      },
+                      "minutes": {
+                        "description": "For \"N minutes\". Runs on the clock (:00, :15, :30…).",
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 1440
+                      }
+                    },
+                    "required": []
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "page-visited"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Start when you open a matching page (in any tab). That tab becomes \"main\".",
+                    "properties": {
+                      "url": {
+                        "description": "Plain text = the URL contains it; * any part between slashes; ** anything; /…/ regex.",
+                        "type": "string"
+                      },
+                      "when": {
+                        "description": "When",
+                        "enum": [
+                          "load",
+                          "any"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "url"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "context-menu"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Add an item to the right-click menu that starts the flow on that page.",
+                    "properties": {
+                      "title": {
+                        "description": "Menu item",
+                        "type": "string"
+                      },
+                      "contexts": {
+                        "description": "Show it when right-clicking",
+                        "enum": [
+                          "all",
+                          "page",
+                          "selection",
+                          "link",
+                          "image"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "title"
+                    ]
                   },
                   "step": {
                     "$ref": "#/$defs/step"

@@ -7,6 +7,10 @@ import { appendLog, loadWorkflows, saveRun, saveWorkflows, updateRuns } from '..
 import { createDefaultRegistry } from '../core/blocks';
 import { WorkflowRunner } from '../core/engine';
 import { markInterrupted } from '../core/runs';
+import { withSessionTab } from '../core/session';
+import { urlMatches } from '../core/urlPattern';
+import { isOwnTab } from '../browser/ownTabs';
+import { onRecordedTabUpdated, recordStep, startRecording, stopRecording } from '../browser/recording';
 import type { RunRecord } from '../core/runs';
 import { sampleWorkflows } from '../core/samples';
 import { parseTimerKey, workflowTimerPrefix } from '../core/timerKey';
@@ -88,6 +92,66 @@ export default defineBackground(() => {
     await newRunner(workflow).handleTimer(name);
   }
 
+  /** Start blocks of enabled workflows that react to outside events (page visits, right-click menu). */
+  async function eventRoots(type: string): Promise<{ workflow: Workflow; nodeId: string; config: Record<string, unknown> }[]> {
+    const found: { workflow: Workflow; nodeId: string; config: Record<string, unknown> }[] = [];
+    for (const workflow of await loadWorkflows()) {
+      if (!workflow.enabled) continue;
+      const fed = new Set(workflow.edges.map((edge) => edge.target));
+      for (const node of workflow.nodes) {
+        if (node.type === type && !fed.has(node.id)) found.push({ workflow, nodeId: node.id, config: node.config });
+      }
+    }
+    return found;
+  }
+
+  async function onPageVisited(tabId: number, url: string, kind: 'load' | 'route'): Promise<void> {
+    if (!/^https?:/.test(url) || (await isOwnTab(tabId))) return;
+    for (const { workflow, nodeId, config } of await eventRoots('page-visited')) {
+      if (kind === 'route' && config.when !== 'any') continue;
+      let matches = false;
+      try {
+        matches = urlMatches(url, String(config.url ?? ''));
+      } catch {
+        matches = false;
+      }
+      if (!matches) continue;
+      const tab = await browser.tabs.get(tabId).catch(() => undefined);
+      void newRunner(workflow)
+        .handleEvent(nodeId, withSessionTab({ url, title: tab?.title ?? '', tabId }, 'main', tabId))
+        .catch(report('page visited'));
+    }
+  }
+
+  const MENU_PREFIX = 'bf-menu::';
+  let menuSync: Promise<void> = Promise.resolve();
+
+  /** One right-click menu item per Context Menu start block of an enabled workflow. */
+  function syncContextMenus(): void {
+    menuSync = menuSync
+      .then(async () => {
+        await browser.contextMenus.removeAll();
+        for (const { workflow, nodeId, config } of await eventRoots('context-menu')) {
+          const where = String(config.contexts ?? 'all');
+          browser.contextMenus.create({
+            id: `${MENU_PREFIX}${workflow.id}::${nodeId}`,
+            title: String(config.title || workflow.name),
+            contexts: [where === 'all' ? 'all' : (where as 'page' | 'selection' | 'link' | 'image')],
+          });
+        }
+      })
+      .catch(report('context menus'));
+  }
+
+  async function onMenuClicked(menuItemId: string, info: { pageUrl?: string; selectionText?: string; linkUrl?: string; srcUrl?: string }, tabId: number | undefined): Promise<void> {
+    if (!menuItemId.startsWith(MENU_PREFIX)) return;
+    const [workflowId, nodeId] = menuItemId.slice(MENU_PREFIX.length).split('::');
+    const workflow = (await loadWorkflows()).find((candidate) => candidate.id === workflowId);
+    if (!workflow || !nodeId) return;
+    const payload = { url: info.pageUrl ?? '', selection: info.selectionText ?? '', link: info.linkUrl ?? '', src: info.srcUrl ?? '', tabId: tabId ?? null };
+    await newRunner(workflow).handleEvent(nodeId, tabId === undefined ? payload : withSessionTab(payload, 'main', tabId));
+  }
+
   async function openEditor(): Promise<void> {
     const url = browser.runtime.getURL('/editor.html');
     const [existing] = await browser.tabs.query({ url });
@@ -119,6 +183,22 @@ export default defineBackground(() => {
 
   browser.runtime.onStartup.addListener(() => {
     void startAllEnabled().catch(report('startup'));
+    syncContextMenus();
+  });
+
+  browser.webNavigation.onCompleted.addListener((details) => {
+    if (details.frameId === 0) void onPageVisited(details.tabId, details.url, 'load').catch(report('page visited'));
+  });
+  browser.webNavigation.onHistoryStateUpdated.addListener((details) => {
+    if (details.frameId === 0) void onPageVisited(details.tabId, details.url, 'route').catch(report('page visited'));
+  });
+
+  browser.tabs.onUpdated.addListener((tabId, change) => {
+    if (change.url || change.status === 'complete') void onRecordedTabUpdated(tabId, change).catch(report('recording'));
+  });
+
+  browser.contextMenus.onClicked.addListener((info, tab) => {
+    void onMenuClicked(String(info.menuItemId), info, tab?.id).catch(report('context menu'));
   });
 
   browser.runtime.onInstalled.addListener((details) => {
@@ -127,6 +207,7 @@ export default defineBackground(() => {
         await saveWorkflows(sampleWorkflows());
       }
       await startAllEnabled();
+      syncContextMenus();
     })().catch(report('install'));
   });
 
@@ -143,6 +224,7 @@ export default defineBackground(() => {
       for (const id of stop) await stopWorkflow(id);
       for (const id of start) await startWorkflow(id);
     })().catch(report('workflow change'));
+    if (start.length > 0 || stop.length > 0) syncContextMenus();
   });
 
   // Manual Step answers from the notification (Chrome has buttons; Firefox: a click means Continue).
@@ -180,6 +262,15 @@ export default defineBackground(() => {
         break;
       case 'bf:answer-prompt':
         answerPrompt(message.runId, message.ok);
+        break;
+      case 'bf:start-recording':
+        void startRecording(message.workflowId, message.url).catch(report('start recording'));
+        break;
+      case 'bf:stop-recording':
+        void stopRecording().catch(report('stop recording'));
+        break;
+      case 'bf:recorded':
+        void recordStep(message.step, sender.tab?.id).catch(report('record'));
         break;
       default:
         break; // pick-result / pick-error are for the editor

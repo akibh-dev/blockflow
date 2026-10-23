@@ -1,7 +1,11 @@
+import { locatorCandidates } from './bestLocator';
 import { ElementNavigator, countMatches, generateSelector, sampleText } from './selector';
 
 export interface PickResult {
+  /** A structural CSS selector (stable when the element's text changes, as watched prices do). */
   selector: string;
+  /** Readable locators that find exactly this element, best first (see bestLocator.ts). */
+  candidates: string[];
   url: string;
   sample: string;
 }
@@ -129,8 +133,10 @@ export function startPicker(options: PickerOptions): PickerHandle {
 
   function confirm(): void {
     if (!navigator || !currentSelector) return;
+    const candidates = locatorCandidates(navigator.current);
     const result: PickResult = {
       selector: currentSelector,
+      candidates,
       url: win.location.href,
       sample: sampleText(navigator.current),
     };

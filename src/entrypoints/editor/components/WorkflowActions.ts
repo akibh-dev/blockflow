@@ -2,6 +2,8 @@
 export interface WorkflowActions {
   onOpen(id: string): void;
   onCreate(): void;
+  /** Adds the workflows of a template (export-format JSON) and opens the last one. */
+  onCreateFromTemplate(text: string): void;
   onRename(id: string, name: string): void;
   onToggle(id: string, enabled: boolean): void;
   onDuplicate(id: string): void;

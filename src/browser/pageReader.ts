@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { addOwnTab } from './ownTabs';
 import { actInTab } from './pageDriver';
 import { STORAGE_KEYS } from '../shared/keys';
 import { reloadAndWait, requireTabId, tabExists, waitForTabComplete } from './tabs';
@@ -33,6 +34,7 @@ async function ensureWatchTab(url: string, reload: boolean): Promise<number> {
 
   const tab = await browser.tabs.create({ url, active: false });
   const tabId = requireTabId(tab);
+  await addOwnTab(tabId).catch(() => {});
   await saveTabMap({ ...map, [url]: tabId });
   await waitForTabComplete(tabId);
   return tabId;

@@ -106,6 +106,11 @@ export interface TextField extends FieldBase {
   templated?: boolean;
   /** For kind "selector": config key the picker also fills with the page URL. */
   pickerUrlKey?: string;
+  /**
+   * What "Pick on page" puts in: a readable locator (role=…, label=…; default, best for actions) or
+   * a structural CSS selector ("stable": keeps working when the element's text changes, for watching).
+   */
+  pickPrefers?: 'readable' | 'stable';
 }
 
 export interface NumberField extends FieldBase {
@@ -370,6 +375,8 @@ export interface Host {
     close(tabId: number): Promise<void>;
     /** null when the tab no longer exists. */
     info(tabId: number): Promise<TabInfo | null>;
+    /** The web page tab the user is looking at (not the editor), or null. */
+    current(): Promise<(TabInfo & { tabId: number }) | null>;
     waitForLoad(tabId: number, until: WaitUntil, timeoutMs: number): Promise<void>;
     /** Resolves with the URL once it matches `pattern` (see urlPattern.ts). */
     waitForUrl(tabId: number, pattern: string, timeoutMs: number): Promise<string>;

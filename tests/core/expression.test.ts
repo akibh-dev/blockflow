@@ -48,6 +48,9 @@ describe('expressions', () => {
     expect(evaluate("replace('a-b-c', '-', '+')", data)).toBe('a+b+c');
     expect(evaluate("replace('Order 42', '/\\\\d+/', '#')", data)).toBe('Order #');
     expect(evaluate("extract('Order #123 placed', '/#(\\\\d+)/')", data)).toBe('123');
+    // As typed in the editor: a single backslash.
+    expect(evaluate(String.raw`extract('Order #123', '/#(\d+)/')`, data)).toBe('123');
+    expect(evaluate(String.raw`'it\'s' + ' ' + 'a\\b'`, data)).toBe("it's a\\b");
     expect(evaluate("contains(name, 'HASAN')", data)).toBe(true);
     expect(evaluate('len(items)', data)).toBe(3);
     expect(evaluate("default('', 'none')", data)).toBe('none');

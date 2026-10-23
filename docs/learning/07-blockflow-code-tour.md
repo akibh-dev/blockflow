@@ -132,7 +132,18 @@ web app: extension pages and the worker share it because they share the `chrome-
 - A surprise worth remembering: values returned from `scripting.executeScript` lose their object key
   order in Chrome. See `tableToObjects` in `src/core/blocks/extractList.ts`.
 
-## 11. The editor: `src/entrypoints/editor/`
+## 11. Events from the browser, and a recorder
+
+`background.ts` now listens to `webNavigation` (page loads and `history.pushState` route changes, the
+SPA events you know from Next.js routing) and to `contextMenus`. Notice they are registered at the top
+of `defineBackground`, synchronously: an event that wakes the worker is only delivered to listeners that
+exist right away (lesson 4).
+
+The recorder (`src/dom/recorder.ts`) is event delegation, like a React synthetic event system: one
+capture-phase listener per event type on `window`, deciding what each event means. Read its test
+(`tests/dom/recorder.test.ts`) and then `src/core/recording.ts`, which turns the raw steps into blocks.
+
+## 12. The editor: `src/entrypoints/editor/`
 
 An ordinary React app (React Flow for the canvas). The interesting file is `flow/convert.ts`: it converts
 between the saved `Workflow` and React Flow's nodes/edges. Everything else is UI. If you know React you

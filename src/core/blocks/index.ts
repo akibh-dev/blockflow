@@ -12,6 +12,10 @@ import { repeatBlock } from './repeat';
 import { saveDatasetBlock } from './saveDataset';
 import { scrollBlock } from './scroll';
 import { transformBlock } from './transform';
+import { contextMenuBlock } from './contextMenu';
+import { manualStartBlock } from './manualStart';
+import { pageVisitedBlock } from './pageVisited';
+import { scheduleBlock } from './scheduleBlock';
 import { assertBlock } from './assert';
 import { checkBlock } from './check';
 import { clickBlock } from './click';
@@ -36,6 +40,10 @@ import { waitForBlock } from './waitFor';
 import { watchElementBlock } from './watchElement';
 
 export {
+  contextMenuBlock,
+  manualStartBlock,
+  pageVisitedBlock,
+  scheduleBlock,
   dataTableBlock,
   downloadBlock,
   extractListBlock,
@@ -77,7 +85,7 @@ export {
  * (Categories live here rather than in each block so the grouping is visible in one place.)
  */
 export const BLOCK_GROUPS: { category: BlockCategory; blocks: AnyBlockDefinition[] }[] = [
-  { category: 'start', blocks: [timerBlock, watchElementBlock] },
+  { category: 'start', blocks: [manualStartBlock, timerBlock, scheduleBlock, pageVisitedBlock, contextMenuBlock, watchElementBlock] },
   { category: 'browser', blocks: [openUrlBlock, navigateBlock, closeTabBlock] },
   { category: 'page', blocks: [clickBlock, fillBlock, fillFormBlock, selectOptionBlock, checkBlock, pressKeyBlock, scrollBlock, waitForBlock] },
   { category: 'read', blocks: [readElementBlock, extractListBlock, extractTableBlock, paginateBlock, pageInfoBlock] },

@@ -116,3 +116,21 @@ describe('aria', () => {
     expect([getRole(el('d')), accessibleName(el('d'))]).toEqual(['switch', 'Dark mode']);
   });
 });
+
+describe('locatorCandidates', () => {
+  it('ranks readable, unique locators first and always ends with CSS', async () => {
+    const { locatorCandidates, bestLocator } = await import('../../src/dom/bestLocator');
+    page(`
+      <form><label for="e">Email</label><input id="e" name="email" placeholder="you@x.co"></form>
+      <button data-testid="save">Save</button>
+      <button>Delete</button><a href="/x">Delete</a>
+      <p>Hello</p>`);
+    const input = document.getElementById('e') as Element;
+    expect(locatorCandidates(input)).toEqual(['label="Email"', 'placeholder="you@x.co"', 'role=textbox[name="Email"]', 'input[name="email"]', '#e']);
+    expect(bestLocator(document.querySelector('[data-testid]') as Element)).toBe('testid=save');
+    const del = document.querySelector('button:not([data-testid])') as Element;
+    // "text=Delete" matches the link too, so it is left out.
+    expect(locatorCandidates(del)[0]).toBe('role=button[name="Delete"]');
+    expect(locatorCandidates(del)).not.toContain('text="Delete"');
+  });
+});

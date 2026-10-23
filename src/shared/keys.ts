@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   runs: 'bf:runs',
   secrets: 'bf:secrets',
   prompts: 'bf:prompts',
+  recording: 'bf:recording',
   pendingPick: 'bf:pending-pick',
   watchTabs: 'bf:watch-tabs',
   timerPrefix: 'bf:timer:',

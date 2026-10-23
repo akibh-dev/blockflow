@@ -1,6 +1,6 @@
 import { accessibleName, checkedState, getRole } from './aria';
 import { LocatorError, describeElement, resolveLocator, textMatcher } from './locator';
-import { generateSelector } from './selector';
+import { bestLocator } from './bestLocator';
 import type { AgentCall, AgentRequest, AgentResponse, FormFieldRow } from '../core/page';
 
 /**
@@ -591,35 +591,6 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   }
 
   // --- forms ----------------------------------------------------------------
-
-  /** A short locator that finds exactly this element, preferring what a person would write. */
-  function bestLocator(element: Element): string {
-    const candidates: string[] = [];
-    const testId = ['data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-qa'].map((name) => element.getAttribute(name)).find(Boolean);
-    if (testId) candidates.push(`testid=${testId}`);
-    const labels = (element as HTMLInputElement).labels;
-    const labelText = labels?.[0]?.textContent?.replace(/\s+/g, ' ').trim();
-    if (labelText && labelText.length <= 60) candidates.push(`label="${labelText.replace(/"/g, '\\"')}"`);
-    const ariaLabel = element.getAttribute('aria-label');
-    if (ariaLabel) candidates.push(`label="${ariaLabel.replace(/"/g, '\\"')}"`);
-    const placeholder = element.getAttribute('placeholder');
-    if (placeholder) candidates.push(`placeholder="${placeholder.replace(/"/g, '\\"')}"`);
-    const nameAttr = element.getAttribute('name');
-    if (nameAttr) {
-      const value = element.localName === 'input' && (element as HTMLInputElement).type === 'radio' ? `[value="${(element as HTMLInputElement).value}"]` : '';
-      candidates.push(`${element.localName}[name="${nameAttr}"]${value}`);
-    }
-    candidates.push(generateSelector(element));
-    for (const candidate of candidates) {
-      try {
-        const found = resolveLocator(candidate, doc);
-        if (found.length === 1 && found[0] === element) return candidate;
-      } catch {
-        // try the next one
-      }
-    }
-    return generateSelector(element);
-  }
 
   function hint(element: Element): string {
     const name = accessibleName(element) || element.getAttribute('name') || '';

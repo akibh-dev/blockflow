@@ -149,6 +149,23 @@ need the future CDP driver; iframes and closed shadow roots are not reached yet.
   **Downloads** use `downloads.download` with a `data:` URL in Chrome's worker (no `createObjectURL`
   there) or a `blob:` URL where available.
 
+## Triggers and the recorder
+
+- **Page Visited / Context Menu** have no timers: the background registers `webNavigation`
+  (`onCompleted`, `onHistoryStateUpdated`) and `contextMenus.onClicked` listeners at the top level and,
+  per event, finds the matching start blocks of enabled workflows and calls `runner.handleEvent(nodeId,
+  payload)` with the tab put in `$session` as `main`. Context menu items are re-created from the enabled
+  workflows on install, startup and every workflow change. Tabs BlockFlow opened (Open Tab, watch tabs)
+  are listed in `storage.session` (`ownTabs.ts`) and never trigger Page Visited, so a workflow cannot
+  start itself in a loop.
+- **Schedule** computes the next local time in `src/core/schedule.ts` and sets a one-shot timer; each
+  firing plans the next one first.
+- **Recorder** (`src/dom/recorder.ts`, injected by `src/browser/recording.ts` after every page load of the
+  recording tab) reports steps by message; the background appends them to `bf:recording` (and adds
+  `navigated` steps from `tabs.onUpdated`). When it stops, the editor converts the steps with
+  `src/core/recording.ts` and inserts the blocks. Locators come from `src/dom/bestLocator.ts`, shared
+  with the picker and Detect fields.
+
 ## Watch Element
 
 `Host.page.readElement({ url, selector, reload })` (see `src/browser/pageReader.ts`):

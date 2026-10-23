@@ -1,4 +1,5 @@
 import type { FormFieldRow } from '../core/page';
+import type { RecordedStep } from '../core/recording';
 import type { Workflow } from '../core/types';
 
 /**
@@ -21,6 +22,7 @@ export interface StartPickMessage {
 export interface PickedMessage {
   type: 'bf:picked';
   selector: string;
+  candidates?: string[];
   url: string;
   sample: string;
 }
@@ -34,6 +36,8 @@ export interface PickCancelledMessage {
 export interface PickResultMessage {
   type: 'bf:pick-result';
   selector: string;
+  /** Other locators for the same element, best first. */
+  candidates?: string[];
   url: string;
   sample: string;
   /** For mode "form": the form's fields. */
@@ -65,6 +69,24 @@ export interface AnswerPromptMessage {
   ok: boolean;
 }
 
+/** Editor → background: record what the user does on `url`, for this workflow. */
+export interface StartRecordingMessage {
+  type: 'bf:start-recording';
+  workflowId: string;
+  url: string;
+}
+
+/** Editor or the recorder's toolbar → background. */
+export interface StopRecordingMessage {
+  type: 'bf:stop-recording';
+}
+
+/** Recorder → background: one thing the user did. */
+export interface RecordedMessage {
+  type: 'bf:recorded';
+  step: RecordedStep;
+}
+
 export type ExtensionMessage =
   | StartPickMessage
   | PickedMessage
@@ -73,7 +95,10 @@ export type ExtensionMessage =
   | PickErrorMessage
   | RunWorkflowMessage
   | StopRunMessage
-  | AnswerPromptMessage;
+  | AnswerPromptMessage
+  | StartRecordingMessage
+  | StopRecordingMessage
+  | RecordedMessage;
 
 const TYPES = new Set<string>([
   'bf:start-pick',
@@ -84,6 +109,9 @@ const TYPES = new Set<string>([
   'bf:run-workflow',
   'bf:stop-run',
   'bf:answer-prompt',
+  'bf:start-recording',
+  'bf:stop-recording',
+  'bf:recorded',
 ]);
 
 export function isExtensionMessage(value: unknown): value is ExtensionMessage {

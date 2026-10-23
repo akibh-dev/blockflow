@@ -144,7 +144,7 @@ startsWith endsWith slice(x, from, to) first last keys values pluck(list, 'key')
 extract(text, '/re(group)/')`.
 
 Examples: `sum(pluck(items, 'price'))` · `first(sort(items, 'price')).title` ·
-`extract(value, '/#(\\d+)/')` · `len(rows) > 0 ? 'some' : 'none'` · `default(name, 'anonymous')`.
+`extract(value, '/#(\d+)/')` · `len(rows) > 0 ? 'some' : 'none'` · `default(name, 'anonymous')`.
 
 ## 4. Elements: locators
 
@@ -220,7 +220,21 @@ with its own copy of the data.
 | `disabled` | skip the block, pass the data through |
 | `note` | text shown on the block |
 
-## 8. Running, results, reports
+## 8. Starting a workflow
+
+| Start block | Starts when | On ▶ Run |
+| --- | --- | --- |
+| `start` (Start) | only by hand, or when called by Run Workflow; gives named starting values (a caller's values win) | yes |
+| `timer` | every N seconds while On (or once) | fires once now |
+| `schedule` | at set times while On: `every: "day"` + `at: "09:00"` + `days: "weekdays"` / `"mon,fri"`; `every: "hour"` + `minute`; `every: "minutes"` + `minutes` (on the clock) | fires once now |
+| `page-visited` | while On, when any tab loads a page whose URL matches `url` (`when: "any"` also on SPA route changes). Tabs BlockFlow opened never trigger it. The tab becomes `main`. | uses the tab you are on |
+| `context-menu` | while On, when you choose its item (`title`) in the right-click menu; gives `url`, `selection`, `link`, `src` | uses the tab you are on |
+| `watch-element` | while On, when an element's text changes | reads once now |
+| any other block | once when switched On (with empty data) | runs once |
+
+A workflow may have several start blocks; each starts its own runs.
+
+## 9. Running, results, reports
 
 - **▶ Run** (header): runs the workflow once, now. A Timer at the start fires immediately; Watch
   Element reads once. **■ Stop** cancels before the next block.
@@ -232,14 +246,31 @@ with its own copy of the data.
 - If the browser stops the extension's background worker during a run, the run is marked
   **interrupted**.
 
-## 9. Secrets
+## 10. Building workflows in the editor
+
+- **● Record**: opens a page in a new tab and turns what you do into blocks: typing (one Fill per
+  field; two or more fields + a click become Fill Form with that click as submit), selects,
+  checkboxes, clicks, Enter, page changes (Wait For URL). The on-page toolbar adds **Assert text** /
+  **Assert visible** for the next element you click. Passwords are never recorded: the blocks use
+  `{{secret.password}}`.
+- **🎯 Pick on page**: click the element; Enter confirms. Action fields get the most readable
+  unique locator (`role=…`, `label=…`, `testid=…`); Watch/Read Element get a structural CSS selector
+  (stable when the text changes). Other ways to find it are offered as one-click alternatives.
+- **🎯 Detect fields** (Fill Form): click any field of a form; all its fields are listed with hints.
+- Typing `{{` in a setting suggests names: outputs of earlier blocks, keys seen in the last run,
+  `secret.*`.
+- **+ New ▾** → templates (the files in [`examples/`](examples)).
+- Keys on the canvas: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo, Ctrl+C / Ctrl+V copy and
+  paste blocks (also into another workflow), Ctrl+D duplicate, Delete/Backspace remove.
+
+## 11. Secrets
 
 Header → **Secrets**: name/value pairs, e.g. `loginPassword`. Use as `{{secret.loginPassword}}` in
 any templated setting. Their values are replaced by `•••` in the run log, step inspector, run records
 and reports, and are never part of exported workflows. They are stored unencrypted in the browser
 profile's extension storage.
 
-## 10. Testing patterns
+## 12. Testing patterns
 
 - **Test = workflow** starting with Open Tab, ending with Asserts. Run with ▶ Run; read the result in
   Reports.
@@ -254,7 +285,7 @@ profile's extension storage.
 - **Data-driven tests**: Data Table (CSV/JSON) → For Each (`each` output) → the test steps using
   `{{row.email}}`. Use `step.onError: "continue"` or soft Asserts so one bad row does not stop the rest.
 
-## 11. Scraping and data
+## 13. Scraping and data
 
 - **One page**: `Open Tab → Extract List` with an item locator (`.product-card`) and fields
   (`name`, `locator` inside the item, optional `attribute` such as `href`). Result: `{{items}}`, a list
@@ -272,7 +303,7 @@ profile's extension storage.
 - **The page itself**: `Page Info` (title, meta, canonical, JSON-LD) or its localStorage /
   sessionStorage / cookies.
 
-## 12. Monitoring patterns
+## 14. Monitoring patterns
 
 - `Timer (repeat) → Read Element (Page URL) → If → Notify`: Read Element with a Page URL uses
   BlockFlow's own background tab and reloads it each time. `{{previous}}` and `{{changed}}` compare
@@ -280,7 +311,7 @@ profile's extension storage.
 - `Watch Element → Notify`: fires only when the text changes.
 - `Timer → HTTP Request → Assert {{status}} equals 200 (onError: port) → Notify`: uptime check.
 
-## 13. Examples
+## 15. Examples
 
 | File | Shows |
 | --- | --- |
@@ -293,7 +324,7 @@ profile's extension storage.
 | [`data-driven-login`](examples/data-driven-login.blockflow.json) | Data Table + For Each + soft Assert, a secret chosen by an expression |
 | [`api-to-dataset`](examples/api-to-dataset.blockflow.json) | HTTP Request + Transform + dataset history + If |
 
-## 14. Limits (what a browser extension cannot do, or BlockFlow does not do yet)
+## 16. Limits (what a browser extension cannot do, or BlockFlow does not do yet)
 
 - Page events are synthetic (`isTrusted: false`); a few sites (anti-bot checks, some payment
   widgets) ignore them.

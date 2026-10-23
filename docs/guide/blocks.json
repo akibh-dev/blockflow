@@ -2,6 +2,45 @@
   "generatedBy": "scripts/guide.ts",
   "blocks": [
     {
+      "type": "start",
+      "label": "Start",
+      "category": "start",
+      "description": "Start here when you press Run, with some starting values (also defaults for Run Workflow).",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "inputs": []
+      },
+      "fields": [
+        {
+          "key": "inputs",
+          "label": "Starting values",
+          "kind": "rows",
+          "columns": [
+            {
+              "key": "name",
+              "label": "Name"
+            },
+            {
+              "key": "value",
+              "label": "Value",
+              "templated": true
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(your names)",
+          "description": "One key per starting value."
+        }
+      ]
+    },
+    {
       "type": "timer",
       "label": "Timer",
       "category": "start",
@@ -39,6 +78,177 @@
         {
           "key": "firedAt",
           "description": "ISO time the timer fired."
+        }
+      ]
+    },
+    {
+      "type": "schedule",
+      "label": "Schedule",
+      "category": "start",
+      "description": "Start the flow at set times: daily at 09:00, on weekdays, every hour, every N minutes.",
+      "canStart": true,
+      "canTakeInput": false,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "every": "day",
+        "at": "09:00",
+        "days": "weekdays",
+        "minute": 0,
+        "minutes": 15
+      },
+      "fields": [
+        {
+          "key": "every",
+          "label": "Every",
+          "kind": "select",
+          "options": [
+            "day",
+            "hour",
+            "minutes"
+          ]
+        },
+        {
+          "key": "at",
+          "label": "At (HH:MM)",
+          "kind": "text",
+          "help": "For \"day\". Local time of this computer."
+        },
+        {
+          "key": "days",
+          "label": "Days",
+          "kind": "text",
+          "help": "For \"day\": every day, weekdays, weekends, or names: mon, wed, fri."
+        },
+        {
+          "key": "minute",
+          "label": "Minute",
+          "kind": "number",
+          "min": 0,
+          "max": 59,
+          "help": "For \"hour\": minutes past the hour."
+        },
+        {
+          "key": "minutes",
+          "label": "Minutes",
+          "kind": "number",
+          "min": 1,
+          "max": 1440,
+          "help": "For \"N minutes\". Runs on the clock (:00, :15, :30…)."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "firedAt",
+          "description": "When it fired."
+        },
+        {
+          "key": "scheduledFor",
+          "description": "The time it was planned for."
+        }
+      ]
+    },
+    {
+      "type": "page-visited",
+      "label": "Page Visited",
+      "category": "start",
+      "description": "Start when you open a matching page (in any tab). That tab becomes \"main\".",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "url": "",
+        "when": "load"
+      },
+      "fields": [
+        {
+          "key": "url",
+          "label": "Page URL pattern",
+          "kind": "text",
+          "required": true,
+          "help": "Plain text = the URL contains it; * any part between slashes; ** anything; /…/ regex."
+        },
+        {
+          "key": "when",
+          "label": "When",
+          "kind": "select",
+          "options": [
+            "load",
+            "any"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "key": "url",
+          "description": "The page address."
+        },
+        {
+          "key": "title",
+          "description": "The page title."
+        },
+        {
+          "key": "tabId",
+          "description": "The tab."
+        }
+      ]
+    },
+    {
+      "type": "context-menu",
+      "label": "Context Menu",
+      "category": "start",
+      "description": "Add an item to the right-click menu that starts the flow on that page.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "title": "Run my workflow",
+        "contexts": "all"
+      },
+      "fields": [
+        {
+          "key": "title",
+          "label": "Menu item",
+          "kind": "text",
+          "required": true
+        },
+        {
+          "key": "contexts",
+          "label": "Show it when right-clicking",
+          "kind": "select",
+          "options": [
+            "all",
+            "page",
+            "selection",
+            "link",
+            "image"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "key": "url",
+          "description": "The page address."
+        },
+        {
+          "key": "selection",
+          "description": "Selected text, if any."
+        },
+        {
+          "key": "link",
+          "description": "The link right-clicked, if any."
+        },
+        {
+          "key": "src",
+          "description": "The image right-clicked, if any."
         }
       ]
     },
