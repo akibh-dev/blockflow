@@ -390,6 +390,9 @@ describe('with the workflow engine', () => {
       secrets: base.secrets,
       screenshots: base.screenshots,
       prompt: base.prompt,
+      datasets: base.datasets,
+      downloads: base.downloads,
+      html: base.html,
       now: () => base.now(),
     };
     const runner = new WorkflowRunner({ workflow, registry: createDefaultRegistry(), host });

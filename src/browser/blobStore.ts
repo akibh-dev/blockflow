@@ -66,3 +66,28 @@ export async function loadScreenshot(id: string): Promise<Screenshot | undefined
 export async function clearScreenshots(): Promise<void> {
   await done((await store(SCREENSHOTS, 'readwrite')).clear());
 }
+
+export interface Dataset {
+  name: string;
+  rows: unknown[];
+  updatedAt: number;
+}
+
+export async function readDataset(name: string): Promise<Dataset | undefined> {
+  return (await done((await store(DATASETS)).get(name))) as Dataset | undefined;
+}
+
+export async function writeDataset(name: string, rows: unknown[], mode: 'append' | 'replace'): Promise<number> {
+  const existing = mode === 'append' ? ((await readDataset(name))?.rows ?? []) : [];
+  const next = [...existing, ...rows];
+  await done((await store(DATASETS, 'readwrite')).put({ name, rows: next, updatedAt: Date.now() } satisfies Dataset));
+  return next.length;
+}
+
+export async function listDatasets(): Promise<Dataset[]> {
+  return (await done((await store(DATASETS)).getAll())) as Dataset[];
+}
+
+export async function deleteDataset(name: string): Promise<void> {
+  await done((await store(DATASETS, 'readwrite')).delete(name));
+}

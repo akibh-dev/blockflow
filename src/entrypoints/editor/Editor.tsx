@@ -32,6 +32,7 @@ import { useLogs, usePrompts, useRuns } from './hooks';
 import { PromptBanner } from './components/PromptBanner';
 import { ReportsPage } from './components/ReportsPage';
 import { SecretsPage } from './components/SecretsPage';
+import { DataPage } from './components/DataPage';
 import { registry } from './registry';
 
 const nodeTypes = { block: BlockNode };
@@ -221,7 +222,7 @@ export function Editor() {
 
   // --- workflow list actions (all by id, so the sidebar and the manager page share them) ---
 
-  const [view, setView] = useState<'canvas' | 'manage' | 'reports' | 'secrets'>('canvas');
+  const [view, setView] = useState<'canvas' | 'manage' | 'reports' | 'data' | 'secrets'>('canvas');
   const notice = useCallback((message: string) => window.alert(message), []);
 
   const createNew = useCallback(() => {
@@ -463,6 +464,9 @@ export function Editor() {
             <button type="button" className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>
               Reports
             </button>
+            <button type="button" className={view === 'data' ? 'active' : ''} onClick={() => setView('data')}>
+              Data
+            </button>
             <button type="button" className={view === 'secrets' ? 'active' : ''} onClick={() => setView('secrets')}>
               Secrets
             </button>
@@ -483,6 +487,8 @@ export function Editor() {
         )}
 
         {view === 'secrets' && <SecretsPage />}
+
+        {view === 'data' && <DataPage />}
 
         {view === 'manage' && (
           <WorkflowsPage

@@ -4,6 +4,7 @@
     {
       "type": "timer",
       "label": "Timer",
+      "category": "start",
       "description": "Start the flow on a schedule, or delay it when placed after another block.",
       "canStart": true,
       "canTakeInput": true,
@@ -44,6 +45,7 @@
     {
       "type": "watch-element",
       "label": "Watch Element",
+      "category": "start",
       "description": "Fire when the text of a part of a web page changes.",
       "canStart": true,
       "canTakeInput": true,
@@ -118,6 +120,7 @@
     {
       "type": "open-url",
       "label": "Open Tab",
+      "category": "browser",
       "description": "Open a web page, and remember the tab for the next blocks.",
       "canStart": true,
       "canTakeInput": true,
@@ -187,8 +190,97 @@
       ]
     },
     {
+      "type": "navigate",
+      "label": "Navigate",
+      "category": "browser",
+      "description": "Go to a URL, back, forward, or reload, in a tab of this run.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 45,
+      "defaultConfig": {
+        "tab": "main",
+        "action": "goto",
+        "url": "",
+        "waitUntil": "load"
+      },
+      "fields": [
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        },
+        {
+          "key": "action",
+          "label": "Action",
+          "kind": "select",
+          "options": [
+            "goto",
+            "back",
+            "forward",
+            "reload"
+          ]
+        },
+        {
+          "key": "url",
+          "label": "URL",
+          "kind": "text",
+          "templated": true
+        },
+        {
+          "key": "waitUntil",
+          "label": "Continue when",
+          "kind": "select",
+          "options": [
+            "load",
+            "networkidle",
+            "none"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "key": "url",
+          "description": "The URL after navigating."
+        }
+      ]
+    },
+    {
+      "type": "close-tab",
+      "label": "Close Tab",
+      "category": "browser",
+      "description": "Close a tab this run opened.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "tab": "main"
+      },
+      "fields": [
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on."
+        }
+      ]
+    },
+    {
       "type": "click",
       "label": "Click",
+      "category": "page",
       "description": "Click (or double-click, right-click, hover) an element. Waits until it can be clicked.",
       "canStart": true,
       "canTakeInput": true,
@@ -245,6 +337,7 @@
     {
       "type": "fill",
       "label": "Fill",
+      "category": "page",
       "description": "Type a value into a text field. Works with React, Vue and Angular forms.",
       "canStart": true,
       "canTakeInput": true,
@@ -299,6 +392,7 @@
     {
       "type": "fill-form",
       "label": "Fill Form",
+      "category": "page",
       "description": "Fill several fields at once: text, selects, checkboxes. Optionally click submit.",
       "canStart": true,
       "canTakeInput": true,
@@ -355,6 +449,7 @@
     {
       "type": "select-option",
       "label": "Select Option",
+      "category": "page",
       "description": "Choose an option in a dropdown (<select>), by its text or value.",
       "canStart": true,
       "canTakeInput": true,
@@ -401,6 +496,7 @@
     {
       "type": "check",
       "label": "Check",
+      "category": "page",
       "description": "Tick or untick a checkbox, radio button or switch. Does nothing if it already is.",
       "canStart": true,
       "canTakeInput": true,
@@ -448,6 +544,7 @@
     {
       "type": "press-key",
       "label": "Press Key",
+      "category": "page",
       "description": "Press a key or shortcut: Enter, Tab, Escape, Control+A…",
       "canStart": true,
       "canTakeInput": true,
@@ -490,8 +587,72 @@
       ]
     },
     {
+      "type": "scroll",
+      "label": "Scroll",
+      "category": "page",
+      "description": "Scroll to the bottom, top or an element; or keep scrolling until no more content loads.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 120,
+      "defaultConfig": {
+        "tab": "main",
+        "to": "end",
+        "locator": "",
+        "maxScrolls": 20,
+        "pauseMs": 1000
+      },
+      "fields": [
+        {
+          "key": "to",
+          "label": "Scroll",
+          "kind": "select",
+          "options": [
+            "end",
+            "bottom",
+            "top",
+            "element"
+          ]
+        },
+        {
+          "key": "locator",
+          "label": "Element",
+          "kind": "locator",
+          "templated": true,
+          "help": "Only for \"to an element\"."
+        },
+        {
+          "key": "maxScrolls",
+          "label": "At most (scrolls)",
+          "kind": "number",
+          "min": 1
+        },
+        {
+          "key": "pauseMs",
+          "label": "Wait between scrolls (ms)",
+          "kind": "number",
+          "min": 100
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "scrolls",
+          "description": "How many times it scrolled."
+        }
+      ]
+    },
+    {
       "type": "wait-for",
       "label": "Wait For",
+      "category": "page",
       "description": "Wait until an element appears or goes, some text shows, the URL changes, or the page settles.",
       "canStart": true,
       "canTakeInput": true,
@@ -561,6 +722,7 @@
     {
       "type": "read-element",
       "label": "Read Element",
+      "category": "read",
       "description": "Read a value from a page: text, attribute, class, whether it exists, or how many.",
       "canStart": true,
       "canTakeInput": true,
@@ -646,8 +808,288 @@
       ]
     },
     {
+      "type": "extract-list",
+      "label": "Extract List",
+      "category": "read",
+      "description": "Scrape repeated items (cards, results, rows) into a list of objects.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "source": "tab",
+        "tab": "main",
+        "html": "{{body}}",
+        "baseUrl": "",
+        "locator": "",
+        "fields": [],
+        "limit": 0,
+        "into": "items"
+      },
+      "fields": [
+        {
+          "key": "locator",
+          "label": "Each item",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick."
+        },
+        {
+          "key": "fields",
+          "label": "Fields",
+          "kind": "rows",
+          "columns": [
+            {
+              "key": "name",
+              "label": "Name"
+            },
+            {
+              "key": "locator",
+              "label": "Inside the item"
+            },
+            {
+              "key": "attribute",
+              "label": "Attribute"
+            }
+          ],
+          "help": "No fields = each item's text as {text}. Links (href, src) come back as full URLs."
+        },
+        {
+          "key": "limit",
+          "label": "At most (0 = all)",
+          "kind": "number",
+          "min": 0
+        },
+        {
+          "key": "into",
+          "label": "Save the list as",
+          "kind": "text"
+        },
+        {
+          "key": "source",
+          "label": "From",
+          "kind": "select",
+          "options": [
+            "tab",
+            "html"
+          ]
+        },
+        {
+          "key": "html",
+          "label": "HTML",
+          "kind": "text",
+          "templated": true,
+          "help": "Only for \"HTML in the data\"."
+        },
+        {
+          "key": "baseUrl",
+          "label": "Page address",
+          "kind": "text",
+          "templated": true,
+          "help": "Makes relative links absolute (HTML mode)."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "items",
+          "description": "The list (or the name you chose)."
+        },
+        {
+          "key": "count",
+          "description": "How many items."
+        }
+      ]
+    },
+    {
+      "type": "extract-table",
+      "label": "Extract Table",
+      "category": "read",
+      "description": "Read an HTML table into a list of rows, keyed by its column headers.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "source": "tab",
+        "tab": "main",
+        "html": "{{body}}",
+        "baseUrl": "",
+        "locator": "table",
+        "into": "rows"
+      },
+      "fields": [
+        {
+          "key": "locator",
+          "label": "Table",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick."
+        },
+        {
+          "key": "into",
+          "label": "Save the rows as",
+          "kind": "text"
+        },
+        {
+          "key": "source",
+          "label": "From",
+          "kind": "select",
+          "options": [
+            "tab",
+            "html"
+          ]
+        },
+        {
+          "key": "html",
+          "label": "HTML",
+          "kind": "text",
+          "templated": true,
+          "help": "Only for \"HTML in the data\"."
+        },
+        {
+          "key": "baseUrl",
+          "label": "Page address",
+          "kind": "text",
+          "templated": true,
+          "help": "Makes relative links absolute (HTML mode)."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "rows",
+          "description": "One object per row (or the name you chose)."
+        },
+        {
+          "key": "count",
+          "description": "How many rows."
+        }
+      ]
+    },
+    {
+      "type": "paginate",
+      "label": "Paginate",
+      "category": "read",
+      "description": "Run \"each\" on every page of a paged list, clicking Next in between.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "each",
+        "done"
+      ],
+      "timeoutSeconds": 1800,
+      "defaultConfig": {
+        "tab": "main",
+        "next": "role=link[name=\"Next\"]",
+        "maxPages": 10
+      },
+      "fields": [
+        {
+          "key": "next",
+          "label": "Next button",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick."
+        },
+        {
+          "key": "maxPages",
+          "label": "At most (pages)",
+          "kind": "number",
+          "min": 1
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "page",
+          "description": "On \"each\": the page number, from 1."
+        },
+        {
+          "key": "pages",
+          "description": "On \"done\": how many pages were visited."
+        }
+      ]
+    },
+    {
+      "type": "page-info",
+      "label": "Page Info",
+      "category": "read",
+      "description": "Read the page itself: title, meta tags, JSON-LD, or its localStorage / cookies.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "area": "page",
+        "key": ""
+      },
+      "fields": [
+        {
+          "key": "area",
+          "label": "Read",
+          "kind": "select",
+          "options": [
+            "page",
+            "local",
+            "session",
+            "cookies"
+          ]
+        },
+        {
+          "key": "key",
+          "label": "Key (optional)",
+          "kind": "text",
+          "templated": true,
+          "help": "Storage and cookies: one key. Empty = all of them."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "page",
+          "description": "For \"page\": url, title, description, canonical, lang, meta, jsonLd, links."
+        },
+        {
+          "key": "value",
+          "description": "For storage and cookies: the value (or an object of all of them)."
+        }
+      ]
+    },
+    {
       "type": "assert",
       "label": "Assert",
+      "category": "test",
       "description": "Check that something is true. Fails the run (or just records it, if soft) when it is not.",
       "canStart": true,
       "canTakeInput": true,
@@ -762,67 +1204,40 @@
       ]
     },
     {
-      "type": "navigate",
-      "label": "Navigate",
-      "description": "Go to a URL, back, forward, or reload, in a tab of this run.",
+      "type": "manual-step",
+      "label": "Manual Step",
+      "category": "test",
+      "description": "Pause until you press Continue: solve a CAPTCHA, type a 2FA code, take a look.",
       "canStart": true,
       "canTakeInput": true,
       "ports": [
         "out"
       ],
-      "timeoutSeconds": 45,
+      "timeoutSeconds": 600,
       "defaultConfig": {
-        "tab": "main",
-        "action": "goto",
-        "url": "",
-        "waitUntil": "load"
+        "message": "Solve the CAPTCHA in the open tab, then press Continue."
       },
       "fields": [
         {
-          "key": "tab",
-          "label": "Tab",
+          "key": "message",
+          "label": "What to do",
           "kind": "text",
-          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
-        },
-        {
-          "key": "action",
-          "label": "Action",
-          "kind": "select",
-          "options": [
-            "goto",
-            "back",
-            "forward",
-            "reload"
-          ]
-        },
-        {
-          "key": "url",
-          "label": "URL",
-          "kind": "text",
+          "required": true,
           "templated": true
-        },
-        {
-          "key": "waitUntil",
-          "label": "Continue when",
-          "kind": "select",
-          "options": [
-            "load",
-            "networkidle",
-            "none"
-          ]
         }
       ],
       "outputs": [
         {
-          "key": "url",
-          "description": "The URL after navigating."
+          "key": "(same data)",
+          "description": "The input, passed on after you continue."
         }
       ]
     },
     {
-      "type": "close-tab",
-      "label": "Close Tab",
-      "description": "Close a tab this run opened.",
+      "type": "stop",
+      "label": "Stop",
+      "category": "test",
+      "description": "End this path here: as passed, or as failed with a message.",
       "canStart": true,
       "canTakeInput": true,
       "ports": [
@@ -830,26 +1245,32 @@
       ],
       "timeoutSeconds": 60,
       "defaultConfig": {
-        "tab": "main"
+        "outcome": "fail",
+        "message": ""
       },
       "fields": [
         {
-          "key": "tab",
-          "label": "Tab",
+          "key": "outcome",
+          "label": "End as",
+          "kind": "select",
+          "options": [
+            "fail",
+            "pass"
+          ]
+        },
+        {
+          "key": "message",
+          "label": "Message",
           "kind": "text",
-          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+          "templated": true
         }
       ],
-      "outputs": [
-        {
-          "key": "(same data)",
-          "description": "The input, passed on."
-        }
-      ]
+      "outputs": []
     },
     {
       "type": "if",
       "label": "If",
+      "category": "logic",
       "description": "Go one way when a condition is true, another when it is false.",
       "canStart": true,
       "canTakeInput": true,
@@ -908,8 +1329,119 @@
       ]
     },
     {
+      "type": "for-each",
+      "label": "For Each",
+      "category": "logic",
+      "description": "Repeat the blocks on \"each\" for every item of a list, then continue from \"done\".",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "each",
+        "done"
+      ],
+      "timeoutSeconds": 3600,
+      "defaultConfig": {
+        "list": "items",
+        "as": "item"
+      },
+      "fields": [
+        {
+          "key": "list",
+          "label": "List",
+          "kind": "text",
+          "required": true,
+          "help": "Where the list is in the data, e.g. items or data.results (an expression, no {{ }})."
+        },
+        {
+          "key": "as",
+          "label": "Call each item",
+          "kind": "text"
+        }
+      ],
+      "outputs": [
+        {
+          "key": "item",
+          "description": "On \"each\": the current item (or the name you chose)."
+        },
+        {
+          "key": "index",
+          "description": "On \"each\": its position, from 0."
+        },
+        {
+          "key": "total",
+          "description": "On \"each\": how many items there are."
+        },
+        {
+          "key": "count",
+          "description": "On \"done\": how many items were processed."
+        }
+      ]
+    },
+    {
+      "type": "repeat",
+      "label": "Repeat",
+      "category": "logic",
+      "description": "Run the blocks on \"each\" a number of times, then continue from \"done\".",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "each",
+        "done"
+      ],
+      "timeoutSeconds": 3600,
+      "defaultConfig": {
+        "times": 3
+      },
+      "fields": [
+        {
+          "key": "times",
+          "label": "Times",
+          "kind": "number",
+          "min": 1,
+          "max": 1000
+        }
+      ],
+      "outputs": [
+        {
+          "key": "iteration",
+          "description": "On \"each\": 1, 2, 3…"
+        }
+      ]
+    },
+    {
+      "type": "run-workflow",
+      "label": "Run Workflow",
+      "category": "logic",
+      "description": "Run another workflow with this data, and continue with what it returns.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 300,
+      "defaultConfig": {
+        "workflow": ""
+      },
+      "fields": [
+        {
+          "key": "workflow",
+          "label": "Workflow",
+          "kind": "workflow",
+          "required": true,
+          "help": "Its start blocks receive this data. It does not need to be On."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(its data)",
+          "description": "Whatever the called workflow's last block produced."
+        }
+      ]
+    },
+    {
       "type": "set-variable",
       "label": "Set Variable",
+      "category": "data",
       "description": "Add a value to the data flowing through.",
       "canStart": true,
       "canTakeInput": true,
@@ -943,67 +1475,10 @@
       ]
     },
     {
-      "type": "run-workflow",
-      "label": "Run Workflow",
-      "description": "Run another workflow with this data, and continue with what it returns.",
-      "canStart": true,
-      "canTakeInput": true,
-      "ports": [
-        "out"
-      ],
-      "timeoutSeconds": 300,
-      "defaultConfig": {
-        "workflow": ""
-      },
-      "fields": [
-        {
-          "key": "workflow",
-          "label": "Workflow",
-          "kind": "workflow",
-          "required": true,
-          "help": "Its start blocks receive this data. It does not need to be On."
-        }
-      ],
-      "outputs": [
-        {
-          "key": "(its data)",
-          "description": "Whatever the called workflow's last block produced."
-        }
-      ]
-    },
-    {
-      "type": "manual-step",
-      "label": "Manual Step",
-      "description": "Pause until you press Continue: solve a CAPTCHA, type a 2FA code, take a look.",
-      "canStart": true,
-      "canTakeInput": true,
-      "ports": [
-        "out"
-      ],
-      "timeoutSeconds": 600,
-      "defaultConfig": {
-        "message": "Solve the CAPTCHA in the open tab, then press Continue."
-      },
-      "fields": [
-        {
-          "key": "message",
-          "label": "What to do",
-          "kind": "text",
-          "required": true,
-          "templated": true
-        }
-      ],
-      "outputs": [
-        {
-          "key": "(same data)",
-          "description": "The input, passed on after you continue."
-        }
-      ]
-    },
-    {
-      "type": "stop",
-      "label": "Stop",
-      "description": "End this path here: as passed, or as failed with a message.",
+      "type": "transform",
+      "label": "Transform",
+      "category": "data",
+      "description": "Compute new values with expressions: math, text, lists (sum, sort, pluck…).",
       "canStart": true,
       "canTakeInput": true,
       "ports": [
@@ -1011,72 +1486,305 @@
       ],
       "timeoutSeconds": 60,
       "defaultConfig": {
-        "outcome": "fail",
+        "values": [
+          {
+            "name": "total",
+            "expression": "sum(pluck(items, 'price'))"
+          }
+        ]
+      },
+      "fields": [
+        {
+          "key": "values",
+          "label": "Values",
+          "kind": "rows",
+          "required": true,
+          "columns": [
+            {
+              "key": "name",
+              "label": "Name"
+            },
+            {
+              "key": "expression",
+              "label": "Expression"
+            }
+          ],
+          "help": "Expressions without {{ }}. See docs/guide for the functions."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(your names)",
+          "description": "One key per row."
+        }
+      ]
+    },
+    {
+      "type": "filter",
+      "label": "Filter",
+      "category": "data",
+      "description": "Keep only the list items that match a condition.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "list": "items",
+        "left": "{{item.price}}",
+        "operator": "less",
+        "right": "50",
+        "into": ""
+      },
+      "fields": [
+        {
+          "key": "list",
+          "label": "List",
+          "kind": "text",
+          "required": true,
+          "help": "Where the list is in the data, e.g. items or data.results (an expression, no {{ }})."
+        },
+        {
+          "key": "left",
+          "label": "Value (per item)",
+          "kind": "text",
+          "help": "Rendered for each item: {{item.…}} is the item, other {{…}} the data."
+        },
+        {
+          "key": "operator",
+          "label": "Condition",
+          "kind": "select",
+          "options": [
+            "equals",
+            "not-equals",
+            "contains",
+            "not-contains",
+            "starts-with",
+            "ends-with",
+            "matches",
+            "greater",
+            "greater-equal",
+            "less",
+            "less-equal",
+            "empty",
+            "not-empty",
+            "true",
+            "false"
+          ]
+        },
+        {
+          "key": "right",
+          "label": "Compare to",
+          "kind": "text"
+        },
+        {
+          "key": "into",
+          "label": "Save as (empty = replace the list)",
+          "kind": "text"
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(list)",
+          "description": "The kept items, under the list's name or \"Save as\"."
+        }
+      ]
+    },
+    {
+      "type": "data-table",
+      "label": "Data Table",
+      "category": "data",
+      "description": "Rows of data you paste in (CSV or JSON), e.g. logins to test one by one.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "text": "email,password\nfirst@example.com,one\nsecond@example.com,two",
+        "into": "rows"
+      },
+      "fields": [
+        {
+          "key": "text",
+          "label": "Data",
+          "kind": "text",
+          "required": true,
+          "help": "CSV with a header row (comma, semicolon or tab), or a JSON list."
+        },
+        {
+          "key": "into",
+          "label": "Save the rows as",
+          "kind": "text"
+        }
+      ],
+      "outputs": [
+        {
+          "key": "rows",
+          "description": "The rows (or the name you chose)."
+        },
+        {
+          "key": "count",
+          "description": "How many rows."
+        }
+      ]
+    },
+    {
+      "type": "save-dataset",
+      "label": "Save to Dataset",
+      "category": "data",
+      "description": "Add rows to a named dataset kept in the browser. See and download it on the Data page.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "dataset": "scraped",
+        "value": "items",
+        "mode": "append"
+      },
+      "fields": [
+        {
+          "key": "dataset",
+          "label": "Dataset",
+          "kind": "text",
+          "required": true,
+          "templated": true
+        },
+        {
+          "key": "value",
+          "label": "What to save",
+          "kind": "text",
+          "required": true,
+          "help": "An expression: a list adds one row per item, anything else one row. E.g. items, or item inside a For Each. Build objects with Transform first."
+        },
+        {
+          "key": "mode",
+          "label": "Mode",
+          "kind": "select",
+          "options": [
+            "append",
+            "replace"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "key": "datasetSize",
+          "description": "Rows in the dataset afterwards."
+        }
+      ]
+    },
+    {
+      "type": "download",
+      "label": "Download",
+      "category": "data",
+      "description": "Save a list or a dataset to a CSV or JSON file in Downloads.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "from": "value",
+        "value": "items",
+        "dataset": "",
+        "format": "csv",
+        "filename": "blockflow-{{ today() }}.csv"
+      },
+      "fields": [
+        {
+          "key": "from",
+          "label": "Save",
+          "kind": "select",
+          "options": [
+            "value",
+            "dataset"
+          ]
+        },
+        {
+          "key": "value",
+          "label": "Value",
+          "kind": "text",
+          "help": "An expression, for \"a value from the data\"."
+        },
+        {
+          "key": "dataset",
+          "label": "Dataset",
+          "kind": "text",
+          "templated": true
+        },
+        {
+          "key": "format",
+          "label": "Format",
+          "kind": "select",
+          "options": [
+            "csv",
+            "json",
+            "text"
+          ]
+        },
+        {
+          "key": "filename",
+          "label": "File name",
+          "kind": "text",
+          "required": true,
+          "templated": true
+        }
+      ],
+      "outputs": [
+        {
+          "key": "file",
+          "description": "The file name used."
+        }
+      ]
+    },
+    {
+      "type": "notify",
+      "label": "Notify",
+      "category": "output",
+      "description": "Show a desktop notification.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "title": "BlockFlow",
         "message": ""
       },
       "fields": [
         {
-          "key": "outcome",
-          "label": "End as",
-          "kind": "select",
-          "options": [
-            "fail",
-            "pass"
-          ]
-        },
-        {
-          "key": "message",
-          "label": "Message",
-          "kind": "text",
-          "templated": true
-        }
-      ],
-      "outputs": []
-    },
-    {
-      "type": "log",
-      "label": "Log",
-      "description": "Write a line to the run log, e.g. a value you want to see.",
-      "canStart": true,
-      "canTakeInput": true,
-      "ports": [
-        "out"
-      ],
-      "timeoutSeconds": 60,
-      "defaultConfig": {
-        "message": "{{value}}",
-        "level": "info"
-      },
-      "fields": [
-        {
-          "key": "message",
-          "label": "Message",
+          "key": "title",
+          "label": "Title",
           "kind": "text",
           "required": true,
           "templated": true
         },
         {
-          "key": "level",
-          "label": "Level",
-          "kind": "select",
-          "options": [
-            "info",
-            "warn",
-            "error",
-            "debug"
-          ]
+          "key": "message",
+          "label": "Message",
+          "kind": "text",
+          "templated": true
         }
       ],
       "outputs": [
         {
-          "key": "(same data)",
-          "description": "The input, passed on."
+          "key": "notified",
+          "description": "Always true once the notification was shown."
         }
       ]
     },
     {
       "type": "http-request",
       "label": "HTTP Request",
+      "category": "output",
       "description": "Call an API or webhook and use the response.",
       "canStart": true,
       "canTakeInput": true,
@@ -1133,6 +1841,10 @@
       ],
       "outputs": [
         {
+          "key": "url",
+          "description": "The URL that was called (handy as the base for Extract from HTML)."
+        },
+        {
           "key": "status",
           "description": "HTTP status code."
         },
@@ -1151,9 +1863,10 @@
       ]
     },
     {
-      "type": "notify",
-      "label": "Notify",
-      "description": "Show a desktop notification.",
+      "type": "log",
+      "label": "Log",
+      "category": "output",
+      "description": "Write a line to the run log, e.g. a value you want to see.",
       "canStart": true,
       "canTakeInput": true,
       "ports": [
@@ -1161,28 +1874,33 @@
       ],
       "timeoutSeconds": 60,
       "defaultConfig": {
-        "title": "BlockFlow",
-        "message": ""
+        "message": "{{value}}",
+        "level": "info"
       },
       "fields": [
         {
-          "key": "title",
-          "label": "Title",
+          "key": "message",
+          "label": "Message",
           "kind": "text",
           "required": true,
           "templated": true
         },
         {
-          "key": "message",
-          "label": "Message",
-          "kind": "text",
-          "templated": true
+          "key": "level",
+          "label": "Level",
+          "kind": "select",
+          "options": [
+            "info",
+            "warn",
+            "error",
+            "debug"
+          ]
         }
       ],
       "outputs": [
         {
-          "key": "notified",
-          "description": "Always true once the notification was shown."
+          "key": "(same data)",
+          "description": "The input, passed on."
         }
       ]
     }

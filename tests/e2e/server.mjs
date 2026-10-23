@@ -29,6 +29,17 @@ export function startServer() {
       res.setHeader('content-type', 'application/json');
       return res.end(JSON.stringify({ order: (orders += 1) }));
     }
+    // Three pages of products, 3 per page, with a Next link except on the last page.
+    if (url.pathname === '/products') {
+      const page = Number(url.searchParams.get('page') ?? '1');
+      const cards = [1, 2, 3]
+        .map((n) => (page - 1) * 3 + n)
+        .map((id) => `<li class="card"><h2>Product ${id}</h2><span class="price">$${id * 10}</span><a href="/p/${id}">details</a></li>`)
+        .join('');
+      const next = page < 3 ? `<a class="next" href="/products?page=${page + 1}">Next</a>` : '<span class="next disabled">Next</span>';
+      res.setHeader('content-type', 'text/html; charset=utf-8');
+      return res.end(`<!doctype html><title>Products ${page}</title><h1>Page ${page}</h1><ul>${cards}</ul><nav>${next}</nav>`);
+    }
     // The SPA serves its page for its client-side routes too.
     const file = url.pathname.startsWith('/spa') ? 'spa.html' : url.pathname.slice(1) || 'login.html';
     try {

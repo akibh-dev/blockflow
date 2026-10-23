@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture: infinite feed</title>
+    <style>.post { height: 120px; border-bottom: 1px solid #ccc; }</style>
+  </head>
+  <body>
+    <h1>Feed</h1>
+    <div id="feed"></div>
+    <script>
+      // Loads 10 more posts when you get near the bottom, up to 40, after a short "network" delay.
+      const feed = document.getElementById('feed');
+      let loaded = 0;
+      let loading = false;
+      function more() {
+        if (loading || loaded >= 40) return;
+        loading = true;
+        setTimeout(() => {
+          for (let i = 0; i < 10; i += 1) {
+            loaded += 1;
+            const post = document.createElement('article');
+            post.className = 'post';
+            post.textContent = `Post ${loaded}`;
+            feed.append(post);
+          }
+          loading = false;
+        }, 300);
+      }
+      more();
+      addEventListener('scroll', () => {
+        if (innerHeight + scrollY >= document.body.scrollHeight - 200) more();
+      });
+    </script>
+  </body>
+</html>

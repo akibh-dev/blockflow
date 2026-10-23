@@ -58,6 +58,7 @@ export const httpRequestBlock: BlockDefinition<HttpRequestConfig> = {
   ],
   summary: (config) => `${config.method} ${config.url || '…'}`,
   outputs: [
+    { key: 'url', description: 'The URL that was called (handy as the base for Extract from HTML).' },
     { key: 'status', description: 'HTTP status code.' },
     { key: 'ok', description: 'True for 2xx responses.' },
     { key: 'body', description: 'Response text.' },
@@ -86,6 +87,7 @@ export const httpRequestBlock: BlockDefinition<HttpRequestConfig> = {
     }
     return {
       ...input,
+      url,
       status: result.status,
       ok: result.ok,
       body: result.body,

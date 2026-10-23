@@ -30,8 +30,11 @@ export interface Agent {
 /** `window`, typed with its constructors (HTMLInputElement, MouseEvent...), which may differ per window. */
 export type PageWindow = Window & typeof globalThis;
 
-export function createAgent(win: PageWindow = window as PageWindow): Agent {
-  const doc = win.document;
+/**
+ * `doc` defaults to the window's own document. Pass a parsed document (DOMParser) to scrape HTML
+ * that was fetched rather than shown in a tab: it has no layout, so visibility checks are skipped.
+ */
+export function createAgent(win: PageWindow = window as PageWindow, doc: Document = win.document): Agent {
   /** Last seen position of an element, to tell when it stopped moving (animations). */
   const lastRects = new WeakMap<Element, string>();
 
@@ -471,6 +474,122 @@ export function createAgent(win: PageWindow = window as PageWindow): Agent {
     return { state, count: found.length };
   }
 
+  // --- scraping -------------------------------------------------------------
+
+  const URL_ATTRIBUTES = new Set(['href', 'src', 'action', 'poster', 'data-src']);
+
+  function textOf(element: Element): string {
+    return (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  function attributeOf(element: Element, name: string): string {
+    const value = element.getAttribute(name) ?? '';
+    if (!value || !URL_ATTRIBUTES.has(name)) return value;
+    try {
+      return new URL(value, doc.baseURI).href;
+    } catch {
+      return value;
+    }
+  }
+
+  function extract(request: Extract<AgentRequest, { op: 'extract' }>): Done {
+    const items = all(request.locator);
+    if (items.length === 0) throw new Pending(`waiting for ${request.locator}: no element matches`);
+    const picked = request.limit && request.limit > 0 ? items.slice(0, request.limit) : items;
+    const fields = request.fields.length > 0 ? request.fields : [{ name: 'text' }];
+    const values = picked.map((item) =>
+      fields.map((field) => {
+        let target: Element | undefined = item;
+        if (field.locator?.trim()) {
+          try {
+            target = resolveLocator(field.locator, item)[0];
+          } catch (error) {
+            throw new Fatal(`Field "${field.name}": ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+        return !target ? '' : field.attribute?.trim() ? attributeOf(target, field.attribute.trim()) : textOf(target);
+      }),
+    );
+    // Columns + arrays, not objects: Chrome sorts object keys when it passes results back.
+    return { columns: fields.map((field) => field.name), values, count: values.length };
+  }
+
+  function table(locator: string): Done {
+    const found = one(locator);
+    const tableElement = found.localName === 'table' ? found : found.closest('table') ?? found.querySelector('table');
+    if (!tableElement) throw new Fatal(`${describeElement(found)} is not a table`);
+    const rows = Array.from((tableElement as HTMLTableElement).rows);
+    const headerRow = (tableElement as HTMLTableElement).tHead?.rows[0] ?? rows.find((row) => row.querySelector('th')) ?? rows[0];
+    if (!headerRow) return { columns: [], values: [], count: 0 };
+    const headers = Array.from(headerRow.cells).map((cell, index) => textOf(cell) || `column${index + 1}`);
+    const body = rows.filter((row) => row !== headerRow && row.parentElement?.localName !== 'thead' && row.cells.length > 0);
+    const values = body.map((row) => headers.map((_header, index) => (row.cells[index] ? textOf(row.cells[index] as Element) : '')));
+    return { columns: headers, values, count: values.length };
+  }
+
+  function pageInfo(): Done {
+    const meta: Record<string, string> = {};
+    for (const tag of Array.from(doc.querySelectorAll('meta[name], meta[property]'))) {
+      const key = tag.getAttribute('name') ?? tag.getAttribute('property');
+      if (key) meta[key] = tag.getAttribute('content') ?? '';
+    }
+    const jsonLd = Array.from(doc.querySelectorAll('script[type="application/ld+json"]')).flatMap((script) => {
+      try {
+        return [JSON.parse(script.textContent ?? '')];
+      } catch {
+        return [];
+      }
+    });
+    const canonical = doc.querySelector('link[rel="canonical"]');
+    return {
+      url: doc.URL,
+      title: doc.title,
+      description: meta.description ?? meta['og:description'] ?? '',
+      canonical: canonical ? attributeOf(canonical, 'href') : '',
+      lang: doc.documentElement.lang,
+      meta,
+      jsonLd,
+      links: doc.querySelectorAll('a[href]').length,
+    };
+  }
+
+  function storage(request: Extract<AgentRequest, { op: 'storage' }>): Done {
+    if (request.area === 'cookies') {
+      // Cookies the page can see (not HttpOnly ones).
+      const cookies = Object.fromEntries(
+        doc.cookie
+          .split(';')
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .map((part) => {
+            const index = part.indexOf('=');
+            return [decodeURIComponent(part.slice(0, index)), decodeURIComponent(part.slice(index + 1))];
+          }),
+      );
+      return request.key ? { value: cookies[request.key] ?? null } : { value: cookies };
+    }
+    const area = request.area === 'local' ? win.localStorage : win.sessionStorage;
+    if (request.key) return { value: area.getItem(request.key) };
+    const everything: Record<string, string> = {};
+    for (let i = 0; i < area.length; i += 1) {
+      const key = area.key(i);
+      if (key !== null) everything[key] = area.getItem(key) ?? '';
+    }
+    return { value: everything };
+  }
+
+  function scroll(request: Extract<AgentRequest, { op: 'scroll' }>): Done {
+    const scroller = doc.scrollingElement ?? doc.documentElement;
+    if (request.to === 'element') {
+      if (!request.locator) throw new Fatal('Scroll to an element needs the element');
+      const element = one(request.locator);
+      (element as HTMLElement).scrollIntoView?.({ block: 'center' });
+    } else {
+      win.scrollTo(0, request.to === 'top' ? 0 : scroller.scrollHeight);
+    }
+    return { height: scroller.scrollHeight, y: win.scrollY };
+  }
+
   // --- forms ----------------------------------------------------------------
 
   /** A short locator that finds exactly this element, preferring what a person would write. */
@@ -576,7 +695,17 @@ export function createAgent(win: PageWindow = window as PageWindow): Agent {
       case 'detect-form':
         return detectForm(request.locator);
       case 'info':
-        return { url: win.location.href, title: doc.title };
+        return { url: doc.URL, title: doc.title };
+      case 'extract':
+        return extract(request);
+      case 'table':
+        return table(request.locator);
+      case 'page-info':
+        return pageInfo();
+      case 'storage':
+        return storage(request);
+      case 'scroll':
+        return scroll(request);
     }
   }
 

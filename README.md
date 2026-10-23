@@ -3,7 +3,7 @@
 Build small browser automations by connecting blocks, like n8n or AutoHotkey, but inside your browser.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
 
-**Status: prototype 1.** 22 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
+**Status: prototype 1.** 34 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
 [What has been verified](#what-has-been-verified) before you rely on it.
 
 **Using BlockFlow, or asking an AI to build workflows for you?** Read the
@@ -26,6 +26,10 @@ other block's input. The data a block produces becomes available to the next blo
 | 🧭 **Navigate** · ✖️ **Close Tab** | Go to URL, back, forward, reload; close a tab of the run. | `url` |
 | ✅ **Assert** | The test step: text, input value, attribute, count, visible, checked, enabled, URL, title, or any `{{value}}`. Page checks retry until they pass. **Soft** mode records the failure and goes on. | `actual` |
 | 🧩 **Run Workflow** | Calls another workflow like a function (e.g. a reusable "Log in"), in the same tab; continues with its result. | its data |
+| 🧺 **Extract List** · 📊 **Extract Table** | Scrape repeated items (fields by locator, links absolute) or a table, from a tab or from fetched HTML (no tab). | `items` / `rows`, `count` |
+| 📄 **Paginate** · 🖱️ **Scroll** · ℹ️ **Page Info** | Click Next through pages; scroll infinite lists to the end; title/meta/JSON-LD, localStorage, cookies. | `page`; `page`/`value` |
+| 🔁 **For Each** · 🔂 **Repeat** · 🧹 **Filter** · 🧮 **Transform** | Loop over a list (`each`/`done` outputs), N times; keep matching items; compute values with expressions (`sum(pluck(items,'price'))`). | `item`, `index` |
+| 🗂️ **Data Table** · 💾 **Save to Dataset** · ⬇️ **Download** | Paste CSV/JSON test data; keep rows between runs (Data page); save CSV/JSON files. | `rows`; `datasetSize`; `file` |
 | ✋ **Manual Step** · ⏹ **Stop** · 📝 **Log** | Pause until you press Continue (CAPTCHA, 2FA); end a path as passed/failed; write to the log. | |
 | ⏱ **Timer** | Nothing connected to it: starts the flow every N seconds (or once). After another block: **delays** the flow by N seconds. | `tick`, `firedAt` |
 | 🔀 **If** | Two outputs, **true** and **false**: the data goes one way or the other (equals, contains, starts with, regex, greater/at least, empty, is true…). | passes input through |
@@ -158,6 +162,8 @@ src/
     runs.ts              run and step records
     condition.ts         comparisons shared by If and Assert
     report.ts            JUnit XML and HTML reports from runs
+    expression.ts        safe expression language for {{ }} and Transform/Filter (no eval)
+    csv.ts               CSV parse/write
     session.ts, page.ts  the run's named tabs; requests to the page agent
     workflow.ts          diffWorkflows() decides what the background must start/stop
   dom/                   Code that runs inside web pages
@@ -206,6 +212,7 @@ needed.
 | 2026-10-23, Brave Origin 155, Phase A (runs, ports, step settings) through the real editor: If true/false branches, dragging a new connection from the "false" output, inspector input/output, error output + retries (2 attempts), switching back to "stop" removes the error output and its edge, Stop button cancels before the next block, killing the service worker mid-run marks the run interrupted (18 checks) | Run, passing. |
 | 2026-10-23, `npm run e2e` (Brave Origin 155, 20 checks, 3 runs in a row): classic login with Fill Form + submit + Wait For URL + Read + If; wrong password routed to the error output with a readable timeout; SPA with a cookie overlay ("covered by" reason), React-style controlled inputs, typed email, select, custom checkbox under its label, disabled-until-valid button, pushState route, text appearing, shadow DOM button; strict-mode and missing-element errors; Detect fields in the editor on a real form. Unit tests: 212 incl. a React 19 form filled in jsdom | Run, passing. |
 | 2026-10-23, `npm run e2e` Phase C (30 checks in all): Run Workflow reusing a login in the same tab, Assert text/title passing, a soft Assert failing the run while the flow continues, its screenshot in the Reports page and in the HTML export, JUnit export, the secret password absent from all run records, Manual Step continued from the editor banner | Run, passing. |
+| 2026-10-23, `npm run e2e` Phase D (38 checks in all, Playwright Chromium 131: Brave stopped launching under automation that afternoon, see below): Paginate 3 pages + Extract List + Save to Dataset (9 rows in IndexedDB, absolute links) + Download CSV, HTTP Request + Extract Table/List from HTML through Chrome's offscreen document, Scroll an infinite feed to 40 posts, a CSV-driven For Each login (one good, one bad), Data page preview | Run, passing. |
 | Firefox host permission grant, Safari conversion, Chrome Web Store upload | **Not run.** |
 
 ## Known limitations
@@ -219,6 +226,9 @@ needed.
   check by default. Pages that need a login work if you are signed in in the same browser profile.
 - Broad site access (`<all_urls>`) for now. Later: ask for access per workflow with optional permissions.
 - No templates or undo yet. Two editor tabs open at once overwrite each other's changes.
+- `npm run e2e` picks Brave first. If a browser hangs at launch under automation (Brave did after an update on
+  2026-10-23), run `BF_BROWSER=/path/to/chromium npm run e2e`; Playwright's Chromium in
+  `~/.cache/ms-playwright` is used automatically when nothing else is found.
 - Page actions use synthetic events (`isTrusted: false`); a few sites reject them. Iframes, closed shadow
   roots, file uploads and native dialogs are not supported yet (plan: phase F).
 - No "Resume" for an interrupted run yet, and If has one condition (several joined with and/or come later).

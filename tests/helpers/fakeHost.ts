@@ -177,6 +177,29 @@ export class FakeHost implements Host {
     },
   };
 
+  readonly datasetRows = new Map<string, unknown[]>();
+  datasets = {
+    read: async (name: string) => [...(this.datasetRows.get(name) ?? [])],
+    write: async (name: string, rows: unknown[], mode: 'append' | 'replace') => {
+      const next = [...(mode === 'append' ? (this.datasetRows.get(name) ?? []) : []), ...rows];
+      this.datasetRows.set(name, next);
+      return next.length;
+    },
+  };
+
+  readonly downloaded: { filename: string; content: string; mime: string }[] = [];
+  downloads = {
+    save: async (filename: string, content: string, mime: string) => {
+      this.downloaded.push({ filename, content, mime });
+    },
+  };
+
+  /** HTML scraping runs the real page agent on jsdom-free input: tests replace this. */
+  htmlAgent: (html: string, baseUrl: string, request: AgentRequest) => Promise<Record<string, unknown>> = async () => ({});
+  html = {
+    act: (html: string, baseUrl: string, request: AgentRequest) => this.htmlAgent(html, baseUrl, request),
+  };
+
   /** What the "user" answers to Manual Step (default: continue). */
   readonly prompts: string[] = [];
   promptAnswer = true;

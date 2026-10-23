@@ -246,6 +246,111 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "navigate"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Go to a URL, back, forward, or reload, in a tab of this run.",
+                    "properties": {
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      },
+                      "action": {
+                        "description": "Action",
+                        "enum": [
+                          "goto",
+                          "back",
+                          "forward",
+                          "reload"
+                        ]
+                      },
+                      "url": {
+                        "description": "URL",
+                        "type": "string"
+                      },
+                      "waitUntil": {
+                        "description": "Continue when",
+                        "enum": [
+                          "load",
+                          "networkidle",
+                          "none"
+                        ]
+                      }
+                    },
+                    "required": []
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "close-tab"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Close a tab this run opened.",
+                    "properties": {
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": []
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "click"
                   },
                   "position": {
@@ -591,6 +696,71 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "scroll"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Scroll to the bottom, top or an element; or keep scrolling until no more content loads.",
+                    "properties": {
+                      "to": {
+                        "description": "Scroll",
+                        "enum": [
+                          "end",
+                          "bottom",
+                          "top",
+                          "element"
+                        ]
+                      },
+                      "locator": {
+                        "description": "Only for \"to an element\".",
+                        "type": "string"
+                      },
+                      "maxScrolls": {
+                        "description": "At most (scrolls)",
+                        "type": "number",
+                        "minimum": 1
+                      },
+                      "pauseMs": {
+                        "description": "Wait between scrolls (ms)",
+                        "type": "number",
+                        "minimum": 100
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": []
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "wait-for"
                   },
                   "position": {
@@ -731,6 +901,274 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "extract-list"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Scrape repeated items (cards, results, rows) into a list of objects.",
+                    "properties": {
+                      "locator": {
+                        "description": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick.",
+                        "type": "string"
+                      },
+                      "fields": {
+                        "description": "No fields = each item's text as {text}. Links (href, src) come back as full URLs.",
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "description": "Name"
+                            },
+                            "locator": {
+                              "type": "string",
+                              "description": "Inside the item"
+                            },
+                            "attribute": {
+                              "type": "string",
+                              "description": "Attribute"
+                            }
+                          }
+                        }
+                      },
+                      "limit": {
+                        "description": "At most (0 = all)",
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "into": {
+                        "description": "Save the list as",
+                        "type": "string"
+                      },
+                      "source": {
+                        "description": "From",
+                        "enum": [
+                          "tab",
+                          "html"
+                        ]
+                      },
+                      "html": {
+                        "description": "Only for \"HTML in the data\".",
+                        "type": "string"
+                      },
+                      "baseUrl": {
+                        "description": "Makes relative links absolute (HTML mode).",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "locator"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "extract-table"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Read an HTML table into a list of rows, keyed by its column headers.",
+                    "properties": {
+                      "locator": {
+                        "description": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick.",
+                        "type": "string"
+                      },
+                      "into": {
+                        "description": "Save the rows as",
+                        "type": "string"
+                      },
+                      "source": {
+                        "description": "From",
+                        "enum": [
+                          "tab",
+                          "html"
+                        ]
+                      },
+                      "html": {
+                        "description": "Only for \"HTML in the data\".",
+                        "type": "string"
+                      },
+                      "baseUrl": {
+                        "description": "Makes relative links absolute (HTML mode).",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "locator"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "paginate"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Run \"each\" on every page of a paged list, clicking Next in between.",
+                    "properties": {
+                      "next": {
+                        "description": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick.",
+                        "type": "string"
+                      },
+                      "maxPages": {
+                        "description": "At most (pages)",
+                        "type": "number",
+                        "minimum": 1
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "next"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "page-info"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Read the page itself: title, meta tags, JSON-LD, or its localStorage / cookies.",
+                    "properties": {
+                      "area": {
+                        "description": "Read",
+                        "enum": [
+                          "page",
+                          "local",
+                          "session",
+                          "cookies"
+                        ]
+                      },
+                      "key": {
+                        "description": "Storage and cookies: one key. Empty = all of them.",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": []
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "assert"
                   },
                   "position": {
@@ -816,269 +1254,6 @@
                       }
                     },
                     "required": []
-                  },
-                  "step": {
-                    "$ref": "#/$defs/step"
-                  }
-                }
-              },
-              {
-                "type": "object",
-                "required": [
-                  "id",
-                  "type",
-                  "position",
-                  "config"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "const": "navigate"
-                  },
-                  "position": {
-                    "type": "object",
-                    "properties": {
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    }
-                  },
-                  "config": {
-                    "type": "object",
-                    "description": "Go to a URL, back, forward, or reload, in a tab of this run.",
-                    "properties": {
-                      "tab": {
-                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
-                        "type": "string"
-                      },
-                      "action": {
-                        "description": "Action",
-                        "enum": [
-                          "goto",
-                          "back",
-                          "forward",
-                          "reload"
-                        ]
-                      },
-                      "url": {
-                        "description": "URL",
-                        "type": "string"
-                      },
-                      "waitUntil": {
-                        "description": "Continue when",
-                        "enum": [
-                          "load",
-                          "networkidle",
-                          "none"
-                        ]
-                      }
-                    },
-                    "required": []
-                  },
-                  "step": {
-                    "$ref": "#/$defs/step"
-                  }
-                }
-              },
-              {
-                "type": "object",
-                "required": [
-                  "id",
-                  "type",
-                  "position",
-                  "config"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "const": "close-tab"
-                  },
-                  "position": {
-                    "type": "object",
-                    "properties": {
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    }
-                  },
-                  "config": {
-                    "type": "object",
-                    "description": "Close a tab this run opened.",
-                    "properties": {
-                      "tab": {
-                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
-                        "type": "string"
-                      }
-                    },
-                    "required": []
-                  },
-                  "step": {
-                    "$ref": "#/$defs/step"
-                  }
-                }
-              },
-              {
-                "type": "object",
-                "required": [
-                  "id",
-                  "type",
-                  "position",
-                  "config"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "const": "if"
-                  },
-                  "position": {
-                    "type": "object",
-                    "properties": {
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    }
-                  },
-                  "config": {
-                    "type": "object",
-                    "description": "Go one way when a condition is true, another when it is false.",
-                    "properties": {
-                      "left": {
-                        "description": "Value",
-                        "type": "string"
-                      },
-                      "operator": {
-                        "description": "Condition",
-                        "enum": [
-                          "equals",
-                          "not-equals",
-                          "contains",
-                          "not-contains",
-                          "starts-with",
-                          "ends-with",
-                          "matches",
-                          "greater",
-                          "greater-equal",
-                          "less",
-                          "less-equal",
-                          "empty",
-                          "not-empty",
-                          "true",
-                          "false"
-                        ]
-                      },
-                      "right": {
-                        "description": "Ignored by \"is empty\", \"is true\" and similar. For a pattern, write /text/i.",
-                        "type": "string"
-                      }
-                    },
-                    "required": []
-                  },
-                  "step": {
-                    "$ref": "#/$defs/step"
-                  }
-                }
-              },
-              {
-                "type": "object",
-                "required": [
-                  "id",
-                  "type",
-                  "position",
-                  "config"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "const": "set-variable"
-                  },
-                  "position": {
-                    "type": "object",
-                    "properties": {
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    }
-                  },
-                  "config": {
-                    "type": "object",
-                    "description": "Add a value to the data flowing through.",
-                    "properties": {
-                      "name": {
-                        "description": "Name",
-                        "type": "string"
-                      },
-                      "value": {
-                        "description": "Value",
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "name"
-                    ]
-                  },
-                  "step": {
-                    "$ref": "#/$defs/step"
-                  }
-                }
-              },
-              {
-                "type": "object",
-                "required": [
-                  "id",
-                  "type",
-                  "position",
-                  "config"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "const": "run-workflow"
-                  },
-                  "position": {
-                    "type": "object",
-                    "properties": {
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      }
-                    }
-                  },
-                  "config": {
-                    "type": "object",
-                    "description": "Run another workflow with this data, and continue with what it returns.",
-                    "properties": {
-                      "workflow": {
-                        "description": "Its start blocks receive this data. It does not need to be On.",
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "workflow"
-                    ]
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1191,7 +1366,7 @@
                     "type": "string"
                   },
                   "type": {
-                    "const": "log"
+                    "const": "if"
                   },
                   "position": {
                     "type": "object",
@@ -1206,24 +1381,573 @@
                   },
                   "config": {
                     "type": "object",
-                    "description": "Write a line to the run log, e.g. a value you want to see.",
+                    "description": "Go one way when a condition is true, another when it is false.",
                     "properties": {
-                      "message": {
-                        "description": "Message",
+                      "left": {
+                        "description": "Value",
                         "type": "string"
                       },
-                      "level": {
-                        "description": "Level",
+                      "operator": {
+                        "description": "Condition",
                         "enum": [
-                          "info",
-                          "warn",
-                          "error",
-                          "debug"
+                          "equals",
+                          "not-equals",
+                          "contains",
+                          "not-contains",
+                          "starts-with",
+                          "ends-with",
+                          "matches",
+                          "greater",
+                          "greater-equal",
+                          "less",
+                          "less-equal",
+                          "empty",
+                          "not-empty",
+                          "true",
+                          "false"
+                        ]
+                      },
+                      "right": {
+                        "description": "Ignored by \"is empty\", \"is true\" and similar. For a pattern, write /text/i.",
+                        "type": "string"
+                      }
+                    },
+                    "required": []
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "for-each"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Repeat the blocks on \"each\" for every item of a list, then continue from \"done\".",
+                    "properties": {
+                      "list": {
+                        "description": "Where the list is in the data, e.g. items or data.results (an expression, no {{ }}).",
+                        "type": "string"
+                      },
+                      "as": {
+                        "description": "Call each item",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "list"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "repeat"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Run the blocks on \"each\" a number of times, then continue from \"done\".",
+                    "properties": {
+                      "times": {
+                        "description": "Times",
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 1000
+                      }
+                    },
+                    "required": []
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "run-workflow"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Run another workflow with this data, and continue with what it returns.",
+                    "properties": {
+                      "workflow": {
+                        "description": "Its start blocks receive this data. It does not need to be On.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "workflow"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "set-variable"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Add a value to the data flowing through.",
+                    "properties": {
+                      "name": {
+                        "description": "Name",
+                        "type": "string"
+                      },
+                      "value": {
+                        "description": "Value",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "transform"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Compute new values with expressions: math, text, lists (sum, sort, pluck…).",
+                    "properties": {
+                      "values": {
+                        "description": "Expressions without {{ }}. See docs/guide for the functions.",
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "description": "Name"
+                            },
+                            "expression": {
+                              "type": "string",
+                              "description": "Expression"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "required": [
+                      "values"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "filter"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Keep only the list items that match a condition.",
+                    "properties": {
+                      "list": {
+                        "description": "Where the list is in the data, e.g. items or data.results (an expression, no {{ }}).",
+                        "type": "string"
+                      },
+                      "left": {
+                        "description": "Rendered for each item: {{item.…}} is the item, other {{…}} the data.",
+                        "type": "string"
+                      },
+                      "operator": {
+                        "description": "Condition",
+                        "enum": [
+                          "equals",
+                          "not-equals",
+                          "contains",
+                          "not-contains",
+                          "starts-with",
+                          "ends-with",
+                          "matches",
+                          "greater",
+                          "greater-equal",
+                          "less",
+                          "less-equal",
+                          "empty",
+                          "not-empty",
+                          "true",
+                          "false"
+                        ]
+                      },
+                      "right": {
+                        "description": "Compare to",
+                        "type": "string"
+                      },
+                      "into": {
+                        "description": "Save as (empty = replace the list)",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "list"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "data-table"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Rows of data you paste in (CSV or JSON), e.g. logins to test one by one.",
+                    "properties": {
+                      "text": {
+                        "description": "CSV with a header row (comma, semicolon or tab), or a JSON list.",
+                        "type": "string"
+                      },
+                      "into": {
+                        "description": "Save the rows as",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "save-dataset"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Add rows to a named dataset kept in the browser. See and download it on the Data page.",
+                    "properties": {
+                      "dataset": {
+                        "description": "Dataset",
+                        "type": "string"
+                      },
+                      "value": {
+                        "description": "An expression: a list adds one row per item, anything else one row. E.g. items, or item inside a For Each. Build objects with Transform first.",
+                        "type": "string"
+                      },
+                      "mode": {
+                        "description": "Mode",
+                        "enum": [
+                          "append",
+                          "replace"
                         ]
                       }
                     },
                     "required": [
-                      "message"
+                      "dataset",
+                      "value"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "download"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Save a list or a dataset to a CSV or JSON file in Downloads.",
+                    "properties": {
+                      "from": {
+                        "description": "Save",
+                        "enum": [
+                          "value",
+                          "dataset"
+                        ]
+                      },
+                      "value": {
+                        "description": "An expression, for \"a value from the data\".",
+                        "type": "string"
+                      },
+                      "dataset": {
+                        "description": "Dataset",
+                        "type": "string"
+                      },
+                      "format": {
+                        "description": "Format",
+                        "enum": [
+                          "csv",
+                          "json",
+                          "text"
+                        ]
+                      },
+                      "filename": {
+                        "description": "File name",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "filename"
+                    ]
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "notify"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Show a desktop notification.",
+                    "properties": {
+                      "title": {
+                        "description": "Title",
+                        "type": "string"
+                      },
+                      "message": {
+                        "description": "Message",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "title"
                     ]
                   },
                   "step": {
@@ -1310,7 +2034,7 @@
                     "type": "string"
                   },
                   "type": {
-                    "const": "notify"
+                    "const": "log"
                   },
                   "position": {
                     "type": "object",
@@ -1325,19 +2049,24 @@
                   },
                   "config": {
                     "type": "object",
-                    "description": "Show a desktop notification.",
+                    "description": "Write a line to the run log, e.g. a value you want to see.",
                     "properties": {
-                      "title": {
-                        "description": "Title",
-                        "type": "string"
-                      },
                       "message": {
                         "description": "Message",
                         "type": "string"
+                      },
+                      "level": {
+                        "description": "Level",
+                        "enum": [
+                          "info",
+                          "warn",
+                          "error",
+                          "debug"
+                        ]
                       }
                     },
                     "required": [
-                      "title"
+                      "message"
                     ]
                   },
                   "step": {

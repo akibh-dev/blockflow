@@ -120,7 +120,19 @@ know from Jest/Playwright:
 The screenshot store (`src/browser/blobStore.ts`) is plain IndexedDB, the same API you would use in a
 web app: extension pages and the worker share it because they share the `chrome-extension://` origin.
 
-## 10. The editor: `src/entrypoints/editor/`
+## 10. Data features: an interpreter, an offscreen page, IndexedDB
+
+- `src/core/expression.ts` is a tiny language: tokenizer → parser → evaluator, ~400 lines. Extensions
+  may not use `eval` (MV3 content security policy), which is also why template engines like Handlebars'
+  precompiled-at-runtime mode do not work in extensions. Read the tests first
+  (`tests/core/expression.test.ts`).
+- `src/entrypoints/offscreen/`: Chrome's background is a service worker with no `document`, like a web
+  worker. To use `DOMParser` it opens an invisible extension page and messages it. Same idea as moving
+  DOM work out of a Web Worker back to the main thread.
+- A surprise worth remembering: values returned from `scripting.executeScript` lose their object key
+  order in Chrome. See `tableToObjects` in `src/core/blocks/extractList.ts`.
+
+## 11. The editor: `src/entrypoints/editor/`
 
 An ordinary React app (React Flow for the canvas). The interesting file is `flow/convert.ts`: it converts
 between the saved `Workflow` and React Flow's nodes/edges. Everything else is UI. If you know React you

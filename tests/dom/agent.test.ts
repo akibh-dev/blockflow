@@ -202,3 +202,62 @@ describe('read, wait, detect-form', () => {
     expect(fields[3]?.hint).toContain('checkbox');
   });
 });
+
+describe('scraping', () => {
+  const shop = `
+    <ul id="products">
+      <li class="p"><h2>Kettle</h2><span class="price">$25</span><a href="/p/kettle">more</a></li>
+      <li class="p"><h2>Toaster</h2><span class="price">$40</span><a href="/p/toaster">more</a></li>
+      <li class="p"><h2>Mug</h2><a href="/p/mug">more</a></li>
+    </ul>
+    <table id="t"><thead><tr><th>Name</th><th>Qty</th></tr></thead><tbody><tr><td>A</td><td>1</td></tr><tr><td>B</td><td>2</td></tr></tbody></table>`;
+
+  it('extracts a list of objects; links become absolute; missing fields are empty', async () => {
+    page(shop);
+    const response = await run({
+      op: 'extract',
+      locator: 'li.p',
+      fields: [
+        { name: 'title', locator: 'h2' },
+        { name: 'price', locator: '.price' },
+        { name: 'link', locator: 'a', attribute: 'href' },
+      ],
+      limit: 2,
+    });
+    expect(response).toEqual({
+      status: 'done',
+      result: {
+        count: 2,
+        columns: ['title', 'price', 'link'],
+        values: [
+          ['Kettle', '$25', `${location.origin}/p/kettle`],
+          ['Toaster', '$40', `${location.origin}/p/toaster`],
+        ],
+      },
+    });
+    expect(await run({ op: 'extract', locator: '.none', fields: [] })).toMatchObject({ status: 'pending' });
+  });
+
+  it('reads tables by their headers', async () => {
+    page(shop);
+    expect(await run({ op: 'table', locator: '#t' })).toEqual({ status: 'done', result: { count: 2, columns: ['Name', 'Qty'], values: [['A', '1'], ['B', '2']] } });
+  });
+
+  it('page info, storage, cookies', async () => {
+    document.head.innerHTML = '<title>Shop</title><meta name="description" content="Kettles"><link rel="canonical" href="/home"><script type="application/ld+json">{"@type":"Product"}</script>';
+    localStorage.setItem('theme', 'dark');
+    document.cookie = 'session=abc';
+    const info = await run({ op: 'page-info' });
+    expect(info).toMatchObject({ result: { title: 'Shop', description: 'Kettles', canonical: `${location.origin}/home`, jsonLd: [{ '@type': 'Product' }] } });
+    expect(await run({ op: 'storage', area: 'local', key: 'theme' })).toMatchObject({ result: { value: 'dark' } });
+    expect(await run({ op: 'storage', area: 'cookies', key: 'session' })).toMatchObject({ result: { value: 'abc' } });
+    document.head.innerHTML = '';
+  });
+
+  it('works on HTML that is parsed, not displayed', async () => {
+    const parsed = new DOMParser().parseFromString(`<base href="https://shop.test/">${shop}`, 'text/html');
+    const offscreen = createAgent(window as never, parsed);
+    const response = await offscreen.run({ request: { op: 'extract', locator: 'li.p >> nth=0', fields: [{ name: 'link', locator: 'a', attribute: 'href' }] }, budgetMs: 0 });
+    expect(response).toMatchObject({ result: { columns: ['link'], values: [['https://shop.test/p/kettle']] } });
+  });
+});

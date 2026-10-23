@@ -28,7 +28,25 @@ export type AgentRequest =
   | { op: 'read'; locator: string; kind: ReadKind; name?: string }
   | { op: 'wait'; state: WaitState; locator?: string; text?: string }
   | { op: 'detect-form'; locator: string }
-  | { op: 'info' };
+  | { op: 'info' }
+  /**
+   * Scraping: one object per element matching `locator`, with one key per field. A field's
+   * locator is searched inside the item (empty = the item itself); `attribute` reads that attribute
+   * instead of the text (href/src come back as absolute URLs).
+   */
+  | { op: 'extract'; locator: string; fields: ExtractField[]; limit?: number }
+  /** An HTML table as objects keyed by its header cells. */
+  | { op: 'table'; locator: string }
+  /** URL, title, description, canonical, language, meta tags, JSON-LD. */
+  | { op: 'page-info' }
+  | { op: 'storage'; area: 'local' | 'session' | 'cookies'; key?: string }
+  | { op: 'scroll'; to: 'bottom' | 'top' | 'element'; locator?: string };
+
+export interface ExtractField {
+  name: string;
+  locator?: string;
+  attribute?: string;
+}
 
 /** Sent with every request: how long the agent may keep retrying inside the page before answering. */
 export interface AgentCall {

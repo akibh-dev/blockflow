@@ -10,8 +10,20 @@ export default defineConfig({
   manifestVersion: 3,
   manifest: ({ browser }) => ({
     name: 'BlockFlow',
-    description: 'Build small browser automations by connecting blocks: timers, open a URL, watch part of a page.',
-    permissions: ['alarms', 'storage', 'tabs', 'scripting', 'activeTab', 'notifications', 'webRequest'],
+    description: 'Browser automation from connected blocks: fill forms, test sites, watch pages, scrape data.',
+    permissions: [
+      'alarms',
+      'storage',
+      'unlimitedStorage',
+      'tabs',
+      'scripting',
+      'activeTab',
+      'notifications',
+      'webRequest',
+      'downloads',
+      // Chrome parses fetched HTML in an offscreen document; Firefox's background page can do it itself.
+      ...(browser === 'firefox' ? [] : ['offscreen']),
+    ],
     // Prototype: broad host access so "watch element" works on any site.
     // Later: switch to optional_host_permissions and ask per workflow.
     host_permissions: ['<all_urls>'],

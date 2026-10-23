@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DragEvent } from 'react';
-import type { Workflow } from '../../../core/types';
+import { CATEGORY_LABELS } from '../../../core/types';
+import type { BlockCategory, Workflow } from '../../../core/types';
 import { registry } from '../registry';
 import { ImportButton } from './ImportButton';
 import type { WorkflowActions } from './WorkflowActions';
@@ -16,6 +17,17 @@ interface SidebarProps extends WorkflowActions {
 export function Sidebar({ workflows, activeId, onAddBlock, ...actions }: SidebarProps) {
   const [query, setQuery] = useState('');
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [blockQuery, setBlockQuery] = useState('');
+  const needle = blockQuery.trim().toLowerCase();
+  const groups = (Object.keys(CATEGORY_LABELS) as BlockCategory[])
+    .map((category) => ({
+      category,
+      blocks: registry
+        .list()
+        .filter((def) => def.category === category)
+        .filter((def) => !needle || `${def.label} ${def.description} ${def.type}`.toLowerCase().includes(needle)),
+    }))
+    .filter((group) => group.blocks.length > 0);
 
   const onDragStart = (event: DragEvent<HTMLButtonElement>, type: string) => {
     event.dataTransfer.setData(DRAG_MIME, type);
@@ -109,25 +121,40 @@ export function Sidebar({ workflows, activeId, onAddBlock, ...actions }: Sidebar
         <div className="bf-section-title">
           <span>Blocks</span>
         </div>
-        <p className="bf-muted">Drag onto the canvas, or click to add.</p>
-        <ul className="bf-palette">
-          {registry.list().map((def) => (
-            <li key={def.type}>
-              <button
-                type="button"
-                draggable
-                onDragStart={(event) => onDragStart(event, def.type)}
-                onClick={() => onAddBlock(def.type)}
-                style={{ borderLeftColor: def.accent }}
-              >
-                <strong>
-                  {def.icon} {def.label}
-                </strong>
-                <span>{def.description}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <input
+          type="text"
+          className="bf-search"
+          placeholder="Find a block…"
+          value={blockQuery}
+          onChange={(event) => setBlockQuery(event.target.value)}
+          aria-label="Find a block"
+        />
+        {groups.map(({ category, blocks }) => (
+          <details key={category} className="bf-palette-group" open={blockQuery.trim() !== '' || category === 'start' || category === 'browser' || category === 'page'}>
+            <summary>
+              {CATEGORY_LABELS[category]} <span className="bf-muted">{blocks.length}</span>
+            </summary>
+            <ul className="bf-palette">
+              {blocks.map((def) => (
+                <li key={def.type}>
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={(event) => onDragStart(event, def.type)}
+                    onClick={() => onAddBlock(def.type)}
+                    style={{ borderLeftColor: def.accent }}
+                    title={`${def.description} Drag onto the canvas, or click to add.`}
+                  >
+                    <strong>
+                      {def.icon} {def.label}
+                    </strong>
+                    <span>{def.description}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ))}
       </section>
     </aside>
   );

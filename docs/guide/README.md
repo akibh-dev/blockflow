@@ -119,7 +119,32 @@ data just before the block runs:
 | `{{secret.loginPassword}}` | a secret (section 9) |
 | `{{error}}` | the error text, on the `error` output |
 
+| `{{ price * 1.1 }}`, `{{ upper(name) }}` | an expression (below) |
+
 Missing keys render as an empty string; objects render as JSON. The result is always a string.
+Secrets are available to templates and expressions as `secret.name` but never enter the data.
+
+### Expressions
+
+Used inside `{{ }}`, and **without** braces in fields that expect an expression: For Each / Filter
+`list`, Transform `expression`, Save to Dataset / Download `value`. Safe: no JavaScript is executed.
+
+| Kind | Syntax |
+| --- | --- |
+| values | `12`, `3.5`, `'text'`, `"text"`, `true`, `false`, `null`, `[1, 2]` |
+| data | `price`, `item.title`, `rows[0].name`, `items[index]`, `$json.x` |
+| math | `+ - * / %`. `+` adds when both sides read as numbers (`"1,250" + 10` → `1260`), else joins text |
+| compare | `== != < <= > >=` (compare as numbers when both are numbers, else as text) |
+| logic | `&& \|\| !`, `a ? b : c`, `a ?? fallback` |
+
+Functions: `upper lower trim len number string round(x, digits) floor ceil abs min max sum avg count
+join(list, sep) split(text, sep) replace(text, find, with)` (find may be `'/regex/'`) `contains
+startsWith endsWith slice(x, from, to) first last keys values pluck(list, 'key') unique sort(list,
+'key'?) reverse json parseJson now() today() default(x, fallback) matches(text, '/re/i')
+extract(text, '/re(group)/')`.
+
+Examples: `sum(pluck(items, 'price'))` · `first(sort(items, 'price')).title` ·
+`extract(value, '/#(\\d+)/')` · `len(rows) > 0 ? 'some' : 'none'` · `default(name, 'anonymous')`.
 
 ## 4. Elements: locators
 
@@ -226,10 +251,28 @@ profile's extension storage.
 - **Stop** block: end a path as passed or failed with a message.
 - **Manual Step**: the run waits for a person (CAPTCHA, 2FA) until they press Continue in the
   notification or the editor banner.
-- Data-driven tests and loops: see Data blocks in [`blocks.md`](blocks.md) when present (For Each,
-  Data Table).
+- **Data-driven tests**: Data Table (CSV/JSON) → For Each (`each` output) → the test steps using
+  `{{row.email}}`. Use `step.onError: "continue"` or soft Asserts so one bad row does not stop the rest.
 
-## 11. Monitoring patterns
+## 11. Scraping and data
+
+- **One page**: `Open Tab → Extract List` with an item locator (`.product-card`) and fields
+  (`name`, `locator` inside the item, optional `attribute` such as `href`). Result: `{{items}}`, a list
+  of objects in field order; links come back absolute.
+- **Many pages**: `Paginate` (Next locator) with Extract List + Save to Dataset on its `each` output,
+  and Download on `done`.
+- **Infinite lists**: `Scroll` with `to: "end"` before Extract List.
+- **Tables**: `Extract Table` (rows keyed by header text).
+- **Without a tab** (static pages, faster): `HTTP Request → Extract List/Table` with
+  `source: "html"`, `html: "{{body}}"`, `baseUrl: "{{url}}"`.
+- **Lists**: `For Each` (runs `each` per item, then `done`), `Filter` (per-item condition with
+  `{{item.x}}`), `Transform` (typed values from expressions), `Repeat` (N times).
+- **Keeping data**: `Save to Dataset` (append/replace, kept in the browser; see the **Data** page,
+  which downloads CSV/JSON) and `Download` (CSV, JSON or text file into Downloads).
+- **The page itself**: `Page Info` (title, meta, canonical, JSON-LD) or its localStorage /
+  sessionStorage / cookies.
+
+## 12. Monitoring patterns
 
 - `Timer (repeat) → Read Element (Page URL) → If → Notify`: Read Element with a Page URL uses
   BlockFlow's own background tab and reloads it each time. `{{previous}}` and `{{changed}}` compare
@@ -237,7 +280,7 @@ profile's extension storage.
 - `Watch Element → Notify`: fires only when the text changes.
 - `Timer → HTTP Request → Assert {{status}} equals 200 (onError: port) → Notify`: uptime check.
 
-## 12. Examples
+## 13. Examples
 
 | File | Shows |
 | --- | --- |
@@ -246,8 +289,11 @@ profile's extension storage.
 | [`price-watch`](examples/price-watch.blockflow.json) | monitoring with `{{previous}}` |
 | [`api-uptime`](examples/api-uptime.blockflow.json) | HTTP Request + Assert + error output |
 | [`dark-mode-watch`](examples/dark-mode-watch.blockflow.json) | reading a class on `<html>`, `{{changed}}` |
+| [`scrape-to-csv`](examples/scrape-to-csv.blockflow.json) | Paginate + Extract List + dataset + CSV download |
+| [`data-driven-login`](examples/data-driven-login.blockflow.json) | Data Table + For Each + soft Assert, a secret chosen by an expression |
+| [`api-to-dataset`](examples/api-to-dataset.blockflow.json) | HTTP Request + Transform + dataset history + If |
 
-## 13. Limits (what a browser extension cannot do, or BlockFlow does not do yet)
+## 14. Limits (what a browser extension cannot do, or BlockFlow does not do yet)
 
 - Page events are synthetic (`isTrusted: false`); a few sites (anti-bot checks, some payment
   widgets) ignore them.

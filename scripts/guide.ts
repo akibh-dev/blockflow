@@ -7,7 +7,8 @@ import path from 'node:path';
 import { createDefaultRegistry } from '../src/core/blocks';
 import { DEFAULT_TIMEOUT_SECONDS } from '../src/core/engine';
 import { nodePorts } from '../src/core/ports';
-import type { AnyBlockDefinition, FieldSpec } from '../src/core/types';
+import { CATEGORY_LABELS } from '../src/core/types';
+import type { AnyBlockDefinition, BlockCategory, FieldSpec } from '../src/core/types';
 
 const out = path.resolve(import.meta.dirname ?? __dirname, '../docs/guide');
 const registry = createDefaultRegistry();
@@ -31,6 +32,7 @@ function blockJson(def: AnyBlockDefinition) {
   return {
     type: def.type,
     label: def.label,
+    category: def.category,
     description: def.description,
     canStart: Boolean(def.start || def.trigger || def.run),
     canTakeInput: Boolean(def.run),
@@ -183,7 +185,13 @@ const files: Record<string, string> = {
     '',
     `${blocks.length} blocks. Every block also accepts the common \`step\` settings (see README.md in this folder).`,
     '',
-    ...blocks.map((def) => `- [${def.label}](#${def.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}--${def.type.replace(/[^a-z0-9]+/g, '-')}) \`${def.type}\``),
+    ...(Object.keys(CATEGORY_LABELS) as BlockCategory[]).map(
+      (category) =>
+        `- **${CATEGORY_LABELS[category]}**: ${blocks
+          .filter((def) => def.category === category)
+          .map((def) => `[${def.label}](#${def.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}--${def.type.replace(/[^a-z0-9]+/g, '-')}) \`${def.type}\``)
+          .join(' · ')}`,
+    ),
     '',
     ...blocks.map(blockMarkdown),
   ].join('\n'),

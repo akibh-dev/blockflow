@@ -198,9 +198,24 @@ export interface BlockContext<C extends object = BlockConfig> {
   };
 }
 
+export type BlockCategory = 'start' | 'browser' | 'page' | 'read' | 'test' | 'logic' | 'data' | 'output';
+
+export const CATEGORY_LABELS: Record<BlockCategory, string> = {
+  start: 'Start',
+  browser: 'Tabs',
+  page: 'Page actions',
+  read: 'Read & scrape',
+  test: 'Test',
+  logic: 'Logic & loops',
+  data: 'Data',
+  output: 'Send & log',
+};
+
 export interface BlockDefinition<C extends object = BlockConfig> {
   type: string;
   label: string;
+  /** Palette group; set when registered (see BLOCK_GROUPS in blocks/index.ts). */
+  category?: BlockCategory;
   description: string;
   icon: string;
   /** Accent colour used by the editor. */
@@ -381,6 +396,20 @@ export interface Host {
   /** Screenshot of a tab's visible area; resolves with an id to show it later, or null if not possible. */
   screenshots: {
     capture(tabId: number, runId: string): Promise<string | null>;
+  };
+  /** Named lists of rows kept between runs (scraped data, test results). */
+  datasets: {
+    read(name: string): Promise<unknown[]>;
+    /** Resolves with the dataset's size afterwards. */
+    write(name: string, rows: unknown[], mode: 'append' | 'replace'): Promise<number>;
+  };
+  /** Saves a file to the user's Downloads folder. */
+  downloads: {
+    save(filename: string, content: string, mime: string): Promise<void>;
+  };
+  /** Runs a page-agent request against HTML that was fetched, not shown in a tab (Extract from HTML). */
+  html: {
+    act(html: string, baseUrl: string, request: AgentRequest): Promise<Record<string, unknown>>;
   };
   /** Ask the user to do something and confirm (Manual Step). Resolves true = continue, false = fail. */
   prompt: {

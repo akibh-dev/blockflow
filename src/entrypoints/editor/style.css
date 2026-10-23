@@ -823,3 +823,23 @@ textarea {
   border-radius: 6px;
   background: var(--bg);
 }
+
+.bf-palette-group summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.bf-palette-group .bf-palette {
+  margin-top: 4px;
+}
+
+.bf-data-preview {
+  overflow: auto;
+  max-height: 60vh;
+}
+
+.bf-report-detail .bf-manage-bar h3 {
+  margin: 0;
+}

@@ -129,6 +129,26 @@ Page blocks send one request each to `Host.page.act(tabId, request, timeoutMs)` 
 Known gaps (see docs/PLAN-automation.md, phase F): events are `isTrusted: false`, so sites that check it
 need the future CDP driver; iframes and closed shadow roots are not reached yet.
 
+## Data and scraping
+
+- **Expressions** (`src/core/expression.ts`): tokenizer + Pratt parser + interpreter, whitelisted
+  functions, own properties only. MV3 forbids `eval`/`new Function` in extension pages and workers, and
+  a hand-rolled interpreter is safe on untrusted data. `template.ts` uses it for any `{{…}}` that is not
+  a plain path; design-mode validation reports parse errors.
+- **Scraping** goes through the page agent (`extract`, `table` ops). Results come back as
+  `{columns, values}`: Chrome serialises `executeScript` results through `base::Value`, which sorts
+  object keys, so objects are rebuilt in the block (`tableToObjects`) to keep column order.
+- **HTML without a tab**: `Host.html.act` parses with `DOMParser` and runs the same agent on the parsed
+  document (no layout, so geometry checks are skipped). Chrome's service worker has no DOM, so it opens
+  an offscreen document (`src/entrypoints/offscreen`, reason `DOM_PARSER`) and messages it; Firefox's
+  background page parses directly.
+- **Loops** (For Each, Repeat, Paginate) call `ctx.emit(payload, 'each')` per item from inside `run`;
+  `emit` awaits the whole downstream subtree, so iterations run one after another in the same run, then
+  the block returns `routeTo('done', …)`.
+- **Datasets** live in IndexedDB (`datasets` store, keyed by name); `unlimitedStorage` lifts the quota.
+  **Downloads** use `downloads.download` with a `data:` URL in Chrome's worker (no `createObjectURL`
+  there) or a `blob:` URL where available.
+
 ## Watch Element
 
 `Host.page.readElement({ url, selector, reload })` (see `src/browser/pageReader.ts`):

@@ -1,3 +1,4 @@
+import { ExpressionError, evaluate, parseExpression, toText } from './expression';
 import type { Payload } from './types';
 
 /**
@@ -8,9 +9,15 @@ import type { Payload } from './types';
  *   {{item.name}}        nested values
  *   {{rows[0].title}}    array indexes
  *
+ *   {{ price * 1.1 }}    expressions and functions, see expression.ts
+ *   {{ upper(name) }}
+ *
  * Missing values render as an empty string. Objects render as JSON.
  * Only own properties are read, so `{{constructor}}` and friends resolve to nothing.
  */
+
+/** Plain paths (also with dashes in names, like {{my-key}}) skip the expression parser. */
+const PATH = /^\$?[\w-]+(?:\.[\w$-]+|\[\d+\])*$/;
 
 const TOKEN = /\{\{\s*([^{}]+?)\s*\}\}/g;
 
@@ -39,17 +46,33 @@ export function getPath(data: unknown, rawPath: string): unknown {
   return current;
 }
 
-function stringify(value: unknown): string {
-  if (value === undefined || value === null) return '';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+/** The value of one `{{…}}` token: a path, or an expression. Invalid expressions give ''. */
+export function resolveToken(token: string, data: Payload): unknown {
+  const text = token.trim();
+  if (PATH.test(text)) return getPath(data, text);
   try {
-    return JSON.stringify(value) ?? '';
-  } catch {
-    return '';
+    return evaluate(text, data);
+  } catch (error) {
+    if (error instanceof ExpressionError) return '';
+    throw error;
   }
 }
 
 export function render(template: string, data: Payload): string {
-  return template.replace(TOKEN, (_match, path: string) => stringify(getPath(data, path)));
+  return template.replace(TOKEN, (_match, token: string) => toText(resolveToken(token, data)));
+}
+
+/** Problems with the `{{…}}` expressions in a setting, for the editor. */
+export function templateErrors(template: string): string[] {
+  const errors: string[] = [];
+  for (const [, token] of template.matchAll(TOKEN)) {
+    const text = (token ?? '').trim();
+    if (PATH.test(text)) continue;
+    try {
+      parseExpression(text);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  return errors;
 }

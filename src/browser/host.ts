@@ -1,7 +1,8 @@
 import { browser } from 'wxt/browser';
 import { uid } from '../core/id';
 import { STORAGE_KEYS } from '../shared/keys';
-import { saveScreenshot } from './blobStore';
+import { readDataset, saveScreenshot, writeDataset } from './blobStore';
+import { actOnHtml } from './htmlParse';
 import { tabInfo, waitForLoad, waitForUrl } from './navigation';
 import { askUser } from './prompts';
 import { loadWorkflows } from './stores';
@@ -95,6 +96,15 @@ async function allSecrets(): Promise<Record<string, string>> {
   return (stored[STORAGE_KEYS.secrets] as Record<string, string> | undefined) ?? {};
 }
 
+async function saveDownload(filename: string, content: string, mime: string): Promise<void> {
+  // Firefox's background page can make blob: URLs; Chrome's service worker cannot, so data: there.
+  const url =
+    typeof URL.createObjectURL === 'function'
+      ? URL.createObjectURL(new Blob([content], { type: mime }))
+      : `data:${mime};charset=utf-8,${encodeURIComponent(content)}`;
+  await browser.downloads.download({ url, filename: filename.replace(/[\\/:*?"<>|]+/g, '-'), conflictAction: 'uniquify' });
+}
+
 /** The real Host: connects the engine to the browser. */
 export function createExtensionHost(scheduler: Scheduler): Host {
   return {
@@ -118,6 +128,12 @@ export function createExtensionHost(scheduler: Scheduler): Host {
     secrets: { all: allSecrets },
     screenshots: { capture },
     prompt: { ask: askUser },
+    datasets: {
+      read: async (name) => (await readDataset(name))?.rows ?? [],
+      write: writeDataset,
+    },
+    downloads: { save: saveDownload },
+    html: { act: actOnHtml },
     now: () => new Date(),
   };
 }

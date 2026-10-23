@@ -1,4 +1,4 @@
-import { hasTemplate, render } from './template';
+import { hasTemplate, render, templateErrors } from './template';
 import { normalizeHttpUrl } from './url';
 import type { AnyBlockDefinition, FieldSpec, Payload } from './types';
 
@@ -69,6 +69,10 @@ export function validateConfig(
   for (const field of def.fields) {
     const error = fieldError(field, config[field.key], mode);
     if (error) errors.push(error);
+    // While designing, catch broken {{ expressions }} before they render as ''.
+    if (mode === 'design' && 'templated' in field && field.templated && typeof config[field.key] === 'string') {
+      for (const problem of templateErrors(config[field.key] as string)) errors.push(`${field.label}: ${problem}`);
+    }
   }
   return errors;
 }
