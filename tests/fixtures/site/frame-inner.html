@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Fixture: payment frame</title></head>
+<body>
+  <label>Card number <input id="card"></label>
+  <button type="button" id="pay">Pay</button>
+  <p id="paid"></p>
+  <script>
+    document.getElementById('pay').onclick = () => {
+      document.getElementById('paid').textContent = `Paid ${document.getElementById('card').value} from ${location.host}`;
+    };
+  </script>
+</body></html>

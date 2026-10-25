@@ -1,0 +1,84 @@
+{
+  "format": "blockflow-workflows",
+  "version": 1,
+  "workflows": [
+    {
+      "schemaVersion": 1,
+      "id": "dark-mode",
+      "name": "Dark mode on akibh.dev",
+      "enabled": false,
+      "nodes": [
+        {
+          "id": "every",
+          "type": "timer",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "config": {
+            "seconds": 120,
+            "repeat": true
+          }
+        },
+        {
+          "id": "theme",
+          "type": "read-element",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "config": {
+            "url": "https://akibh.dev",
+            "selector": "html",
+            "read": "has-class",
+            "name": "dark",
+            "reload": true
+          }
+        },
+        {
+          "id": "flipped",
+          "type": "if",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "config": {
+            "left": "{{changed}}",
+            "operator": "true",
+            "right": ""
+          }
+        },
+        {
+          "id": "tell",
+          "type": "notify",
+          "position": {
+            "x": 780,
+            "y": 0
+          },
+          "config": {
+            "title": "akibh.dev",
+            "message": "Dark mode is now {{value}}"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "every",
+          "target": "theme"
+        },
+        {
+          "id": "e1",
+          "source": "theme",
+          "target": "flipped"
+        },
+        {
+          "id": "e2",
+          "source": "flipped",
+          "target": "tell",
+          "sourcePort": "true"
+        }
+      ]
+    }
+  ]
+}

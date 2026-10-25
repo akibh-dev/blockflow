@@ -377,11 +377,22 @@ describe('with the workflow engine', () => {
       fire: (key) => holder.runner?.handleTimer(key),
       ping: () => {},
     });
+    // Same fake browser as FakeHost, but with the real HybridScheduler.
     const host: Host = {
+      sleep: base.sleep,
+      http: base.http,
+      notify: base.notify,
       tabs: base.tabs,
       page: base.page,
       scheduler,
       state: base.state,
+      workflows: base.workflows,
+      secrets: base.secrets,
+      screenshots: base.screenshots,
+      prompt: base.prompt,
+      datasets: base.datasets,
+      downloads: base.downloads,
+      html: base.html,
       now: () => base.now(),
     };
     const runner = new WorkflowRunner({ workflow, registry: createDefaultRegistry(), host });

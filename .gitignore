@@ -7,3 +7,4 @@ web-ext.log
 dist
 coverage
 .DS_Store
+.output-e2e

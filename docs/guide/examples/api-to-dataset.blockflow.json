@@ -1,0 +1,129 @@
+{
+  "format": "blockflow-workflows",
+  "version": 1,
+  "workflows": [
+    {
+      "schemaVersion": 1,
+      "id": "api",
+      "name": "Daily API snapshot",
+      "enabled": false,
+      "nodes": [
+        {
+          "id": "every",
+          "type": "timer",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "config": {
+            "seconds": 86400,
+            "repeat": true
+          }
+        },
+        {
+          "id": "call",
+          "type": "http-request",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "config": {
+            "url": "https://api.example.com/v1/orders?status=open",
+            "method": "GET",
+            "headers": "Authorization: Bearer {{secret.apiToken}}"
+          }
+        },
+        {
+          "id": "shape",
+          "type": "transform",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "config": {
+            "values": [
+              {
+                "name": "open",
+                "expression": "len(data.orders)"
+              },
+              {
+                "name": "value",
+                "expression": "round(sum(pluck(data.orders, 'total')), 2)"
+              },
+              {
+                "name": "row",
+                "expression": "[today(), len(data.orders)]"
+              }
+            ]
+          }
+        },
+        {
+          "id": "save",
+          "type": "save-dataset",
+          "position": {
+            "x": 780,
+            "y": 0
+          },
+          "config": {
+            "dataset": "open-orders",
+            "value": "row",
+            "mode": "append"
+          }
+        },
+        {
+          "id": "big",
+          "type": "if",
+          "position": {
+            "x": 1040,
+            "y": 0
+          },
+          "config": {
+            "left": "{{open}}",
+            "operator": "greater",
+            "right": "100"
+          }
+        },
+        {
+          "id": "tell",
+          "type": "notify",
+          "position": {
+            "x": 1300,
+            "y": 0
+          },
+          "config": {
+            "title": "Open orders",
+            "message": "{{open}} open orders worth {{value}}"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "every",
+          "target": "call"
+        },
+        {
+          "id": "e1",
+          "source": "call",
+          "target": "shape"
+        },
+        {
+          "id": "e2",
+          "source": "shape",
+          "target": "save"
+        },
+        {
+          "id": "e3",
+          "source": "save",
+          "target": "big"
+        },
+        {
+          "id": "e4",
+          "source": "big",
+          "target": "tell",
+          "sourcePort": "true"
+        }
+      ]
+    }
+  ]
+}

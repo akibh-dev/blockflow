@@ -87,7 +87,7 @@ describe('element picker', () => {
     start();
     fire(el('.price'), 'click');
     key('Enter');
-    expect(picked).toEqual([{ selector: 'span.price', url: window.location.href, sample: '$10' }]);
+    expect(picked).toEqual([{ selector: 'span.price', candidates: ['text="$10"', 'span.price'], url: window.location.href, sample: '$10' }]);
     expect(pickerHost()).toBeNull();
   });
 

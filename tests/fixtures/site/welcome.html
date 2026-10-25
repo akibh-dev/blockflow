@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture: welcome</title>
+  </head>
+  <body>
+    <h1 id="greeting">Welcome</h1>
+    <p>Country: <span id="country"></span> · Remember: <span id="remember"></span></p>
+    <script>
+      const params = new URLSearchParams(location.search);
+      document.getElementById('greeting').textContent = `Welcome, ${params.get('name')}!`;
+      document.getElementById('country').textContent = params.get('country');
+      document.getElementById('remember').textContent = params.get('remember');
+    </script>
+  </body>
+</html>

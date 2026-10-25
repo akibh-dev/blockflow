@@ -1,0 +1,144 @@
+{
+  "format": "blockflow-workflows",
+  "version": 1,
+  "workflows": [
+    {
+      "schemaVersion": 1,
+      "id": "reusable-login",
+      "name": "Log in (reusable)",
+      "enabled": false,
+      "nodes": [
+        {
+          "id": "form",
+          "type": "fill-form",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "config": {
+            "fields": [
+              {
+                "locator": "label=Email",
+                "value": "{{email}}"
+              },
+              {
+                "locator": "label=Password",
+                "value": "{{secret.loginPassword}}"
+              }
+            ],
+            "submit": "role=button[name=\"Sign in\"]"
+          }
+        },
+        {
+          "id": "in",
+          "type": "wait-for",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "config": {
+            "mode": "url",
+            "url": "/dashboard"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "form",
+          "target": "in"
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "checkout-test",
+      "name": "Checkout test",
+      "enabled": false,
+      "nodes": [
+        {
+          "id": "open",
+          "type": "open-url",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "config": {
+            "url": "https://shop.example.com/login",
+            "where": "window"
+          }
+        },
+        {
+          "id": "who",
+          "type": "set-variable",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "config": {
+            "name": "email",
+            "value": "buyer@example.com"
+          }
+        },
+        {
+          "id": "login",
+          "type": "run-workflow",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "config": {
+            "workflow": "reusable-login"
+          }
+        },
+        {
+          "id": "add",
+          "type": "click",
+          "position": {
+            "x": 780,
+            "y": 0
+          },
+          "config": {
+            "locator": "role=button[name=\"Add to cart\"] >> nth=0"
+          }
+        },
+        {
+          "id": "cart",
+          "type": "assert",
+          "position": {
+            "x": 1040,
+            "y": 0
+          },
+          "config": {
+            "subject": "text",
+            "locator": "testid=cart-count",
+            "operator": "equals",
+            "expected": "1"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "open",
+          "target": "who"
+        },
+        {
+          "id": "e1",
+          "source": "who",
+          "target": "login"
+        },
+        {
+          "id": "e2",
+          "source": "login",
+          "target": "add"
+        },
+        {
+          "id": "e3",
+          "source": "add",
+          "target": "cart"
+        }
+      ]
+    }
+  ]
+}

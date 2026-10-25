@@ -1,7 +1,9 @@
 import { browser } from 'wxt/browser';
 import { STORAGE_KEYS } from '../shared/keys';
 import { normalizeHttpUrl } from '../core/url';
+import { actInTab } from './pageDriver';
 import { requireTabId, waitForTabComplete } from './tabs';
+import type { FormFieldRow } from '../core/page';
 import type { PickedMessage } from '../shared/messages';
 
 /**
@@ -18,6 +20,7 @@ const PICKER_SCRIPT = '/content-scripts/picker.js';
 
 interface PendingPick {
   editorTabId: number | undefined;
+  mode?: 'element' | 'form';
 }
 
 function isWebUrl(url: string | undefined): boolean {
@@ -58,11 +61,15 @@ async function tellEditor(message: unknown): Promise<void> {
   }
 }
 
-export async function startPicking(editorTabId: number | undefined, url: string | undefined): Promise<void> {
+export async function startPicking(
+  editorTabId: number | undefined,
+  url: string | undefined,
+  mode: 'element' | 'form' = 'element',
+): Promise<void> {
   try {
     const targetTabId = await findTargetTab(editorTabId, url);
     await browser.storage.local.set({
-      [STORAGE_KEYS.pendingPick]: { editorTabId } satisfies PendingPick,
+      [STORAGE_KEYS.pendingPick]: { editorTabId, mode } satisfies PendingPick,
     });
     await focusTab(targetTabId);
     await browser.scripting.executeScript({ target: { tabId: targetTabId }, files: [PICKER_SCRIPT] });
@@ -87,13 +94,27 @@ async function returnToEditor(pending: PendingPick | undefined): Promise<void> {
   }
 }
 
-export async function finishPicking(message: PickedMessage): Promise<void> {
+export async function finishPicking(message: PickedMessage, pickedTabId: number | undefined): Promise<void> {
   const pending = await takePending();
+  let fields: FormFieldRow[] | undefined;
+  if (pending?.mode === 'form' && pickedTabId !== undefined) {
+    try {
+      const result = await actInTab(pickedTabId, { op: 'detect-form', locator: message.selector }, 5_000);
+      fields = result.fields as FormFieldRow[];
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      await tellEditor({ type: 'bf:pick-error', message: `Could not read the form: ${text}` });
+      await returnToEditor(pending);
+      return;
+    }
+  }
   await tellEditor({
     type: 'bf:pick-result',
     selector: message.selector,
+    ...(message.candidates ? { candidates: message.candidates } : {}),
     url: message.url,
     sample: message.sample,
+    ...(fields ? { fields } : {}),
   });
   await returnToEditor(pending);
 }

@@ -1,5 +1,9 @@
 import type {
   Host,
+  HttpRequestOptions,
+  HttpResult,
+  NavigateOptions,
+  NotifyOptions,
   LogEntry,
   OpenTabOptions,
   Payload,
@@ -7,11 +11,16 @@ import type {
   ReadElementResult,
   Scheduler,
   StateStore,
+  StepSettings,
+  TabInfo,
   TimerOptions,
   TimerRecord,
   Workflow,
 } from '../../src/core/types';
 import { WorkflowRunner } from '../../src/core/engine';
+import { urlMatches } from '../../src/core/urlPattern';
+import type { AgentRequest, WaitUntil } from '../../src/core/page';
+import type { RunRecord } from '../../src/core/runs';
 import { createDefaultRegistry } from '../../src/core/blocks';
 
 interface StoredTimer extends TimerOptions {
@@ -69,16 +78,98 @@ export class FakeHost implements Host {
   readonly state = new MemoryState();
   readonly opened: OpenTabOptions[] = [];
   readonly reads: ReadElementOptions[] = [];
+  readonly requests: HttpRequestOptions[] = [];
+  readonly notifications: NotifyOptions[] = [];
   private clock = Date.parse('2026-01-01T00:00:00.000Z');
   private nextTabId = 100;
 
   /** Replace to control what the "page" contains. */
   pageReader: PageReader = async () => ({ found: true, text: '' });
 
+  /** Replace to control what the "server" answers. */
+  httpHandler: (options: HttpRequestOptions) => Promise<HttpResult> = async () => ({
+    status: 200,
+    ok: true,
+    body: '',
+  });
+
+  http = {
+    fetch: async (options: HttpRequestOptions) => {
+      this.requests.push(options);
+      return this.httpHandler(options);
+    },
+    download: async (url: string) => ({ base64: btoa(`file at ${url}`), mime: 'image/png', name: url.split('/').pop() ?? 'file' }),
+  };
+
+  notify = async (options: NotifyOptions) => {
+    this.notifications.push(options);
+  };
+
+  /** Open tabs: id → current URL. Closed tabs are removed. */
+  readonly tabUrls = new Map<number, string>();
+  /** Popups pages "opened", for Wait for Popup. */
+  readonly popups: { openerTabId: number; tabId: number; url: string }[] = [];
+  /** Network responses tabs "received", for Wait For response. */
+  readonly responses: { tabId: number; url: string; status: number }[] = [];
+  /** Dialog settings sent per tab, and what dialogs "were shown". */
+  readonly dialogSettings: { tabId: number; options: unknown }[] = [];
+  shownDialogs: { type: string; message: string }[] = [];
+  /** Scripts run (Run Script); `scriptResult` is what they return. */
+  readonly scripts: { tabId: number; code: string; data: Payload }[] = [];
+  scriptResult: unknown = null;
+  /** realInput flags seen by page.act, in order. */
+  readonly realInputs: boolean[] = [];
+  /** The tab "the user is looking at" (Run button on Page Visited / Context Menu). */
+  currentTab: { tabId: number; url: string } | null = null;
+  /** Every request sent to the page agent. */
+  readonly actions: { tabId: number; request: AgentRequest; timeoutMs: number }[] = [];
+  readonly navigations: { tabId: number; options: NavigateOptions }[] = [];
+  readonly loads: { tabId: number; until: WaitUntil }[] = [];
+
+  /** Replace to control what the page agent answers (throw to simulate a failure). */
+  agent: (tabId: number, request: AgentRequest) => Promise<Record<string, unknown>> = async () => ({});
+
   tabs = {
     open: async (options: OpenTabOptions) => {
       this.opened.push(options);
-      return { tabId: this.nextTabId++ };
+      const tabId = options.reuseTabId !== undefined && this.tabUrls.has(options.reuseTabId) ? options.reuseTabId : this.nextTabId++;
+      this.tabUrls.set(tabId, options.url);
+      if (options.waitUntil && options.waitUntil !== 'none') this.loads.push({ tabId, until: options.waitUntil });
+      return { tabId };
+    },
+    navigate: async (tabId: number, options: NavigateOptions) => {
+      this.navigations.push({ tabId, options });
+      if (!this.tabUrls.has(tabId)) throw new Error('The tab was closed');
+      if (options.action === 'goto' && options.url) this.tabUrls.set(tabId, options.url);
+      return { url: this.tabUrls.get(tabId) ?? '' };
+    },
+    close: async (tabId: number) => {
+      this.tabUrls.delete(tabId);
+    },
+    info: async (tabId: number): Promise<TabInfo | null> => {
+      const url = this.tabUrls.get(tabId);
+      return url === undefined ? null : { url, title: '', loading: false };
+    },
+    current: async () => (this.currentTab ? { ...this.currentTab, title: '', loading: false } : null),
+    waitForLoad: async (tabId: number, until: WaitUntil) => {
+      this.loads.push({ tabId, until });
+    },
+    waitForPopup: async (openerTabId: number) => {
+      const popup = this.popups.find((candidate) => candidate.openerTabId === openerTabId);
+      if (!popup) throw new Error('Timed out: no new tab was opened by this page');
+      this.popups.splice(this.popups.indexOf(popup), 1);
+      this.tabUrls.set(popup.tabId, popup.url);
+      return popup.tabId;
+    },
+    waitForResponse: async (tabId: number, pattern: string, status: string) => {
+      const found = this.responses.find((response) => response.tabId === tabId && urlMatches(response.url, pattern) && (!status || String(response.status) === status));
+      if (!found) throw new Error(`Timed out waiting for a response from ${pattern}`);
+      return { url: found.url, status: found.status, method: 'GET' };
+    },
+    waitForUrl: async (tabId: number, pattern: string, timeoutMs: number) => {
+      const url = this.tabUrls.get(tabId) ?? '';
+      if (!urlMatches(url, pattern)) throw new Error(`Timed out after ${timeoutMs / 1000}s waiting for the URL to match ${pattern} (it is ${url})`);
+      return url;
     },
   };
 
@@ -87,7 +178,105 @@ export class FakeHost implements Host {
       this.reads.push(options);
       return this.pageReader(options);
     },
+    act: async (tabId: number, request: AgentRequest, timeoutMs: number, options?: { realInput?: boolean }) => {
+      this.actions.push({ tabId, request, timeoutMs });
+      this.realInputs.push(options?.realInput === true);
+      if (!this.tabUrls.has(tabId)) throw new Error('The tab was closed');
+      return this.agent(tabId, request);
+    },
+    dialogs: async (tabId: number, options: unknown) => {
+      this.dialogSettings.push({ tabId, options });
+      return this.shownDialogs;
+    },
+    runScript: async (tabId: number, code: string, data: Payload) => {
+      this.scripts.push({ tabId, code, data });
+      return this.scriptResult;
+    },
   };
+
+  /** Saved workflows, for Run Workflow. */
+  readonly savedWorkflows = new Map<string, Workflow>();
+  workflows = {
+    get: async (id: string) => this.savedWorkflows.get(id),
+  };
+
+  secretValues: Record<string, string> = {};
+  secrets = {
+    all: async () => ({ ...this.secretValues }),
+  };
+
+  /** Screenshots taken: tab ids, in order. Return null from `screenshotResult` to simulate failure. */
+  readonly screenshotsTaken: { tabId: number; runId: string }[] = [];
+  screenshots = {
+    capture: async (tabId: number, runId: string) => {
+      this.screenshotsTaken.push({ tabId, runId });
+      return `shot-${this.screenshotsTaken.length}`;
+    },
+  };
+
+  readonly datasetRows = new Map<string, unknown[]>();
+  datasets = {
+    read: async (name: string) => [...(this.datasetRows.get(name) ?? [])],
+    write: async (name: string, rows: unknown[], mode: 'append' | 'replace') => {
+      const next = [...(mode === 'append' ? (this.datasetRows.get(name) ?? []) : []), ...rows];
+      this.datasetRows.set(name, next);
+      return next.length;
+    },
+  };
+
+  readonly downloaded: { filename: string; content: string; mime: string }[] = [];
+  downloads = {
+    save: async (filename: string, content: string, mime: string) => {
+      this.downloaded.push({ filename, content, mime });
+    },
+  };
+
+  /** HTML scraping runs the real page agent on jsdom-free input: tests replace this. */
+  htmlAgent: (html: string, baseUrl: string, request: AgentRequest) => Promise<Record<string, unknown>> = async () => ({});
+  html = {
+    act: (html: string, baseUrl: string, request: AgentRequest) => this.htmlAgent(html, baseUrl, request),
+  };
+
+  /** What the "user" answers to Manual Step (default: continue). */
+  readonly prompts: string[] = [];
+  promptAnswer = true;
+  prompt = {
+    ask: async (options: { message: string }) => {
+      this.prompts.push(options.message);
+      return this.promptAnswer;
+    },
+  };
+
+  /** Every sleep asked for (timeouts, retry backoff, Assert polling), in ms. */
+  readonly sleeps: number[] = [];
+  private sleepers: { at: number; resolve: () => void }[] = [];
+  private virtualMs = 0;
+  private pumping = false;
+
+  /**
+   * Virtual time: sleeps finish in the order they would in real time (a 250 ms poll before a 10 s
+   * timeout), one per macrotask, without actually waiting.
+   */
+  sleep = (ms: number): Promise<void> =>
+    new Promise((resolve) => {
+      this.sleeps.push(ms);
+      this.sleepers.push({ at: this.virtualMs + ms, resolve });
+      this.pump();
+    });
+
+  private pump(): void {
+    if (this.pumping) return;
+    this.pumping = true;
+    setTimeout(() => {
+      this.pumping = false;
+      this.sleepers.sort((a, b) => a.at - b.at);
+      const next = this.sleepers.shift();
+      if (!next) return;
+      this.virtualMs = Math.max(this.virtualMs, next.at);
+      next.resolve();
+      if (this.sleepers.length > 0) this.pump();
+    }, 0);
+  }
 
   now(): Date {
     return new Date(this.clock);
@@ -111,7 +300,11 @@ export class FakeHost implements Host {
 export interface Harness {
   host: FakeHost;
   logs: LogEntry[];
+  /** Latest copy of every run, by id, in the order runs started. */
+  runs: Map<string, RunRecord>;
   runner: WorkflowRunner;
+  /** The most recently started run. */
+  lastRun(): RunRecord | undefined;
   /** New runner for the same workflow and host, like the background worker after a restart. */
   restart(): WorkflowRunner;
   /** Fires the first timer whose name starts with `name`. */
@@ -119,8 +312,9 @@ export interface Harness {
   messages(level?: LogEntry['level']): string[];
 }
 
-export function harness(workflow: Workflow, host: FakeHost = new FakeHost(), maxDepth?: number): Harness {
+export function harness(workflow: Workflow, host: FakeHost = new FakeHost(), maxSteps?: number): Harness {
   const logs: LogEntry[] = [];
+  const runs = new Map<string, RunRecord>();
   const registry = createDefaultRegistry();
   const make = () =>
     new WorkflowRunner({
@@ -128,13 +322,16 @@ export function harness(workflow: Workflow, host: FakeHost = new FakeHost(), max
       registry,
       host,
       log: (entry) => logs.push(entry),
-      ...(maxDepth !== undefined ? { maxDepth } : {}),
+      onRun: (run) => runs.set(run.id, run),
+      ...(maxSteps !== undefined ? { maxSteps } : {}),
     });
   const runner = make();
   return {
     host,
     logs,
+    runs,
     runner,
+    lastRun: () => [...runs.values()].at(-1),
     restart: make,
     async fire(name: string) {
       const [key] = host.scheduler.keysNamed(name);
@@ -149,10 +346,10 @@ export function harness(workflow: Workflow, host: FakeHost = new FakeHost(), max
 
 let counter = 0;
 
-/** Compact way to build a workflow in tests. Edges are [fromId, toId] pairs. */
+/** Compact way to build a workflow in tests. Edges are [fromId, toId] or [fromId, toId, port]. */
 export function flow(
-  nodes: { id: string; type: string; config?: Record<string, unknown> }[],
-  edges: [string, string][],
+  nodes: { id: string; type: string; config?: Record<string, unknown>; step?: StepSettings }[],
+  edges: ([string, string] | [string, string, string])[],
 ): Workflow {
   counter += 1;
   return {
@@ -165,7 +362,13 @@ export function flow(
       type: node.type,
       position: { x: index * 100, y: 0 },
       config: node.config ?? {},
+      ...(node.step ? { step: node.step } : {}),
     })),
-    edges: edges.map(([source, target]) => ({ id: `${source}-${target}`, source, target })),
+    edges: edges.map(([source, target, sourcePort]) => ({
+      id: `${source}-${sourcePort ?? ''}-${target}`,
+      source,
+      target,
+      ...(sourcePort ? { sourcePort } : {}),
+    })),
   };
 }

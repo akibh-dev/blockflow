@@ -3,8 +3,12 @@
 Build small browser automations by connecting blocks, like n8n or AutoHotkey, but inside your browser.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
 
-**Status: prototype 1.** Three blocks, a canvas editor, and a background engine. See
+**Status: prototype 1.** 42 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
 [What has been verified](#what-has-been-verified) before you rely on it.
+
+**Using BlockFlow, or asking an AI to build workflows for you?** Read the
+[usage guide](docs/guide/README.md) and the generated [block reference](docs/guide/blocks.md)
+(`llms.txt` points AI tools there).
 
 ## The idea
 
@@ -13,8 +17,28 @@ other block's input. The data a block produces becomes available to the next blo
 
 | Block | What it does | Output data |
 | --- | --- | --- |
+| ▶️ **Start** · 📅 **Schedule** · 🌍 **Page Visited** · 🖱 **Context Menu** | Start by hand with starting values; at set times (daily 09:00, weekdays, hourly, every N min); when you open a matching page; from the right-click menu. | your values; `firedAt`; `url`, `title`; `url`, `selection`, `link` |
+| 🔗 **Open Tab** | Opens a page in a new tab, the workflow's own reused tab, a new window or the current tab, waits for load / network idle, and **names the tab** (`main`) for the blocks after it. | `url`, `tabId` |
+| 👆 **Click** | Click, double-click, right-click or hover an element. Waits until it is visible, enabled, still and not covered. | passes input through |
+| ⌨️ **Fill** | Types into a field (all at once, or key by key). Works with React/Vue/Angular forms. | passes input through |
+| 📋 **Fill Form** | Many fields in one block (text, selects, checkboxes), optional submit click. **🎯 Detect fields** lists a form's fields for you. | passes input through |
+| 🔽 **Select Option** · ☑️ **Check** · ⏎ **Press Key** | Dropdowns by text or value; tick/untick; Enter, Tab, Control+A… | |
+| ⏳ **Wait For** | Element visible/hidden/gone/enabled, text appears/disappears, URL matches (also SPA route changes), page load, network quiet. | `url` |
+| 🧭 **Navigate** · ✖️ **Close Tab** | Go to URL, back, forward, reload; close a tab of the run. | `url` |
+| ✅ **Assert** | The test step: text, input value, attribute, count, visible, checked, enabled, URL, title, or any `{{value}}`. Page checks retry until they pass. **Soft** mode records the failure and goes on. | `actual` |
+| 🧩 **Run Workflow** | Calls another workflow like a function (e.g. a reusable "Log in"), in the same tab; continues with its result. | its data |
+| 🧺 **Extract List** · 📊 **Extract Table** | Scrape repeated items (fields by locator, links absolute) or a table, from a tab or from fetched HTML (no tab). | `items` / `rows`, `count` |
+| 📄 **Paginate** · 🖱️ **Scroll** · ℹ️ **Page Info** | Click Next through pages; scroll infinite lists to the end; title/meta/JSON-LD, localStorage, cookies. | `page`; `page`/`value` |
+| 🔁 **For Each** · 🔂 **Repeat** · 🧹 **Filter** · 🧮 **Transform** | Loop over a list (`each`/`done` outputs), N times; keep matching items; compute values with expressions (`sum(pluck(items,'price'))`). | `item`, `index` |
+| 🗂️ **Data Table** · 💾 **Save to Dataset** · ⬇️ **Download** | Paste CSV/JSON test data; keep rows between runs (Data page); save CSV/JSON files. | `rows`; `datasetSize`; `file` |
+| 📎 **Upload File** · 💬 **Dialogs** · 🪟 **Wait for Popup** · 🧑‍💻 **Run Script** | Files without the file dialog; answer alert/confirm/prompt; catch new tabs/windows; your own JS (Chrome 135+). | `uploaded`; `dialogs`; `popupUrl`; `result` |
+| ✋ **Manual Step** · ⏹ **Stop** · 📝 **Log** | Pause until you press Continue (CAPTCHA, 2FA); end a path as passed/failed; write to the log. | |
 | ⏱ **Timer** | Nothing connected to it: starts the flow every N seconds (or once). After another block: **delays** the flow by N seconds. | `tick`, `firedAt` |
-| 🔗 **Open URL** | Opens a page in a tab. | `url`, `tabId` |
+| 🔀 **If** | Two outputs, **true** and **false**: the data goes one way or the other (equals, contains, starts with, regex, greater/at least, empty, is true…). | passes input through |
+| 📝 **Set Variable** | Adds a named value to the data, usable as `{{name}}` later. | your `name` |
+| 🌐 **HTTP Request** | Calls an API or webhook (GET/POST/…, headers, body). | `status`, `ok`, `body`, `data` (parsed JSON) |
+| 🔔 **Notify** | Shows a desktop notification. | `notified` |
+| 🔎 **Read Element** | Reads one value: text, input value, an attribute (`aria-pressed`), a class (`dark`), exists, or how many match. From the run's tab (after Click/Fill), or from a Page URL in BlockFlow's own background tab. | `value`, `previous`, `changed`, `count`, `url` |
 | 👁 **Watch Element** | Watches one element of a page and fires when its text changes. Pick the element by clicking it, like uBlock Origin's picker. | `value`, `previous`, `url`, `selector`, `changedAt` |
 
 Blocks that nothing feeds are **start blocks**. They begin running when you switch the workflow **On**.
@@ -28,11 +52,77 @@ Things you can build with just these three:
 ```text
 Timer ──▶ Open URL                              open a page every 5 minutes
 Watch Element ──▶ Open URL                      open the page when a price changes
+Timer ──▶ Read Element ──▶ If ──▶ Notify        notify when dark mode is on, or the post count grew
+                                                (If: {{value}} greater than {{previous}})
 Timer ──▶ Watch Element ──▶ Open URL            Timer decides how often to check
 Watch Element ──▶ Timer (delay) ──▶ Open URL    wait 20s after a change, then open
 Timer ──▶ Open URL A
       └─▶ Open URL B                            one block feeds several
 ```
+
+## Elements: locators
+
+Every "Element" setting takes a **locator**, Playwright style. Press 🎯 **Pick on page** to get a CSS one, or
+write a more readable one yourself:
+
+| Locator | Finds |
+| --- | --- |
+| `#save`, `form .btn` | CSS (the default). `my-widget >>> button` reaches inside a web component |
+| `text=Sign in` · `text="Sign in"` · `text=/sign ?in/i` | by visible text: contains (any case) · exact · regex |
+| `role=button[name="Save"]` | by role and accessible name (`checkbox[checked]`, `heading[level=2]`) |
+| `label=Email` · `placeholder=you@example.com` · `testid=submit` | form fields by label / placeholder; `data-testid` (`data-test`, `data-cy`, `data-qa`) |
+| `#list >> text=Pro` · `li >> nth=0` | inside another element · the first (`-1` = last) |
+
+Actions are strict: if a locator matches two elements the step fails and says so, instead of clicking the
+wrong one.
+
+## Form filling example
+
+```text
+Open Tab (https://shop.test/login)
+  → Fill Form (label=Email: me@x.com · label=Password: … · label=Country: Bangladesh · label="Remember me": true,
+               then click role=button[name="Sign in"])
+  → Wait For (URL matches /account)            ← on error → Notify "login broken"
+  → Read Element (#greeting) → If ({{value}} contains "Welcome") → true: Notify "login OK"
+```
+
+## Harder pages, and CI
+
+- `frame=#pay >> label=Card number` reaches into iframes, also from other sites.
+- Step setting **Use real mouse and keyboard** sends trusted input through the browser debugger
+  (Chromium; asks for the permission when ticked) for sites that ignore synthetic events.
+- **Wait For → a network request finishes** waits for an API call (URL pattern + status).
+- 🎭 exports a workflow as a **Playwright test** (`.spec.ts`) to run in CI with `npx playwright test`.
+
+## Building faster
+
+- **● Record** turns what you do on a page into blocks (Fill Form, Click, Select, Check, Wait For URL,
+  and Assert from the on-page toolbar). Passwords are not recorded; the blocks use `{{secret.password}}`.
+- **Pick on page** offers readable locators (`role=button[name="Save"]`, `label=Email`) with alternatives.
+- Typing `{{` suggests data names. **+ New ▾** starts from a template. Ctrl+Z / Ctrl+Shift+Z, Ctrl+C / Ctrl+V.
+
+## Running and debugging
+
+- **▶ Run** runs the workflow once, now, even when it is Off. A Timer at the start fires immediately; a
+  Watch Element reads the page once. **■ Stop** stops it before the next block.
+- Blocks light up with how they did in the last run (✓ passed, ✕ failed, ↪ error handled). Click a block to
+  see its **input and output** from that run. The **Runs** tab under the canvas lists past runs (Run
+  button and scheduled ones); click one to show it on the canvas.
+- **Step settings** on every block: On error (stop / continue / send to an **error** output), Retries,
+  Timeout (default 60s), Disabled, Note.
+- If the browser stops the background worker in the middle of a run, the run is marked **interrupted**.
+- **Reports** (header): every run with its steps, errors and **screenshots** (taken when a step fails,
+  of the run's tab), exportable as a self-contained **HTML** report, **JUnit XML** for CI, or JSON.
+- **Secrets** (header): passwords and tokens used as `{{secret.name}}`, shown as `•••` everywhere and
+  never exported with workflows.
+
+## Managing workflows
+
+- **Sidebar** (file-manager style): click a row to open it, the dot turns it on/off, hover for rename (or double-click),
+  duplicate, export to a `.blockflow.json` file and delete. `+ New` and `Import` sit on top, plus search.
+- **All workflows** tab: a table with on/off switches, block icons, last activity, Edit / Duplicate / Export / Delete,
+  select several to export together, Turn all on / off.
+- Imported and duplicated workflows always arrive **off** with fresh ids. Turning on a workflow with errors is refused with the reason.
 
 ## Getting started
 
@@ -80,25 +170,38 @@ src/
   core/                  The engine. Plain TypeScript, no browser APIs, fully unit-tested.
     types.ts             Workflow model, block definition, Host interface
     engine.ts            WorkflowRunner: start blocks, pass data along connections, timers
-    blocks/              timer.ts, openUrl.ts, watchElement.ts, index.ts (registry of built-ins)
+    blocks/              timer, openUrl, watchElement, ifBlock, setVariable, httpRequest, notify, index.ts (registry of built-ins)
     template.ts          {{value}} templating
     config.ts            defaults, templating and validation of block settings
     validate.ts          checks a whole workflow (used by the editor)
+    library.ts           duplicate, export and import of workflows
+    ports.ts             block outputs (out / true / false / error) and routeTo()
+    runs.ts              run and step records
+    condition.ts         comparisons shared by If and Assert
+    report.ts            JUnit XML and HTML reports from runs
+    expression.ts        safe expression language for {{ }} and Transform/Filter (no eval)
+    csv.ts               CSV parse/write
+    session.ts, page.ts  the run's named tabs; requests to the page agent
     workflow.ts          diffWorkflows() decides what the background must start/stop
   dom/                   Code that runs inside web pages
     selector.ts          CSS selector generation + widen/narrow navigation
     picker.ts            the click-to-pick overlay (shadow DOM)
-    readElement.ts       function injected into a page to read an element
+    readElement.ts       function injected into a page to read an element (CSS only, kept for reference)
+    locator.ts, aria.ts  Playwright-style locators: css, text=, role=, label=, testid=, >>, nth=
+    agent.ts             the page agent: auto-wait, click, fill, select, check, press, read, wait, detect form
   browser/               Real implementations of the Host (alarms, tabs, storage, scripting)
   shared/                Storage keys and message types
   entrypoints/
     background.ts        runs enabled workflows; restart-safe
     picker.content.ts    injects the picker on demand
+    agent.content.ts     the page agent, injected on demand by src/browser/pageDriver.ts
     editor/              React + React Flow editor page
 tests/                   Vitest. core/ and editor/ run in Node, dom/ runs in jsdom.
 docs/ARCHITECTURE.md     how it fits together and why
 docs/manual-test/        a page that changes on every load, for end-to-end testing
 docs/learning/           hand-coding course: build your own extension step by step (start at its README)
+docs/guide/              usage guide for people and AI tools, generated block reference, example workflows
+scripts/guide.ts         generates docs/guide/blocks.md, blocks.json, workflow.schema.json (npm run guide:sync)
 ```
 
 ## Adding a block
@@ -113,21 +216,23 @@ needed.
 
 ## What has been verified
 
-Prototype 1 was written in an environment where the npm registry was blocked, so `npm install` and the
-WXT build were **not** run there. What was checked, and how:
-
 | Area | Status |
 | --- | --- |
-| Engine, blocks, templating, validation, workflow diffing (81 tests) | Run, passing. Mutation-checked: a deliberate bug in change detection is caught. |
-| Strict TypeScript on core, dom, shared, browser, background, tests | Passing, with `wxt/browser` stubbed (so calls into browser APIs are not type-checked against real types). |
-| Selector generator and element picker (29 tests) | Run in real Chromium 141, passing. Not yet run under jsdom. |
-| React editor (state sync, autosave, validation, picker round trip, logs) | Driven in Chromium with React 19 in dev mode: 39 checks, no warnings, no render loops. React Flow itself was **faked**, so dragging, connecting and visuals are untested. |
-| `npm install`, `wxt build`, `tsc` against real WXT/React Flow types | **Not run.** First thing to do. |
-| Real extension in Chromium 141 (unpacked MV3, bundled background + picker, local test server): 5s Timer → Open URL and Watch Element every 5s for 50s, disable stops everything, element picker round trip (15 checks) | Run, passing. Used the real background code with a thin `wxt/browser` shim, not a WXT build. |
-| Same on Firefox / Safari, Chrome Web Store build, a worker restart mid-run in a real browser | **Not run.** |
-
-Expect small fixes on first contact with real dependencies, most likely type errors in `src/browser` and
-the editor, or dependency version bumps.
+| `npm install`, `tsc` against real WXT/React Flow types, `npm run check` (131 tests incl. jsdom) | Run, passing (WXT 0.20.27, Vite 8, Vitest 3). |
+| `wxt build` for Chrome and Firefox | Run, passing. `web-ext lint` on the Firefox build: 0 errors (innerHTML warnings come from React DOM and the picker's static template). |
+| Engine, blocks, templating, validation, workflow diffing | Unit tested. Mutation-checked: a deliberate bug in change detection is caught. |
+| React editor (state sync, autosave, validation, picker round trip, logs) | Driven in Chromium with React 19 in dev mode: 39 checks, no warnings, no render loops (React Flow faked). The real build renders the canvas and samples without errors, but dragging and connecting by hand is untested. |
+| Real WXT Chrome build in Playwright Chromium 131 (headless, local test server): editor loads, samples seeded, picker injected from `/content-scripts/picker.js` and round trip to editor, 3s repeating Timer → Open URL, short timer keeps firing after the service worker is stopped (resumes via the heartbeat alarm, so expect a gap of up to 30s), disable stops it, Watch Element in a background tab fires on change with `{{url}}`, a stable element never fires, 30s alarm timer fires once (12 checks) | Run, passing. |
+| 2026-10-23, Brave Origin 155 (temp profile, real WXT Chrome build, local server): Timer → HTTP Request (POST, header, body) → If → Set Variable → Notify → Open URL ran end to end with `{{data.price}}` templating; a second flow with a false If stopped and sent no notification | Run, passing. |
+| 2026-10-23, Brave Origin 155: workflow manager UI driven through the real editor (new, rename, duplicate, enable/disable, turn all off, export, import, bad import, refuse empty, delete) | Run, passing (13 checks). |
+| 2026-10-23, Brave Origin 155 against the live akibh.dev and blog.akibh.dev: Read Element (class `dark` on `<html>`, `aria-pressed` on the theme button, post-link count) → If → Notify. Flipping the theme between two reads gave `changed=true` and a notification; a local page whose post count grows 3→5→7 notified only on increases; unchanged reads stayed quiet | Run, passing. |
+| 2026-10-23, Brave Origin 155, Phase A (runs, ports, step settings) through the real editor: If true/false branches, dragging a new connection from the "false" output, inspector input/output, error output + retries (2 attempts), switching back to "stop" removes the error output and its edge, Stop button cancels before the next block, killing the service worker mid-run marks the run interrupted (18 checks) | Run, passing. |
+| 2026-10-23, `npm run e2e` (Brave Origin 155, 20 checks, 3 runs in a row): classic login with Fill Form + submit + Wait For URL + Read + If; wrong password routed to the error output with a readable timeout; SPA with a cookie overlay ("covered by" reason), React-style controlled inputs, typed email, select, custom checkbox under its label, disabled-until-valid button, pushState route, text appearing, shadow DOM button; strict-mode and missing-element errors; Detect fields in the editor on a real form. Unit tests: 212 incl. a React 19 form filled in jsdom | Run, passing. |
+| 2026-10-23, `npm run e2e` Phase C (30 checks in all): Run Workflow reusing a login in the same tab, Assert text/title passing, a soft Assert failing the run while the flow continues, its screenshot in the Reports page and in the HTML export, JUnit export, the secret password absent from all run records, Manual Step continued from the editor banner | Run, passing. |
+| 2026-10-23, `npm run e2e` Phase D (38 checks in all, Playwright Chromium 131: Brave stopped launching under automation that afternoon, see below): Paginate 3 pages + Extract List + Save to Dataset (9 rows in IndexedDB, absolute links) + Download CSV, HTTP Request + Extract Table/List from HTML through Chrome's offscreen document, Scroll an infinite feed to 40 posts, a CSV-driven For Each login (one good, one bad), Data page preview | Run, passing. |
+| 2026-10-23, `npm run e2e` Phase E (47 checks in all, Chromium 131): recording a real login (typing, select, checkbox, submit, navigation, Assert text from the toolbar) became Open Tab → Fill Form → Wait For → Assert with readable locators and `{{secret.password}}`, and replayed green; pick gives `role=button[name="Forgot password?"]` plus alternatives; undo/redo/copy/paste; a template; `{{` suggestions; Page Visited started a run on a visited tab. Context Menu and Schedule: unit tests only | Run, passing. |
+| 2026-10-23, `npm run e2e` Phase F (57 checks in all, twice in a row, Chromium 131): Upload File on a hidden input, Wait for Popup (window.open and target=_blank from a background tab), Dialogs (confirm dismissed, prompt answered), same-origin and cross-origin iframes, Wait For a POST /api/save 201, synthetic click untrusted vs real input trusted (click and typing), a background-tab screenshot through the debugger, Run Script's message on a browser without userScripts.execute, and a workflow exported from the editor as a .spec.ts passing under `npx playwright test` | Run, passing. |
+| Firefox host permission grant, Safari conversion, Chrome Web Store upload | **Not run.** |
 
 ## Known limitations
 
@@ -138,11 +243,19 @@ the editor, or dependency version bumps.
   particular may still suspend the worker: untested. Timers of 30s or more are alarm-only and cheap.
 - **Watch Element uses its own background tab** per watched URL (never your own tabs) and reloads it on each
   check by default. Pages that need a login work if you are signed in in the same browser profile.
-- Broad site access (`<all_urls>`) for now. Later: ask for access per workflow with optional permissions.
-- No import/export, templates or undo yet.
-- Only three blocks, and a block's output goes to every connection (no conditions or branching yet).
+- Broad site access (`<all_urls>`) for now; only `debugger` and `userScripts` are optional (asked when a block needs
+  them). Per-workflow site permissions are not built: browsers only ask on a click, which scheduled runs cannot give.
+- No templates or undo yet. Two editor tabs open at once overwrite each other's changes.
+- `npm run e2e` picks Brave first. If a browser hangs at launch under automation (Brave did after an update on
+  2026-10-23), run `BF_BROWSER=/path/to/chromium npm run e2e`; Playwright's Chromium in
+  `~/.cache/ms-playwright` is used automatically when nothing else is found.
+- Page actions use synthetic events (`isTrusted: false`); a few sites reject them. Iframes, closed shadow
+  roots, file uploads and native dialogs are not supported yet (plan: phase F).
+- No "Resume" for an interrupted run yet, and If has one condition (several joined with and/or come later).
 
 ## Roadmap ideas
 
-Notification block, IF/condition, HTTP request, extract-text/set-variable, import/export workflows,
+The full plan for form filling, testing and scraping is in [docs/PLAN-automation.md](docs/PLAN-automation.md).
+
+IF with true/false outputs, extract-text block, folders for workflows,
 a recorder that turns your clicks into blocks, per-workflow permissions, Web Store packaging.

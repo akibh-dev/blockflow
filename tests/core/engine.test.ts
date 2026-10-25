@@ -55,14 +55,14 @@ describe('Open URL', () => {
   it('opens its URL once when it is the only block', async () => {
     const h = harness(flow([{ id: 'o', type: 'open-url', config: { url: 'example.com', active: false } }], []));
     await h.runner.start();
-    expect(h.host.opened).toEqual([{ url: 'https://example.com/', newTab: true, active: false }]);
+    expect(h.host.opened).toEqual([expect.objectContaining({ url: 'https://example.com/', newTab: true, active: false, waitUntil: 'load' })]);
   });
 
   it('logs an error and does not open anything for an invalid URL', async () => {
     const h = harness(flow([{ id: 'o', type: 'open-url', config: { url: 'javascript:alert(1)' } }], []));
     await h.runner.start();
     expect(h.host.opened).toHaveLength(0);
-    expect(h.messages('error')).toEqual(['Open URL: URL must be a valid http(s) URL']);
+    expect(h.messages('error')).toEqual(['Open Tab: URL must be a valid http(s) URL']);
   });
 
   it('passes the incoming data on, adding url and tabId', async () => {
@@ -115,7 +115,7 @@ describe('Watch Element as a start block', () => {
     await h.fire('poll'); // $10: no change
     expect(host.opened).toHaveLength(0);
     await h.fire('poll'); // $8: change
-    expect(host.opened).toEqual([{ url: `${SITE}#changed`, newTab: true, active: true }]);
+    expect(host.opened).toEqual([expect.objectContaining({ url: `${SITE}#changed`, newTab: true, active: true })]);
     await h.fire('poll'); // $8: no change
     expect(host.opened).toHaveLength(1);
     expect(h.messages('info')).toContain('Changed: "$10" → "$8"');
@@ -318,7 +318,7 @@ describe('Composing blocks in any order', () => {
     expect(h.messages('error')).toHaveLength(1);
   });
 
-  it('stops a loop after maxDepth blocks instead of running forever', async () => {
+  it('stops a loop after maxSteps blocks instead of running forever', async () => {
     const wf = flow(
       [
         { id: 't', type: 'timer', config: { seconds: 5 } },
@@ -334,8 +334,10 @@ describe('Composing blocks in any order', () => {
     const h = harness(wf, new FakeHost(), 6);
     await h.runner.start();
     await h.fire('tick');
-    expect(h.host.opened.length).toBe(6);
-    expect(h.messages('error')[0]).toContain('more than 6 blocks in a row');
+    // 6 steps: the timer firing, then a, b, a, b, a
+    expect(h.host.opened.length).toBe(5);
+    expect(h.messages('error')[0]).toContain('more than 6 blocks');
+    expect(h.lastRun()?.status).toBe('failed');
   });
 });
 

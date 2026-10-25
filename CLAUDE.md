@@ -10,6 +10,9 @@ npm install            # runs `wxt prepare` (generates .wxt/ types)
 npm run typecheck      # tsc --noEmit
 npm test               # vitest run (core + editor in Node, tests/dom in jsdom)
 npm run check          # typecheck + tests + learning examples in sync
+npm run e2e            # BF_E2E=1 build into .output-e2e (optional permissions granted) + drive it in Brave/Chromium
+                       # (tests/e2e, fixtures in tests/fixtures/site; BF_BROWSER=/path/to/chrome to choose)
+npm run guide:sync     # regenerate docs/guide/blocks.* from the registry (guide:check is part of npm run check)
 npm run learn:sync     # regenerate docs/learning/examples from the lessons (learn:check verifies)
 npm run dev            # Chrome with hot reload; `npm run dev:firefox` for Firefox
 npm run build / build:firefox / build:safari
@@ -27,9 +30,9 @@ Prototype 1 was written where npm was blocked, so it was verified only partially
    before suspecting the code.
 3. `npm run build` and `npm run build:firefox`.
 4. `npm run dev`, then walk through "Try it end to end" in the README using `docs/manual-test/clock.html`.
-5. Confirm what was only run through a shim, not a real WXT build: the picker injection path
-   (`/content-scripts/picker.js`), Watch Element, short and long timers (all passed in unpacked Chromium 141 with a
-   thin `wxt/browser` shim). Still never run: Firefox host permission grant, Safari conversion, a worker restart mid-run.
+5. Done 2026-10-20 on the real WXT Chrome build (see README "What has been verified"): picker injection,
+   Watch Element, short/long timers, worker restart mid-run. Still never run: Firefox host permission grant,
+   Safari conversion.
 
 ## Rules of the codebase
 
@@ -40,13 +43,21 @@ Prototype 1 was written where npm was blocked, so it was verified only partially
 - Never use `setTimeout`/`setInterval` in blocks for workflow timing: the MV3 worker sleeps. Use
   `ctx.timers.set(...)` and handle it in `onTimer`. Keep anything a block must remember in `ctx.state`.
   (Timers under 30s are handled for you by `HybridScheduler`: in-memory timers + keep-alive ping, alarm as heartbeat.
-  Only `src/browser/hybridScheduler.ts` may use `setTimeout`/`setInterval`, via its injected `Clock`.)
+  Only `src/browser/hybridScheduler.ts` may use `setTimeout`/`setInterval` for timers, via its injected `Clock`.
+  Short polling inside one step, in `src/browser` (`sleep` from `tabs.ts`) or in the page agent, is fine;
+  the engine waits through `Host.sleep`.)
 - Block payloads must stay JSON-serialisable (they are stored with alarms).
 - Register all event listeners synchronously at the top of `defineBackground` (service worker rule).
 - WXT auto-imports `defineBackground` / `defineContentScript`; `browser` is imported from `wxt/browser`.
 - React Flow node `data` types must be `type` aliases, not interfaces (see `BlockNodeData`).
 - Add or change a block: edit `src/core/blocks/`, register in `index.ts`, test with `tests/helpers/fakeHost.ts`.
   The editor needs no changes.
+- Blocks that touch a page go through `ctx.host.page.act(tabId, request, …)` (requests in `src/core/page.ts`,
+  carried out by `src/dom/agent.ts`), and find their tab with `requireSessionTab(input, ctx.config.tab)`.
+  New page abilities: add an op to `page.ts`, implement it in `agent.ts` with a jsdom test, then the block.
+- `src/dom/*` runs inside web pages: DOM only; it may import pure `src/core` modules (no browser APIs).
+- New or changed blocks: run `npm run guide:sync` (the usage guide's reference is generated) and keep
+  `docs/guide/README.md` and its examples correct; `npm run check` fails otherwise.
 
 ## Learning material (keep it current)
 

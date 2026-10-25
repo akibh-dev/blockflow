@@ -1,12 +1,12 @@
 import { browser } from 'wxt/browser';
-import { readSelectorInPage } from '../dom/readElement';
+import { addOwnTab } from './ownTabs';
+import { actInTab } from './pageDriver';
 import { STORAGE_KEYS } from '../shared/keys';
-import { reloadAndWait, requireTabId, sleep, tabExists, waitForTabComplete } from './tabs';
+import { reloadAndWait, requireTabId, tabExists, waitForTabComplete } from './tabs';
 import type { ReadElementOptions, ReadElementResult } from '../core/types';
 
 /** How long to keep retrying for an element that has not rendered yet (single-page apps). */
 const ELEMENT_WAIT_MS = 6_000;
-const RETRY_EVERY_MS = 500;
 
 type TabMap = Record<string, number>;
 
@@ -34,26 +34,28 @@ async function ensureWatchTab(url: string, reload: boolean): Promise<number> {
 
   const tab = await browser.tabs.create({ url, active: false });
   const tabId = requireTabId(tab);
+  await addOwnTab(tabId).catch(() => {});
   await saveTabMap({ ...map, [url]: tabId });
   await waitForTabComplete(tabId);
   return tabId;
 }
 
-async function readOnce(tabId: number, selector: string): Promise<ReadElementResult> {
-  const [injection] = await browser.scripting.executeScript({
-    target: { tabId },
-    func: readSelectorInPage,
-    args: [selector],
-  });
-  return (injection?.result as ReadElementResult | undefined) ?? { found: false, text: '' };
-}
-
+/**
+ * Reads through the page agent, so any locator works (text=, role=…), not just CSS. Waits up to
+ * ELEMENT_WAIT_MS for the element, since single-page apps render after "load".
+ */
 export async function readElement(options: ReadElementOptions): Promise<ReadElementResult> {
   const tabId = await ensureWatchTab(options.url, options.reload);
-  const deadline = Date.now() + ELEMENT_WAIT_MS;
-  for (;;) {
-    const result = await readOnce(tabId, options.selector);
-    if (result.found || result.error || Date.now() >= deadline) return result;
-    await sleep(RETRY_EVERY_MS);
+  try {
+    const result = await actInTab(
+      tabId,
+      { op: 'read', locator: options.selector, kind: options.read?.kind ?? 'text', ...(options.read?.name ? { name: options.read.name } : {}) },
+      ELEMENT_WAIT_MS,
+    );
+    return { found: true, text: String(result.text ?? ''), count: Number(result.count ?? 0) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.startsWith('Timed out')) return { found: false, text: '' };
+    return { found: false, text: '', error: message };
   }
 }

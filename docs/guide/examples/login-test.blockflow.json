@@ -1,0 +1,120 @@
+{
+  "format": "blockflow-workflows",
+  "version": 1,
+  "workflows": [
+    {
+      "schemaVersion": 1,
+      "id": "login-test",
+      "name": "Login test",
+      "enabled": false,
+      "nodes": [
+        {
+          "id": "open",
+          "type": "open-url",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "config": {
+            "url": "https://example.com/login",
+            "where": "window",
+            "tab": "main",
+            "active": true,
+            "waitUntil": "load"
+          }
+        },
+        {
+          "id": "form",
+          "type": "fill-form",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "config": {
+            "tab": "main",
+            "fields": [
+              {
+                "locator": "label=Email",
+                "value": "me@example.com"
+              },
+              {
+                "locator": "label=Password",
+                "value": "{{secret.loginPassword}}"
+              }
+            ],
+            "submit": "role=button[name=\"Sign in\"]"
+          }
+        },
+        {
+          "id": "landed",
+          "type": "wait-for",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "config": {
+            "tab": "main",
+            "mode": "url",
+            "url": "/dashboard",
+            "locator": "",
+            "text": ""
+          },
+          "step": {
+            "onError": "port",
+            "timeoutSeconds": 15
+          }
+        },
+        {
+          "id": "greets",
+          "type": "assert",
+          "position": {
+            "x": 780,
+            "y": 0
+          },
+          "config": {
+            "subject": "text",
+            "locator": "role=heading[level=1]",
+            "operator": "contains",
+            "expected": "Welcome",
+            "tab": "main"
+          }
+        },
+        {
+          "id": "broken",
+          "type": "notify",
+          "position": {
+            "x": 1040,
+            "y": 160
+          },
+          "config": {
+            "title": "Login test failed",
+            "message": "{{error}}"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "open",
+          "target": "form"
+        },
+        {
+          "id": "e1",
+          "source": "form",
+          "target": "landed"
+        },
+        {
+          "id": "e2",
+          "source": "landed",
+          "target": "greets"
+        },
+        {
+          "id": "e3",
+          "source": "landed",
+          "target": "broken",
+          "sourcePort": "error"
+        }
+      ]
+    }
+  ]
+}

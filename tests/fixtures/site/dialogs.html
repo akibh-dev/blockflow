@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Fixture: dialogs</title></head>
+<body>
+  <button type="button" id="del">Delete</button>
+  <button type="button" id="ask">Your name</button>
+  <p id="result"></p>
+  <script>
+    document.getElementById('del').onclick = () => {
+      document.getElementById('result').textContent = confirm('Delete it?') ? 'deleted' : 'kept';
+    };
+    document.getElementById('ask').onclick = () => {
+      document.getElementById('result').textContent = `Hi ${prompt('Your name?')}`;
+    };
+  </script>
+</body></html>

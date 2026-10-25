@@ -1,0 +1,137 @@
+{
+  "format": "blockflow-workflows",
+  "version": 1,
+  "workflows": [
+    {
+      "schemaVersion": 1,
+      "id": "scrape",
+      "name": "Scrape all pages to CSV",
+      "enabled": false,
+      "nodes": [
+        {
+          "id": "open",
+          "type": "open-url",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "config": {
+            "url": "https://shop.example.com/products",
+            "where": "new",
+            "active": false
+          }
+        },
+        {
+          "id": "clear",
+          "type": "save-dataset",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "config": {
+            "dataset": "products",
+            "value": "[]",
+            "mode": "replace"
+          }
+        },
+        {
+          "id": "pages",
+          "type": "paginate",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "config": {
+            "next": "role=link[name=\"Next\"]",
+            "maxPages": 20
+          }
+        },
+        {
+          "id": "cards",
+          "type": "extract-list",
+          "position": {
+            "x": 780,
+            "y": -140
+          },
+          "config": {
+            "locator": ".product-card",
+            "fields": [
+              {
+                "name": "title",
+                "locator": "h2",
+                "attribute": ""
+              },
+              {
+                "name": "price",
+                "locator": ".price",
+                "attribute": ""
+              },
+              {
+                "name": "link",
+                "locator": "a",
+                "attribute": "href"
+              }
+            ],
+            "into": "items"
+          }
+        },
+        {
+          "id": "save",
+          "type": "save-dataset",
+          "position": {
+            "x": 1040,
+            "y": -140
+          },
+          "config": {
+            "dataset": "products",
+            "value": "items",
+            "mode": "append"
+          }
+        },
+        {
+          "id": "file",
+          "type": "download",
+          "position": {
+            "x": 1300,
+            "y": 140
+          },
+          "config": {
+            "from": "dataset",
+            "dataset": "products",
+            "format": "csv",
+            "filename": "products-{{ today() }}.csv"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "open",
+          "target": "clear"
+        },
+        {
+          "id": "e1",
+          "source": "clear",
+          "target": "pages"
+        },
+        {
+          "id": "e2",
+          "source": "pages",
+          "target": "cards",
+          "sourcePort": "each"
+        },
+        {
+          "id": "e3",
+          "source": "cards",
+          "target": "save"
+        },
+        {
+          "id": "e4",
+          "source": "pages",
+          "target": "file",
+          "sourcePort": "done"
+        }
+      ]
+    }
+  ]
+}
