@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Fixture: trusted events in frames</title>
+<style>
+  body { margin: 0; padding: 30px 0 0 50px; }
+  header { height: 70px; }
+  /* Borders and padding move the frame's content: real clicks must account for them. */
+  iframe { width: 380px; height: 170px; border: 7px solid #888; padding: 11px 0 0 13px; display: block; margin: 0 0 20px 40px; }
+</style></head>
+<body>
+  <header><h1>Two frames that only accept real input</h1></header>
+  <iframe id="same" src="/trusted.html"></iframe>
+  <iframe id="other"></iframe>
+  <script>
+    // Same server, other origin: localhost instead of 127.0.0.1.
+    document.getElementById('other').src = `${location.protocol}//localhost:${location.port}/trusted.html`;
+  </script>
+</body></html>
