@@ -1,0 +1,147 @@
+{
+  "format": "blockflow-workflows",
+  "version": 1,
+  "workflows": [
+    {
+      "schemaVersion": 1,
+      "id": "playground-tour",
+      "name": "Try it: playground tour",
+      "enabled": false,
+      "nodes": [
+        {
+          "id": "open",
+          "type": "open-url",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "config": {
+            "url": "http://localhost:7357/playground.html",
+            "where": "window",
+            "tab": "main",
+            "active": true,
+            "waitUntil": "load"
+          }
+        },
+        {
+          "id": "add",
+          "type": "click",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "config": {
+            "tab": "main",
+            "locator": "role=button[name=\"Add one\"]",
+            "action": "click",
+            "force": false
+          }
+        },
+        {
+          "id": "name",
+          "type": "fill",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "config": {
+            "tab": "main",
+            "locator": "label=Your name",
+            "value": "BlockFlow",
+            "mode": "fill"
+          }
+        },
+        {
+          "id": "colour",
+          "type": "select-option",
+          "position": {
+            "x": 780,
+            "y": 0
+          },
+          "config": {
+            "tab": "main",
+            "locator": "label=Favourite colour",
+            "value": "Green"
+          }
+        },
+        {
+          "id": "hello",
+          "type": "click",
+          "position": {
+            "x": 1040,
+            "y": 0
+          },
+          "config": {
+            "tab": "main",
+            "locator": "role=button[name=\"Say hello\"]",
+            "action": "click",
+            "force": false
+          }
+        },
+        {
+          "id": "greeting",
+          "type": "assert",
+          "position": {
+            "x": 1300,
+            "y": 0
+          },
+          "config": {
+            "subject": "text",
+            "value": "",
+            "locator": "#greeting",
+            "name": "",
+            "operator": "contains",
+            "expected": "Hello, BlockFlow! Green",
+            "message": "The page greets us by name",
+            "soft": false,
+            "tab": "main"
+          }
+        },
+        {
+          "id": "log",
+          "type": "log",
+          "position": {
+            "x": 1560,
+            "y": 0
+          },
+          "config": {
+            "message": "The playground said hello. Now try changing a block and pressing Run again.",
+            "level": "info"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "open-add",
+          "source": "open",
+          "target": "add"
+        },
+        {
+          "id": "add-name",
+          "source": "add",
+          "target": "name"
+        },
+        {
+          "id": "name-colour",
+          "source": "name",
+          "target": "colour"
+        },
+        {
+          "id": "colour-hello",
+          "source": "colour",
+          "target": "hello"
+        },
+        {
+          "id": "hello-greeting",
+          "source": "hello",
+          "target": "greeting"
+        },
+        {
+          "id": "greeting-log",
+          "source": "greeting",
+          "target": "log"
+        }
+      ]
+    }
+  ]
+}

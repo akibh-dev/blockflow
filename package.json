@@ -22,6 +22,7 @@
     "postinstall": "wxt prepare",
     "e2e": "BF_E2E=1 wxt build && node tests/e2e/run.mjs",
     "e2e:run": "node tests/e2e/run.mjs",
+    "playground": "node scripts/playground.mjs",
     "guide:sync": "vite-node scripts/guide.ts",
     "guide:check": "vite-node scripts/guide.ts -- --check",
     "wiki:check": "node scripts/wiki.mjs --check",

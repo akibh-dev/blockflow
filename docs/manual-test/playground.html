@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BlockFlow playground</title>
+    <style>
+      body { font: 17px/1.5 system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #1b1e24; }
+      .box { border: 1px solid #e2e5ea; border-radius: 10px; padding: 12px 18px; margin: 16px 0; }
+      h2 { font-size: 18px; margin: 4px 0 8px; }
+      label { display: block; margin: 8px 0 4px; }
+      input, select { font: inherit; padding: 6px 8px; width: 100%; box-sizing: border-box; }
+      button { font: inherit; padding: 6px 14px; margin-top: 10px; cursor: pointer; }
+      #now, #count { font: 700 24px ui-monospace, monospace; }
+      #greeting { font-weight: 600; color: #16a34a; min-height: 1.5em; }
+      .muted { color: #6b7280; font-size: 15px; }
+    </style>
+  </head>
+  <body>
+    <h1>BlockFlow playground</h1>
+    <p class="muted">
+      A page to practise on: every box has something to watch, click or fill. The “Try it” workflow in the
+      BlockFlow editor fills the form, clicks the button and checks the greeting.
+    </p>
+
+    <!-- Boxes are divs: an unnamed <section> sends the page agent's role lookup into a loop (src/dom/aria.ts getRole ↔ accessibleName, to be fixed there). -->
+    <div class="box">
+      <h2>Watch</h2>
+      <p>Loaded at <span id="now">…</span> (changes on every reload).</p>
+      <p>The price is <span id="price">$42.00</span> <span class="muted">(this line never changes)</span>.</p>
+    </div>
+
+    <div class="box">
+      <h2>Click</h2>
+      <p>Clicked <span id="count">0</span> times.</p>
+      <button type="button" id="add">Add one</button>
+    </div>
+
+    <div class="box">
+      <h2>Fill</h2>
+      <form id="hello">
+        <label for="name">Your name</label>
+        <input id="name" name="name" autocomplete="off" />
+        <label for="colour">Favourite colour</label>
+        <select id="colour" name="colour">
+          <option>Blue</option>
+          <option>Green</option>
+          <option>Orange</option>
+        </select>
+        <label><input type="checkbox" id="news" name="news" style="width: auto" /> Send me news</label>
+        <button type="submit">Say hello</button>
+      </form>
+      <p id="greeting" role="status"></p>
+    </div>
+
+    <script>
+      document.getElementById('now').textContent = new Date().toLocaleTimeString();
+      const count = document.getElementById('count');
+      document.getElementById('add').addEventListener('click', () => {
+        count.textContent = String(Number(count.textContent) + 1);
+      });
+      document.getElementById('hello').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const name = document.getElementById('name').value.trim() || 'stranger';
+        const colour = document.getElementById('colour').value;
+        const news = document.getElementById('news').checked ? ' News is on its way.' : '';
+        document.getElementById('greeting').textContent = `Hello, ${name}! ${colour} is a fine colour.${news}`;
+      });
+    </script>
+  </body>
+</html>

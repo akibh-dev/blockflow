@@ -8,8 +8,10 @@ export default async function (h) {
     console.log('Phase E: recorder, picker, Page Visited, editing tools, templates, autocomplete');
     await seedWorkflows([workflow('recorded', [{ id: 'note', type: 'log', config: { message: 'start' } }])]);
     await worker.evaluate((password) => chrome.storage.local.set({ 'bf:secrets': { password } }), PASSWORD);
-    h.editor.once('dialog', (dialog) => dialog.accept(`${base}/login.html`));
-    const [recordTab] = await Promise.all([context.waitForEvent('page'), h.editor.click('button:has-text("● Record")')]);
+    // The start URL is asked in the editor's own dialog (components/Dialogs.tsx), not window.prompt.
+    await h.editor.click('button:has-text("● Record")');
+    await h.editor.fill('.bf-modal input', `${base}/login.html`);
+    const [recordTab] = await Promise.all([context.waitForEvent('page'), h.editor.click('.bf-modal button:has-text("Start recording")')]);
     await recordTab.waitForLoadState('load');
     await recordTab.waitForSelector('blockflow-recorder', { state: 'attached', timeout: 10_000 });
     await recordTab.locator('#email').pressSequentially('rec@test.dev');
@@ -21,7 +23,6 @@ export default async function (h) {
     await recordTab.locator('blockflow-recorder >> button[data-act="assert-text"]').click();
     await recordTab.locator('#greeting').click();
     await recordTab.waitForTimeout(300);
-    h.editor.once('dialog', (dialog) => dialog.accept());
     await recordTab.locator('blockflow-recorder >> button[data-act="stop"]').click();
     await h.editor.bringToFront();
     await h.editor.waitForFunction(() => document.querySelectorAll('.bf-node').length > 1, null, { timeout: 10_000 });

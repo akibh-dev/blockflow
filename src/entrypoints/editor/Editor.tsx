@@ -37,6 +37,7 @@ import type { RecordingState } from '../../browser/recording';
 import { PromptBanner } from './components/PromptBanner';
 import { ReportsPage } from './components/ReportsPage';
 import { SecretsPage } from './components/SecretsPage';
+import { TryItCard } from './components/TryItCard';
 import { DataPage } from './components/DataPage';
 import { registry } from './registry';
 import { mergeStoredWorkflows, sameData, syncBase } from './sync';
@@ -879,6 +880,7 @@ export function Editor() {
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable />
           </ReactFlow>
+          <TryItCard onCreate={createFromTemplate} />
           {active.nodes.length === 0 && (
             <p className="bf-empty">Add blocks from the left, then drag from one block’s right dot to another block’s left dot to connect them.</p>
           )}
