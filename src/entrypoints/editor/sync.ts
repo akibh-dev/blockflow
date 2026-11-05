@@ -9,17 +9,34 @@ import type { Workflow } from '../../core/types';
  * so it is tested without a browser.
  */
 
-/** JSON of each workflow as last seen in storage, by id. */
+/**
+ * JSON with object keys sorted. Browser storage does not keep key order, so a plain
+ * `JSON.stringify` of a stored workflow can differ from the same workflow in memory.
+ */
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : item,
+  );
+}
+
+/** True when two values hold the same data, whatever their key order. */
+export function sameData(a: unknown, b: unknown): boolean {
+  return canonicalJson(a) === canonicalJson(b);
+}
+
+/** Canonical JSON of each workflow as last seen in storage, by id. */
 export type SyncBase = Map<string, string>;
 
 /** The base for a list just loaded from or saved to storage. */
 export function syncBase(list: Workflow[]): SyncBase {
-  return new Map(list.map((workflow) => [workflow.id, JSON.stringify(workflow)]));
+  return new Map(list.map((workflow) => [workflow.id, canonicalJson(workflow)]));
 }
 
 /** True when this tab changed `workflow` (or created it) since the last sync. */
 function editedHere(workflow: Workflow, base: SyncBase): boolean {
-  return base.get(workflow.id) !== JSON.stringify(workflow);
+  return base.get(workflow.id) !== canonicalJson(workflow);
 }
 
 /**

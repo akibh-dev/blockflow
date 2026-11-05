@@ -38,7 +38,7 @@ import { ReportsPage } from './components/ReportsPage';
 import { SecretsPage } from './components/SecretsPage';
 import { DataPage } from './components/DataPage';
 import { registry } from './registry';
-import { mergeStoredWorkflows, syncBase } from './sync';
+import { mergeStoredWorkflows, sameData, syncBase } from './sync';
 import type { SyncBase } from './sync';
 
 /** React Flow node renderers by node `type`; every BlockFlow node is `'block'`. Module-level so it is stable. */
@@ -168,7 +168,7 @@ export function Editor() {
       if (area !== 'local' || !change) return;
       const theirs = (change.newValue as Workflow[] | undefined) ?? [];
       const ours = latest.current;
-      if (!ours || JSON.stringify(theirs) === JSON.stringify(ours)) {
+      if (!ours || sameData(theirs, ours)) {
         synced.current = syncBase(theirs);
         return;
       }
@@ -178,9 +178,10 @@ export function Editor() {
       const id = activeIdRef.current;
       const before = ours.find((workflow) => workflow.id === id);
       const after = merged.find((workflow) => workflow.id === id);
+      // Reload the canvas only when the open workflow really changed elsewhere (this also resets undo).
       if (!after) {
         if (merged[0]) open(merged[0]);
-      } else if (before !== after) {
+      } else if (after !== before && !sameData(after, before)) {
         open(after);
       }
     };
