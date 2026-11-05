@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Fixture: web component</title></head>
+<body>
+  <h1>Newsletter</h1>
+  <!-- A form inside an open shadow root, as web components build them. -->
+  <sign-up></sign-up>
+  <script>
+    customElements.define('sign-up', class extends HTMLElement {
+      connectedCallback() {
+        const root = this.attachShadow({ mode: 'open' });
+        root.innerHTML = `
+          <style>.card { border: 1px solid #ccc; padding: 12px; max-width: 320px; }</style>
+          <div class="card">
+            <label for="mail">Your email</label> <input id="mail" type="email">
+            <button type="button" id="join">Join</button>
+            <p class="status" id="status">Not joined</p>
+          </div>`;
+        root.getElementById('join').addEventListener('click', () => {
+          root.getElementById('status').textContent = `Joined as ${root.getElementById('mail').value}`;
+        });
+      }
+    });
+  </script>
+</body></html>

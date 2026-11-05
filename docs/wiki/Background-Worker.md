@@ -84,7 +84,7 @@ All registered synchronously at the top level of `defineBackground`.
 | `runtime.onInstalled` | On `reason === 'install'` with no workflows: `saveWorkflows(sampleWorkflows())`. Then `startAllEnabled()`, `syncContextMenus()` | Also fires on extension update and on reload in developer mode. |
 | `webNavigation.onCompleted` | `onPageVisited(tabId, url, 'load')`, top frame only (`frameId === 0`) | Page Visited trigger. |
 | `webNavigation.onHistoryStateUpdated` | `onPageVisited(tabId, url, 'route')`, top frame only | SPA route changes; only for `when: any`. |
-| `webNavigation.onCreatedNavigationTarget` | `recordPopup(tabId, sourceTabId)` | For Wait for Popup. Not `tabs.onCreated`: its `openerTabId` is empty for popup windows and names the active tab for links opened from a background tab. |
+| `webNavigation.onCreatedNavigationTarget` | `recordPopup(tabId, sourceTabId)`, `onRecordedPopup(tabId, sourceTabId, url)` | For Wait for Popup, and so the recorder follows popups. Not `tabs.onCreated`: its `openerTabId` is empty for popup windows and names the active tab for links opened from a background tab. |
 | `tabs.onUpdated` | `onRecordedTabUpdated(tabId, change)` when `change.url` or `status === 'complete'` | Recorder: adds `navigated` steps and re-injects the recorder after a load. |
 | `contextMenus.onClicked` | `onMenuClicked(...)` | Context Menu trigger. |
 | `storage.onChanged` (area `local`, key `bf:workflows`) | `diffWorkflows(old, new)` → `stopWorkflow` for `stop`; for `removed` (deleted, on or off) also `scheduler.clearPrefix` of its timers and `clearWorkflowState` (its `bf:state:<id>::*` keys); then `startWorkflow` for `start`; `syncContextMenus()` if either list is non-empty | The editor never messages the worker to start or stop: saving is enough. Position/name edits produce an empty diff. |
@@ -99,14 +99,16 @@ Full payloads in [Message Protocol](Message-Protocol.md).
 
 | `type` | Action |
 | --- | --- |
-| `bf:start-pick` | `startPicking(sender.tab?.id, url, mode)`; the sender's tab is remembered as the editor tab. |
-| `bf:picked` | `finishPicking(message, sender.tab?.id)` |
-| `bf:pick-cancelled` | `cancelPicking()` |
+| `bf:start-pick` | `startPicking(sender.tab?.id, url, mode, urlFrom)`; the sender's tab is remembered as the editor tab. |
+| `bf:picked` | `finishPicking(message, {tabId, frameId, tabUrl})` from `sender` |
+| `bf:pick-cancelled` | `cancelPicking(sender.tab?.id)` |
+| `bf:pick-error` | from a picker in a page: `cancelPicking(sender.tab.id)` (the editor shows the message itself) |
+| `bf:picker-sync` / `bf:recorder-sync` | `relayPickerSync` / `relayRecorderSync`: passed on to every frame of the sender's tab |
 | `bf:run-workflow` | `newRunner(message.workflow).runOnce()`: runs the workflow **as sent** (the canvas, possibly unsaved), enabled or not. |
 | `bf:stop-run` | `cancelRequests.add(runId)` and `answerPrompt(runId, false)` (a run waiting on a Manual Step stops right away). |
 | `bf:answer-prompt` | `answerPrompt(runId, ok)` |
 | `bf:start-recording` / `bf:stop-recording` / `bf:recorded` | `startRecording` / `stopRecording` / `recordStep(step, sender.tab?.id)` |
-| anything else | ignored (`bf:pick-result`, `bf:pick-error` are for the editor; `bf:parse-html` fails `isExtensionMessage`). |
+| anything else | ignored (`bf:pick-result` is for the editor; `bf:parse-html` fails `isExtensionMessage`). |
 
 ## How workflows start and stop
 

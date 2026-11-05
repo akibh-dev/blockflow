@@ -1,5 +1,7 @@
 import type { FormFieldRow } from '../core/page';
 import type { RecordedStep } from '../core/recording';
+import type { PickerMode, PickerSync } from '../dom/picker';
+import type { RecorderMode } from '../dom/recorder';
 import type { Workflow } from '../core/types';
 
 /**
@@ -14,17 +16,37 @@ import type { Workflow } from '../core/types';
 export interface StartPickMessage {
   type: 'bf:start-pick';
   url?: string;
-  /** form: pick any element of a form, and get all of the form's fields back (Fill Form). */
-  mode?: 'element' | 'form';
+  /**
+   * block: the block's own URL setting (the picker tab is sent there unless it already shows it).
+   * upstream: the URL of an Open Tab before the block, a hint (the picker tab only moves when it shows another site).
+   */
+  urlFrom?: 'block' | 'upstream';
+  /** watch / action: pick one element (changes the hint); form: pick any element of a form, and get all of the form's fields back (Fill Form). */
+  mode?: PickerMode;
 }
 
-/** Picker → background. */
+/**
+ * Picker → background. Picked inside a frame, the locators already start with `frame=… >> ` and
+ * `url` is the frame's; the background replaces it with the tab's.
+ */
 export interface PickedMessage {
   type: 'bf:picked';
   selector: string;
   candidates?: string[];
   url: string;
   sample: string;
+}
+
+/** Picker in one frame → background → the pickers in every frame of that tab (see `PickerSync`). */
+export interface PickerSyncMessage {
+  type: 'bf:picker-sync';
+  sync: PickerSync;
+}
+
+/** Recorder in one frame → background → the recorders in every frame of that tab: the toolbar's mode. */
+export interface RecorderSyncMessage {
+  type: 'bf:recorder-sync';
+  mode: RecorderMode;
 }
 
 /** Picker → background. */
@@ -99,7 +121,9 @@ export type ExtensionMessage =
   | AnswerPromptMessage
   | StartRecordingMessage
   | StopRecordingMessage
-  | RecordedMessage;
+  | RecordedMessage
+  | PickerSyncMessage
+  | RecorderSyncMessage;
 
 /** Runtime list of the `type` values above; keep it in sync with `ExtensionMessage`. */
 const TYPES = new Set<string>([
@@ -114,6 +138,8 @@ const TYPES = new Set<string>([
   'bf:start-recording',
   'bf:stop-recording',
   'bf:recorded',
+  'bf:picker-sync',
+  'bf:recorder-sync',
 ]);
 
 /**

@@ -29,7 +29,7 @@ rest. Every listener calls it first.
 
 | `type` | Interface | Sender | Receiver | Payload | Response |
 | --- | --- | --- | --- | --- | --- |
-| `bf:start-pick` | `StartPickMessage` | Editor (`ConfigPanel.startPick`) | Background → `startPicking(sender.tab.id, url, mode)` | `url?: string` page to open first; `mode?: 'element' \| 'form'` | none; later `bf:pick-result` or `bf:pick-error` |
+| `bf:start-pick` | `StartPickMessage` | Editor (`ConfigPanel.startPick`) | Background → `startPicking(sender.tab.id, url, mode, urlFrom)` | `url?: string` page to pick on; `urlFrom?: 'block' \| 'upstream'` (the block's own URL, or the nearest Open Tab's); `mode?: 'watch' \| 'action' \| 'form'` | none; later `bf:pick-result` or `bf:pick-error` |
 | `bf:picked` | `PickedMessage` | Picker content script (`onPick`) | Background → `finishPicking(msg, sender.tab.id)` | `selector`, `candidates?: string[]`, `url`, `sample` | none |
 | `bf:pick-cancelled` | `PickCancelledMessage` | Picker content script (`onCancel`, Esc) | Background → `cancelPicking()` | none | none (the editor is not told) |
 | `bf:pick-result` | `PickResultMessage` | Background (`finishPicking`) | Editor (`ConfigPanel` listener) | `selector`, `candidates?` (best first), `url`, `sample`, `fields?: FormFieldRow[]` (form mode) | n/a |
@@ -39,7 +39,9 @@ rest. Every listener calls it first.
 | `bf:answer-prompt` | `AnswerPromptMessage` | Editor `PromptBanner` | Background → `answerPrompt(runId, ok)` | `runId`, `ok` (true = Continue) | none |
 | `bf:start-recording` | `StartRecordingMessage` | Editor Record button | Background → `startRecording(workflowId, url)` | `workflowId`, `url` | none; state via `bf:recording` |
 | `bf:stop-recording` | `StopRecordingMessage` | Editor (Stop in the recording bar) **or** recorder toolbar in the page (`onStop`) | Background → `stopRecording()` | none | none |
-| `bf:recorded` | `RecordedMessage` | Recorder content script (`onStep`) | Background → `recordStep(step, sender.tab.id)` | `step: RecordedStep` | none |
+| `bf:recorded` | `RecordedMessage` | Recorder content script (`onStep`, any frame; locators already `frame=…`-prefixed) | Background → `recordStep(step, sender.tab.id)` | `step: RecordedStep` | none |
+| `bf:picker-sync` | `PickerSyncMessage` | Picker content script, any frame | Background → `relayPickerSync`: `tabs.sendMessage` to every frame of the sender's tab | `sync: PickerSync` (`locked` / `state` / `command`) | none |
+| `bf:recorder-sync` | `RecorderSyncMessage` | Recorder content script, any frame | Background → `relayRecorderSync`: to every frame of the sender's tab | `mode: 'record' \| 'assert-text' \| 'assert-visible'` | none |
 
 Notes:
 
@@ -47,7 +49,7 @@ Notes:
   is fire-and-forget. Senders `.catch` the promise only to detect "worker unreachable" (the editor shows
   "Could not reach the background worker").
 - `sender.tab?.id` matters: it identifies the editor tab for `bf:start-pick` (to return to it later), the
-  picked tab for `bf:picked` (form detection runs there), and filters `bf:recorded` to the recording tab.
+  picked tab for `bf:picked` (form detection runs there), and filters `bf:recorded` to the recording tab and its popups.
 - `bf:pick-result` / `bf:pick-error` are broadcasts: every open editor tab's `ConfigPanel` receives them, but
   only one with a pending pick (`pending.current`) acts.
 

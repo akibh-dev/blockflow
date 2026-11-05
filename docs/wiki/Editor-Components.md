@@ -120,11 +120,14 @@ Delete button.
 Values shown are `{ ...def.defaultConfig, ...node.data.config }`; only what the user changes is written.
 
 **Element picking (messages).** `startPick(target, config)` stores the target in `pending` and sends
-`bf:start-pick { url?, mode }`:
+`bf:start-pick { url?, urlFrom?, mode }`:
 
-- `url` is the value of `field.pickerUrlKey` (e.g. Watch Element's page URL) when set and not templated;
-  without it the background uses the most recent web tab.
-- `mode` is `'form'` for **Detect fields**, otherwise `'element'`.
+- `url` is the value of `field.pickerUrlKey` (e.g. Watch Element's page URL) when set and not templated
+  (`urlFrom: 'block'`), else the `upstreamUrl` prop: the URL of the nearest Open Tab before the block,
+  computed by the editor (`urlFrom: 'upstream'`). Without either the background reuses the editor's picker
+  tab or the most recent web tab (see [Browser Host: picking.ts](Browser-Host.md#pickingts)).
+- `mode` is `'form'` for **Detect fields**, `'watch'` for fields with `pickPrefers: 'stable'`, otherwise
+  `'action'` (it picks the hint on the page).
 
 A `runtime.onMessage` listener applies the answer to the pending target only (so another editor tab's pick
 is ignored):

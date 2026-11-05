@@ -197,8 +197,7 @@ covered in "Harder pages (phase F)" below. Closed shadow roots are still out of 
    reuses your own tabs, so it never reloads a page you are working in.
 2. Reload it if `reload` is on, wait for load.
 3. Read it through the page agent (`read` op, so every locator works), waiting up to 6 seconds for the
-   element, for single-page apps. (`src/dom/readElement.ts`'s `readSelectorInPage` is the older CSS-only
-   reader, kept for reference.)
+   element, for single-page apps.
 
 The block compares the whitespace-normalised text with the last value in `ctx.state`. The first read only
 records a baseline. If the URL or selector changes, the baseline resets, so editing a workflow never
