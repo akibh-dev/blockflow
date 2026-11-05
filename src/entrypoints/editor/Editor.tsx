@@ -637,10 +637,13 @@ export function Editor() {
     setEdges((current) => [...current, ...flow.edges]);
     void browser.storage.local.remove(STORAGE_KEYS.recording);
     if (blocks.secrets.length > 0) {
-      const names = blocks.secrets.map((name) => `“${name}”`).join(', ');
-      window.alert(`Passwords were not recorded. On the Secrets page, create ${blocks.secrets.length === 1 ? 'a secret named' : 'secrets named'} ${names}; the recorded blocks use ${blocks.secrets.length === 1 ? 'it' : 'them'}.`);
+      window.alert(`Passwords were not recorded. Create a secret named “${blocks.secrets.join('”, “')}” on the Secrets page; the recorded blocks use it.`);
     }
   }, [recording, open]);
+
+  const selectedNode = nodes.find((node) => node.selected);
+  const [secrets] = useStorageValue<Record<string, string>>(STORAGE_KEYS.secrets, {});
+  const lastStepOfSelected = selectedNode ? [...(inspectedRun?.steps ?? [])].reverse().find((step) => step.nodeId === selectedNode.id) : undefined;
 
   /** For the picker: the URL of the nearest Open Tab before the selected block (none when it is templated). */
   const upstreamUrl = useMemo(() => {
@@ -661,10 +664,6 @@ export function Editor() {
     }
     return undefined;
   }, [nodes, edges]);
-
-  const selectedNode = nodes.find((node) => node.selected);
-  const [secrets] = useStorageValue<Record<string, string>>(STORAGE_KEYS.secrets, {});
-  const lastStepOfSelected = selectedNode ? [...(inspectedRun?.steps ?? [])].reverse().find((step) => step.nodeId === selectedNode.id) : undefined;
 
   /** What {{ can offer in the selected block: outputs of blocks before it, keys seen in its last run, secrets. */
   const suggestions = useMemo(() => {

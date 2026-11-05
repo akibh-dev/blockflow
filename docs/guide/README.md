@@ -255,11 +255,22 @@ A workflow may have several start blocks; each starts its own runs.
 - **● Record**: opens a page in a new tab and turns what you do into blocks: typing (one Fill per
   field; two or more fields + a click become Fill Form with that click as submit), selects,
   checkboxes, clicks, Enter, page changes (Wait For URL). The on-page toolbar adds **Assert text** /
-  **Assert visible** for the next element you click. Passwords are never recorded: the blocks use
-  `{{secret.password}}`.
+  **Assert visible** for the next element you click. It also records inside iframes (locators start
+  with `frame=…`) and web components (open shadow roots), and follows tabs the page opens: a **Wait
+  for Popup** block, then the steps there with `"tab": "popup"`. Passwords are never recorded: each
+  password field gets its own secret named after its label or name (`{{secret.password}}`,
+  `{{secret.adminPassword}}`…), and the editor lists the secrets to create. In a workflow that
+  already has blocks, the recording continues after the selected block (or the last block of the
+  main path), to its right and connected to it; if the workflow already opens that site, no second
+  Open Tab is added and the recorded blocks use that Open Tab's tab.
 - **🎯 Pick on page**: click the element; Enter confirms. Action fields get the most readable
   unique locator (`role=…`, `label=…`, `testid=…`); Watch/Read Element get a structural CSS selector
   (stable when the text changes). Other ways to find it are offered as one-click alternatives.
+  Elements inside iframes get `frame=<iframe css> >> …`, inside open shadow roots `host >>> …` when no
+  readable locator fits. The page: the block's own URL (Watch/Read Element), else the URL of the
+  nearest Open Tab before the block, else your last-used tab. Each editor keeps one picker tab and
+  reuses it: a block's own URL sends it to that page, an Open Tab's URL only when it shows another
+  site (so you can log in or go deeper there first, and the next pick stays on that page).
 - **🎯 Detect fields** (Fill Form): click any field of a form; all its fields are listed with hints.
 - Typing `{{` in a setting suggests names: outputs of earlier blocks, keys seen in the last run,
   `secret.*`.
@@ -278,8 +289,9 @@ profile's extension storage.
 
 | Situation | Use |
 | --- | --- |
-| A site ignores synthetic clicks/typing (checks `event.isTrusted`) | step setting `"realInput": true` on Click / Fill / Fill Form / Check / Press Key. Uses the browser's debugger (Chrome, Edge, Brave; optional permission, asked when ticked; a "debugging" bar shows while it acts). Also lets failed steps in background tabs get screenshots |
-| Payment / login widget in an iframe | `frame=<iframe css> >> <locator>` in any locator; cross-origin frames work too |
+| A site ignores synthetic clicks/typing (checks `event.isTrusted`) | step setting `"realInput": true` on Click / Fill / Fill Form / Check / Press Key. Uses the browser's debugger (Chrome, Edge, Brave; optional permission, asked when ticked; a "debugging" bar shows while it acts). Works inside iframes too, same-site and cross-site. Also lets failed steps in background tabs get screenshots |
+| Payment / login widget in an iframe | `frame=<iframe css> >> <locator>` in any locator; cross-origin frames work too. When `frame=` matches several iframes, every same-site one is searched; a cross-site one is used when they find nothing. Pick on page and Record write these locators for you |
+| Web components (open shadow roots) | `text=`, `role=`, `label=`… look inside them; CSS needs `host >>> inner`. Pick on page and Record see inside them |
 | "Sign in with…" popup, `target=_blank` link | Click, then **Wait for Popup** (`name: "popup"`), then blocks with `"tab": "popup"` |
 | `alert` / `confirm` / `prompt` | **Dialogs** (`accept` + prompt `text`, or `dismiss`) **before** the click that opens them; `read` returns `{{dialogs}}` / `{{lastDialog}}` |
 | File chooser | **Upload File** on the `<input type="file">` (hidden ones too, or its label): text you write, or a file from a URL |
@@ -344,7 +356,11 @@ profile's extension storage.
 ## 17. Limits (what a browser extension cannot do, or BlockFlow does not do yet)
 
 - Page events are synthetic (`isTrusted: false`) unless `realInput` is on (Chromium only). Real input
-  inside cross-origin iframes is not supported (coordinates are the frame's own).
+  inside iframes assumes the page is not zoomed or CSS-transformed around the frame.
+- The recorder names every popup `popup`: with two popups open at once, steps in the older one are
+  attributed to the newer. Iframes added after the page finished loading are not recorded (reload
+  or record again); a frame whose parent page does not answer BlockFlow's question about which
+  iframe it is (a page that swallows `message` events) records nothing.
 - Closed shadow roots, drag and drop, and file *drop zones* (not inputs) are not supported.
 - Run Script needs Chrome 135+ with user scripts allowed; Firefox and older Chrome explain that.
 - Pages browsers protect: `chrome://`, the extension stores, other extensions, PDF viewer. `file://`

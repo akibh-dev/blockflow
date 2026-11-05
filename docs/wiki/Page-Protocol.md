@@ -32,7 +32,7 @@ Everything here must stay JSON-serialisable: it crosses `scripting.executeScript
 | Type | Definition |
 | --- | --- |
 | `AgentCall` | `{ request: AgentRequest; budgetMs: number }`: how long the agent may retry inside the page before answering. |
-| `AgentResponse` | `{ status: 'done', result }` · `{ status: 'pending', reason }` (not possible yet; the driver asks again) · `{ status: 'error', message }` (will never work) · `{ status: 'frame', src, rest }` (locator crosses into a cross-origin iframe; run `rest` in the frame showing `src`). |
+| `AgentResponse` | `{ status: 'done', result }` · `{ status: 'pending', reason }` (not possible yet; the driver asks again) · `{ status: 'error', message }` (will never work) · `{ status: 'frame', src, rest, offset? }` (locator crosses into a cross-origin iframe; run `rest` in the frame showing `src`; for `locate`, `offset` is where that frame's content starts in this frame's viewport). |
 | `ReadKind` | `text`, `value`, `attribute`, `has-class`, `exists`, `count`, `visible`, `checked`, `enabled`. |
 | `WaitState` | `visible`, `hidden`, `attached`, `detached`, `enabled`, `text`, `no-text`. |
 | `WaitUntil` | `load`, `networkidle`, `none` (tab operations, not agent ops). |
@@ -81,7 +81,7 @@ Geometry checks (stable, hit) are skipped where there is no layout (jsdom, `Host
 | `storage` | `area: local \| session \| cookies`, `key?` | `storage()` | n/a | `{ value }`: one item (or null) or all of them. Cookies are those visible to the page (no HttpOnly). | Page Info (storage mode) |
 | `scroll` | `to: bottom \| top \| element`, `locator?` | `scroll()` | n/a | `{ height, y }` | Scroll |
 | `upload` | `locator`, `files: UploadFile[]` | `upload()` | enabled (a hidden input is fine) | `{ files: string[] }`. Accepts the input, a label, or an element containing the input. | Upload File |
-| `locate` | `locator`, `purpose: click \| fill \| set-field \| check \| press` | `locate()` | visible, enabled, stable, hit; editable for `fill` (and `set-field` on text) | `{ x, y, kind: select \| check \| text \| other }` (viewport center) | `pageDriver.actWithRealInput` only |
+| `locate` | `locator`, `purpose: click \| fill \| set-field \| check \| press` | `locate()` | visible, enabled, stable, hit; editable for `fill` (and `set-field` on text) | `{ x, y, kind: select \| check \| text \| other }` (center, in the tab's viewport: frame offsets added) | `pageDriver.actWithRealInput` only |
 
 ### Real input
 

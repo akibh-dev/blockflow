@@ -21,7 +21,7 @@ Design rationale (why short calls, why synthetic events) is in
 | Call | `pageDriver.callOnce` | `scripting.executeScript({ func, args: [call] })` in the default ISOLATED world, so it sees the content script's `globalThis`. The func returns `__blockflowAgent.run(call)` or `{status: 'missing'}`. |
 | Missing | `pageDriver.callAgent` | On `missing`, injects `agent.js` with `files:` and calls once more. A navigation gives a fresh document, so the next call re-injects. |
 | Vanished | `pageDriver.callOnce` | `executeScript` returned no result: the page went away mid-call. For actions (`click`, `fill`, `set-field`, `select`, `check`, `press`) the driver returns `{navigated: true}` rather than repeat the action. |
-| Frames | `pageDriver.actInTab` | Target is the top frame unless the agent answered `{status: 'frame'}`; then the driver looks the frame up with `webNavigation.getAllFrames` (exact URL, else prefix match) and sends `rest` to that `frameIds: [id]`, re-injecting there if needed. |
+| Frames | `pageDriver.actInTab` | Target is the top frame unless the agent answered `{status: 'frame'}`; then the driver looks the frame up with `webNavigation.getAllFrames` (children of the current frame first; exact URL, else prefix match) and sends `rest` to that `frameIds: [id]`, re-injecting there if needed. |
 
 There is one agent per document (per frame). Same-origin iframes are entered by the top-frame agent
 itself through `contentDocument` (see [Locators: frames](Locators.md#frames)); only cross-origin frames
@@ -68,7 +68,7 @@ async run({ request, budgetMs }) {
 | — (returns) | Success | `{status: 'done', result}` |
 | `Pending(reason)` | Not possible yet | Retry every 50 ms; at the deadline `{status: 'pending', reason}` (the last reason). |
 | `Fatal(message)` | Never going to work | `{status: 'error', message}` immediately. |
-| `FrameBoundaryError` | Locator crosses into a cross-origin iframe | `{status: 'frame', src, rest}` immediately. |
+| `FrameBoundaryError` | Locator crosses into a cross-origin iframe (and no same-origin frame it matches has the element) | `{status: 'frame', src, rest}` immediately; for `locate` also `offset`. |
 | `LocatorError` | Bad locator syntax/CSS/XPath/regex | Wrapped into `Fatal` by `all()`, so `error`. |
 | anything else | Bug or page oddity | `{status: 'error', message}`. `run` never rejects. |
 
@@ -179,6 +179,13 @@ waits as the action), takes `{x, y}` and drives `chrome.debugger` `Input.*` even
 ([cdp.ts](../../src/browser/cdp.ts)). The agent's only role is waiting and reporting the center and field
 kind; `set-field` on non-text fields and all non-action ops fall back to the synthetic path. See
 [Browser Host](Browser-Host.md).
+
+Coordinates are the tab's, also inside frames: for an element in a same-origin frame, `locate` brings the
+frames around it on screen and adds each frame's content origin (`getBoundingClientRect()` + `clientLeft/Top`
++ padding), walking `frameElement` up to its own document. When the locator hands over to a cross-origin
+frame, the `frame` answer to a `locate` carries `offset` (that iframe's content origin in this frame's
+viewport, after scrolling it into view), and the driver adds the offsets of every hop to the inner agent's
+`{x, y}`. Page zoom and CSS transforms around a frame are not accounted for.
 
 ## Shadow DOM
 

@@ -34,8 +34,8 @@ workflow timing goes through the scheduler.
 | `cdp.ts` | Real input and background screenshots via `debugger` | `withDebugger`, `mouseClick`, `pressKey`, `typeInto`, `captureWithDebugger`, `hasDebugger` | pageDriver, host |
 | `popups.ts` | Tabs opened by pages | `recordPopup`, `waitForPopup` | background, host |
 | `prompts.ts` | Manual Step | `askUser`, `answerPrompt`, `promptRunId`, `clearStalePrompts`, `PendingPrompt` | host, background, editor |
-| `picking.ts` | Background side of the element picker | `startPicking`, `finishPicking`, `cancelPicking` | background |
-| `recording.ts` | Background side of the recorder | `startRecording`, `recordStep`, `onRecordedTabUpdated`, `stopRecording`, `loadRecording`, `clearRecording`, `RecordingState` | background, editor (type) |
+| `picking.ts` | Background side of the element picker | `startPicking`, `finishPicking`, `cancelPicking`, `relayPickerSync` | background |
+| `recording.ts` | Background side of the recorder | `startRecording`, `recordStep`, `onRecordedPopup`, `onRecordedTabUpdated`, `relayRecorderSync`, `stopRecording`, `loadRecording`, `RecordingState` | background, editor (type) |
 | `blobStore.ts` | IndexedDB: screenshots, datasets | `saveScreenshot`, `loadScreenshot`, `readDataset`, `writeDataset`, `listDatasets`, `deleteDataset`, … | host, editor |
 | `stores.ts` | `storage.local` for workflows, logs, runs | `loadWorkflows`, `saveWorkflows`, `appendLog`, `saveRun`, `updateRuns`, … | background, editor |
 
@@ -124,14 +124,14 @@ actInTab(tabId, request: AgentRequest, timeoutMs): Promise<Record<string, unknow
 | `done` | return `result` |
 | `error` | throw its message (strict-mode violations, bad locators…) |
 | `pending` | remember `reason`, ask again immediately |
-| `frame` (`src`, `rest`) | `webNavigation.getAllFrames`, pick the frame whose URL equals `src` (or prefixes it), then continue with `locator: rest` in that `frameId` |
+| `frame` (`src`, `rest`, `offset?`) | `webNavigation.getAllFrames`, pick the frame whose URL equals `src` (or prefixes it), children of the current frame first, then continue with `locator: rest` in that `frameId`; `offset` is added up and added to a `locate` answer's `x`, `y` |
 | `vanished` | for actions (`click`, `fill`, `set-field`, `select`, `check`, `press`) return `{navigated: true}` (never repeat: it might submit twice); otherwise retry |
 | executeScript threw | tab gone → "The tab was closed"; restricted page (`chrome://`, web store, missing host permission) → "The browser does not let extensions work on this page"; else retry ("the page was busy loading") |
 
 4. Past the deadline: `Timed out after Ns: <last reason>`. Between non-pending outcomes it sleeps 250 ms.
 
 `actWithRealInput` (when `options.realInput` and the op is an action): asks the agent to `locate` the
-element (same auto-wait, returns viewport `x`, `y`, `kind`), then drives it with `cdp.ts`:
+element (same auto-wait, returns `x`, `y` in the tab's viewport, frame offsets included, and `kind`), then drives it with `cdp.ts`:
 click/hover/right/double via `mouseClick`, fill via `typeInto`, check reads the state first and only clicks
 if it differs, press clicks then `pressKey`. `select` and non-text `set-field` fall back to the agent. A
 `press` without a locator sends the key to whatever has focus.
@@ -194,28 +194,36 @@ Session storage, not memory, because the popup can open while the worker is betw
 Background half of "Pick on page"; the page half is in [Picker and Recorder](Picker-and-Recorder.md) and the
 UX in [Architecture: Element picker](../ARCHITECTURE.md#element-picker).
 
-1. `startPicking(editorTabId, url?, mode = 'element')`: with a URL (`normalizeHttpUrl`) open it in a new
-   active tab and wait for load; otherwise take the most recently accessed http(s) tab that is not the
-   editor. Store `bf:pending-pick = {editorTabId, mode}`, focus the tab and its window, inject
-   `/content-scripts/picker.js`. Any failure → `bf:pick-error` to the editor.
-2. `finishPicking(picked, pickedTabId)`: take and delete `bf:pending-pick`. In `form` mode run
-   `actInTab(... {op: 'detect-form', locator: selector}, 5000)` for the fields. Send `bf:pick-result`
-   (selector, candidates, url, sample, fields?) and focus the editor tab again.
-3. `cancelPicking()`: take the pending pick and focus the editor tab. No message is sent to the editor.
+1. `startPicking(editorTabId, url?, mode = 'action', urlFrom = 'block')`: `findTargetTab` reuses the
+   editor's picker tab (`storage.session` `bf:picker-tabs`: `Record<editorTabId, tabId>`), navigating it to a
+   block URL unless it shows that page, or to an upstream URL only when it shows another origin; without one,
+   an upstream URL takes the last-used tab on that origin, else a new remembered tab; no URL takes the
+   last-used web tab. Ends a pick still open in another tab, stores `bf:pending-pick = {editorTabId, mode,
+   tabId}`, focuses the tab and its window, sets `__blockflowPickerMode` and injects
+   `/content-scripts/picker.js` into **all frames**. Any failure → `bf:pick-error` to the editor.
+2. `relayPickerSync(message, tabId)`: `tabs.sendMessage(tabId, message)` to every frame of the tab.
+3. `finishPicking(picked, {tabId, frameId, tabUrl})`: take and delete `bf:pending-pick`, stop the pickers in
+   every frame. In `form` mode run `actInTab(... {op: 'detect-form', locator: selector}, 5000)` (the selector
+   may start with `frame=`). Send `bf:pick-result` (selector, candidates, url (the tab's URL when picked in a
+   frame), sample, fields?) and focus the editor tab again.
+4. `cancelPicking(tabId?)`: take the pending pick, stop the pickers in every frame, focus the editor tab. No
+   message is sent to the editor. Also run for a `bf:pick-error` sent by a picker.
 
 Messages to the editor go through `runtime.sendMessage`; errors (editor closed) are swallowed.
 
 ## recording.ts
 
-`bf:recording` holds one `RecordingState {workflowId, tabId, startUrl, lastUrl, steps, status}`.
+`bf:recording` holds one `RecordingState {workflowId, tabId, startUrl, lastUrl, steps, status, popups?}`.
 
 | Function | Behaviour |
 | --- | --- |
-| `startRecording(workflowId, url)` | New active tab (also an own tab), store a fresh `recording` state, wait for load, inject `/content-scripts/recorder.js` (failures on protected pages ignored). |
-| `recordStep(step, fromTabId)` | Append the step if recording and the sender is the recording tab. |
-| `onRecordedTabUpdated(tabId, change)` | A new URL adds `{kind: 'navigated', url}`; `status: 'complete'` re-injects the recorder. |
-| `stopRecording()` | `status: 'stopped'`; calls `__blockflowRecorder.stop()` in the page. The editor then converts the steps and deletes the key. |
-| `loadRecording()`, `clearRecording()` | Read / delete the key. |
+| `startRecording(workflowId, url)` | New active tab (also an own tab), store a fresh `recording` state, wait for load, inject `/content-scripts/recorder.js` into all frames (failures on protected pages ignored). |
+| `recordStep(step, fromTabId)` | Append the step if recording and the sender is the recording tab (any frame) or one of its popups (then `tab: 'popup'`). |
+| `onRecordedPopup(tabId, openerTabId, url)` | From `webNavigation.onCreatedNavigationTarget`: a tab opened by the recording tab or a popup becomes an own tab, `{kind: 'popup', url}` is appended after 300 ms, and the recorder is injected once it has loaded. |
+| `onRecordedTabUpdated(tabId, change)` | A new URL adds `{kind: 'navigated', url}` (`tab: 'popup'` in a popup, not for its first page); `status: 'complete'` re-injects the recorder. |
+| `relayRecorderSync(message, tabId)` | The toolbar's assert mode, to every frame of that tab. |
+| `stopRecording()` | `status: 'stopped'`; calls `__blockflowRecorder.stop()` in every frame of the recording tab and its popups. The editor then converts the steps and deletes the key. |
+| `loadRecording()` | Read the key. |
 
 Writes go through a promise queue (`update`) because steps arrive in bursts.
 
