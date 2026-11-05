@@ -82,7 +82,7 @@ and Brave, using the optional `debugger` permission.
 | Browser | Status |
 | --- | --- |
 | Chrome, Brave, Edge | ✅ main target. End-to-end tests run in Chromium 131 and Brave; Chrome and Edge use the same build |
-| Firefox | 🟡 builds; host permission grant and real use not verified yet. No `realInput`, no Run Script |
+| Firefox | ✅ verified with `npm run e2e:firefox` (Firefox 159): page actions, forms, scraping, datasets, uploads, popups, dialogs, screenshots. No `realInput`, no Run Script (Chromium only) |
 | Safari | 🟡 builds; never converted or run |
 
 ## Things no extension can do

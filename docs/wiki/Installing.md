@@ -12,7 +12,7 @@ Be clear about this before you start. The table follows the README's
 | --- | --- |
 | **Brave, Chromium** | Built, loaded and driven end to end many times (Brave Origin 155, Playwright's Chromium 131). This is the reference browser. |
 | **Chrome, Edge** | Same build as Brave/Chromium (`.output/chrome-mv3`). Expected to work, but no test run is recorded on them specifically. |
-| **Firefox** | Builds and passes `web-ext lint`. Loading it, granting site access and running workflows have **not** been tried yet. Real mouse/keyboard input and Run Script are not available in Firefox. |
+| **Firefox** | Builds, passes `web-ext lint` (0 errors), and passes the Firefox e2e smoke test (`npm run e2e:firefox`, Firefox 159, installed as a temporary add-on). Granting site access by hand on a normal install hasn't been tried yet. Real mouse/keyboard input and Run Script are not available in Firefox. |
 | **Safari** | The build exists, but converting it into a Safari app has **not** been tried. Treat it as unknown. |
 
 If you just want to try BlockFlow, use a Chromium browser.
@@ -48,7 +48,7 @@ That browser uses a temporary profile, so your normal logins are not there.
 On first install BlockFlow creates two example workflows, both **Off**:
 "Example: open a page every 5 minutes" and "Example: open the page when part of it changes".
 
-### Firefox (untested)
+### Firefox
 
 1. Open `about:debugging` → **This Firefox** → **Load Temporary Add-on…**
 2. Choose any file inside `.output/firefox-mv3` (for example `manifest.json`).

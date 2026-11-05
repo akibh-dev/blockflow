@@ -29,6 +29,12 @@ import { forgetLegacyWatchTabs } from '../browser/pageReader';
  * browser alarms; a runner is rebuilt whenever an alarm fires.
  */
 export default defineBackground(() => {
+  // e2e builds only: a bridge content script on the local fixture server, for the Firefox e2e runner.
+  if (import.meta.env.BF_E2E === '1') {
+    void browser.scripting
+      .registerContentScripts([{ id: 'bf-e2e-bridge', matches: ['http://127.0.0.1/*'], js: ['content-scripts/e2e-bridge.js'], runAt: 'document_start' }])
+      .catch(() => {}); // already registered
+  }
   // Short timers (under 30s) fire from memory; longer ones from alarms. Both end up in onAlarm.
   const scheduler = createBrowserScheduler((key) => {
     void onAlarm(key).catch(report('timer'));
