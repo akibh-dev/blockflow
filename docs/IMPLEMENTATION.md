@@ -76,29 +76,31 @@ matters, Firefox verified for real.
 Every block gets at least one unit test and, when it touches a page or a browser API, one e2e check.
 Blocks with no e2e check today:
 
-| Block | Missing | Add |
-| --- | --- | --- |
-| Start | e2e | Run with starting values, and as a called workflow with caller values winning |
-| Timer | e2e | Short repeating timer survives a worker stop (exists in README history; move into `run.mjs`), in-run delay, Stop during delay |
-| Schedule | e2e | `every: minutes` with a fake system time is not possible; check that the alarm is created with the right `when` |
-| Context Menu | unit + e2e | Unit: config → menu item; e2e: `contextMenus.onClicked` dispatched via `chrome.contextMenus` test hook (call the background's handler through a test-only message when `BF_E2E`) |
-| Watch Element | e2e | Change detection on `feed.html` |
-| Navigate | e2e | back/forward/reload/goto on `spa.html` |
-| Press Key | e2e | Enter submits, Control+A selects |
-| Page Info | unit + e2e | Title/meta/JSON-LD on a new `meta.html` fixture; local/session storage; cookies |
-| Stop | e2e | pass/fail outcomes |
-| Repeat, Filter | e2e | small data flows (cheap, they're pure, but prove the editor wiring) |
-| Notify | e2e | notification created (read through `chrome.notifications.getAll`) |
-| Scroll | unit | the end/top/element modes against `FakeHost` |
+| Block | Missing | Add | Done |
+| --- | --- | --- | --- |
+| Start | e2e | Run with starting values, and as a called workflow with caller values winning | x |
+| Timer | e2e | Short repeating timer survives a worker stop (exists in README history; move into `run.mjs`), in-run delay, Stop during delay | x (in-run delay, Stop during a delay, repeating trigger; the worker-stop check is not automated) |
+| Schedule | e2e | `every: minutes` with a fake system time is not possible; check that the alarm is created with the right `when` | x |
+| Context Menu | unit + e2e | Unit: config → menu item; e2e: `contextMenus.onClicked` dispatched via `chrome.contextMenus` test hook (call the background's handler through a test-only message when `BF_E2E`) | x (`bf:e2e-menu-click`, BF_E2E builds only) |
+| Watch Element | e2e | Change detection on `feed.html` | x (on a new `ticker.html`: `feed.html` does not change by itself) |
+| Navigate | e2e | back/forward/reload/goto on `spa.html` | x (goto/reload; back fails in Chromium after a goto: known bug, printed as `!`) |
+| Press Key | e2e | Enter submits, Control+A selects | x (`keys.html`) |
+| Page Info | unit + e2e | Title/meta/JSON-LD on a new `meta.html` fixture; local/session storage; cookies | x |
+| Stop | e2e | pass/fail outcomes | x |
+| Repeat, Filter | e2e | small data flows (cheap, they're pure, but prove the editor wiring) | x |
+| Notify | e2e | notification created (read through `chrome.notifications.getAll`) | x |
+| Scroll | unit | the end/top/element modes against `FakeHost` | x |
 
 Also:
 
-- [ ] **Split `tests/e2e/run.mjs`** (≈600 lines) into one file per area under `tests/e2e/specs/`, sharing
+- [x] **Split `tests/e2e/run.mjs`** (≈600 lines) into one file per area under `tests/e2e/specs/`, sharing
   `harness.mjs` (launch, `seedWorkflows`, `run`, `check`). `npm run e2e -- <name>` runs one area.
-- [ ] **e2e in CI.** A GitHub Actions job runs Chromium headless with the extension (new headless
+- [x] **e2e in CI.** A GitHub Actions job runs Chromium headless with the extension (new headless
   supports extensions) under `xvfb-run` as a fallback. Runs on PRs touching `src/browser`, `src/dom`,
   `src/entrypoints`, `tests/e2e`.
-- [ ] **Coverage report** (`vitest --coverage`) published as a CI artifact; no threshold yet.
+- [x] **Coverage report** (`vitest --coverage`) published as a CI artifact; no threshold yet.
+  (`npm run test:coverage`; the e2e job runs on every PR and push to `main`, not only on PRs touching
+  `src/browser`, `src/dom`, `src/entrypoints`, `tests/e2e`.)
 
 ### M0.4 Firefox verification
 

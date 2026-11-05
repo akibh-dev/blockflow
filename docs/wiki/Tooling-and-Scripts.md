@@ -110,22 +110,32 @@ AI tools. It points AI tools that **write workflows** at the usage guide, `block
 
 ## CI workflow
 
-[.github/workflows/ci.yml](../../.github/workflows/ci.yml), job `check` on `ubuntu-latest`, triggered by pushes
-to `main` and every pull request:
+[.github/workflows/ci.yml](../../.github/workflows/ci.yml), triggered by pushes to `main` and every pull
+request (the GitHub mirror only receives `main`, so there it runs after a merge). Two jobs on `ubuntu-latest`:
+
+**`check`**
 
 | Step | Command |
 | --- | --- |
 | Checkout, Node 22 with npm cache | `actions/checkout@v4`, `actions/setup-node@v4` |
 | Install | `npm ci` (runs `wxt prepare`) |
 | Typecheck | `npm run typecheck` |
-| Unit tests | `npm test` |
+| Unit tests with coverage | `npm run test:coverage` (`vitest run --coverage` with `@vitest/coverage-v8`, settings in `vitest.config.ts`; no threshold) |
+| Coverage artifact | `actions/upload-artifact@v4`: `coverage/` as `coverage` (HTML report and `coverage-summary.json`) |
 | Learning examples | `npm run learn:check` |
 | Block reference | `npm run guide:check` |
 | Wiki links | `npm run wiki:check` |
 | Builds | `npm run build`, `npm run build:firefox` |
 
-Not in CI: the Safari build and `npm run e2e` (needs a
-desktop browser). Run `npm run check` locally before pushing.
+**`e2e`** (30 minute limit)
+
+| Step | Command |
+| --- | --- |
+| Checkout, Node 22, install | As above |
+| Browser | `npx playwright install --with-deps chromium` |
+| End-to-end tests | `BF_BROWSER` set to `chromium.executablePath()` from `playwright-core`, then `BF_HEADLESS=1 xvfb-run -a npm run e2e` (new headless loads extensions; `xvfb-run` provides a display as a fallback) |
+
+Not in CI: the Safari build. Run `npm run check` locally before pushing. See [Testing](Testing.md#ci).
 
 ## See also
 
