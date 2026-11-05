@@ -192,6 +192,7 @@ src/
     timerKey.ts          timer and state keys (bf::<workflow>::<node>::<name>)
     recording.ts         turns recorded steps into blocks
     playwright.ts        exports a workflow as a Playwright .spec.ts
+    playwrightRuntime.ts inlines expression/CSV/template code into exported specs
     workflow.ts          diffWorkflows() decides what the background must start/stop
     id.ts, text.ts       small helpers
   dom/                   Code that runs inside web pages
