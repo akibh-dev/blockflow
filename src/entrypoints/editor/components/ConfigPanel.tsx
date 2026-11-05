@@ -236,7 +236,12 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
 
       {lastStep && <StepResult step={lastStep} />}
 
-      <StepSettingsEditor step={node.data.step ?? {}} onChange={(patch) => onStepChange(node.id, patch)} defaultTimeout={def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS} />
+      <StepSettingsEditor
+        step={node.data.step ?? {}}
+        onChange={(patch) => onStepChange(node.id, patch)}
+        defaultTimeout={def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS}
+        realInput={def.realInput === true}
+      />
 
       <details className="bf-outputs">
         <summary>Data this block passes on</summary>
@@ -411,10 +416,13 @@ function StepSettingsEditor({
   step,
   onChange,
   defaultTimeout,
+  realInput,
 }: {
   step: StepSettings;
   onChange(patch: Partial<StepSettings>): void;
   defaultTimeout: number;
+  /** The block's page actions honour real input (`BlockDefinition.realInput`). */
+  realInput: boolean;
 }) {
   const configured = Boolean(step.timeoutSeconds || step.retries || (step.onError && step.onError !== 'stop') || step.disabled || step.note || step.screenshot || step.realInput);
   return (
@@ -458,17 +466,20 @@ function StepSettingsEditor({
         </select>
         <small className="bf-muted">Only possible while the tab is showing in its window (Open Tab “in a new window” works best).</small>
       </label>
-      <label className="bf-field bf-inline" title="For sites that ignore synthetic clicks and typing. Chromium browsers only.">
-        <input
-          type="checkbox"
-          checked={step.realInput === true}
-          onChange={(event) => {
-            if (!event.target.checked) onChange({ realInput: false });
-            else void requestPermission('debugger').then((granted) => onChange({ realInput: granted }));
-          }}
-        />
-        <span>Use real mouse and keyboard (debugger)</span>
-      </label>
+      {/* Only page actions use it; still shown when set elsewhere (an imported file) so it can be cleared. */}
+      {(realInput || step.realInput === true) && (
+        <label className="bf-field bf-inline" title="For sites that ignore synthetic clicks and typing. Chromium browsers only.">
+          <input
+            type="checkbox"
+            checked={step.realInput === true}
+            onChange={(event) => {
+              if (!event.target.checked) onChange({ realInput: false });
+              else void requestPermission('debugger').then((granted) => onChange({ realInput: granted }));
+            }}
+          />
+          <span>Use real mouse and keyboard (debugger)</span>
+        </label>
+      )}
       <label className="bf-field bf-inline">
         <input type="checkbox" checked={step.disabled === true} onChange={(event) => onChange({ disabled: event.target.checked })} />
         <span>Disabled (skip it, pass the data through)</span>

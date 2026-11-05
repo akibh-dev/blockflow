@@ -3,6 +3,7 @@ import { deleteDataset, listDatasets } from '../../../browser/blobStore';
 import type { Dataset } from '../../../browser/blobStore';
 import { toCsv } from '../../../core/csv';
 import { downloadText, fileNameFor } from '../files';
+import { confirmDialog } from './Dialogs';
 
 const PREVIEW_ROWS = 50;
 
@@ -74,13 +75,16 @@ export function DataPage() {
               <button
                 type="button"
                 className="bf-danger"
-                onClick={() => {
-                  if (!window.confirm(`Delete the dataset “${current.name}” (${current.rows.length} rows)?`)) return;
-                  void deleteDataset(current.name).then(() => {
-                    setOpen(null);
-                    refresh();
-                  });
-                }}
+                onClick={() =>
+                  void confirmDialog({ title: 'Delete dataset', message: `Delete the dataset “${current.name}” (${current.rows.length} rows)?`, confirmLabel: 'Delete', danger: true }).then(
+                    async (ok) => {
+                      if (!ok) return;
+                      await deleteDataset(current.name);
+                      setOpen(null);
+                      refresh();
+                    },
+                  )
+                }
               >
                 Delete
               </button>
