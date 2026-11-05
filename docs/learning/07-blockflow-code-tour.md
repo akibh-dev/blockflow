@@ -7,11 +7,14 @@ Read in this order. Each stop says what to look for and what to try. Budget one 
 ## 0. Setup
 
 ```bash
-npm install && npm run check     # typecheck + tests
+npm install && npm run check     # typecheck + tests + docs in sync
 npm run dev                      # Chrome with hot reload
 ```
 
 Then use the extension once: the "Try it end to end" section of the root `README.md`.
+
+This tour picks the files worth reading; the internals wiki (`docs/wiki/Home.md`) explains every
+file, for when you want the rest.
 
 ## 1. The product in one picture
 
@@ -48,12 +51,12 @@ Key idea: **the engine never talks to the browser.** It talks to `Host` (`src/co
 in the extension it is `src/browser/host.ts`. This is dependency inversion, and it is what let us test the
 whole engine without a browser.
 
-Try: add `console.log` to `run` of Open URL and run the Timer test. Remove it.
+Try: add `console.log` to `run` of Open Tab (`openUrl.ts`) and run the Timer test. Remove it.
 
 ## 4. Templating: `src/core/template.ts`
 
 `{{tick}}`, `{{$json.x}}`, `{{rows[0]}}`. Small, pure, heavily tested; a good "how would I write this"
-exercise: read the tests first and try to implement `renderTemplate` yourself before reading it.
+exercise: read the tests first and try to implement `render` yourself before reading it.
 
 ## 5. The browser layer: `src/browser/`
 
@@ -65,6 +68,11 @@ exercise: read the tests first and try to implement `renderTemplate` yourself be
 | `picking.ts` | start/finish the element picker | 3 |
 | `stores.ts` | storage wrappers | 4 |
 | `pageDriver.ts`, `navigation.ts` | page agent calls, waiting for load / URL / network idle | 3, 5 |
+| `htmlParse.ts` | runs the agent on fetched HTML (Chrome: through the offscreen document) | 10 below |
+| `blobStore.ts` | IndexedDB: screenshots and datasets | 9 below |
+| `prompts.ts` | Manual Step: notification buttons + editor banner | 4 |
+| `recording.ts`, `ownTabs.ts` | the recorder's tab; tabs BlockFlow opened | 11 below |
+| `cdp.ts`, `popups.ts` | real input through the debugger; popups of a run's tab | 12 below |
 | `host.ts` | assembles the `Host` | 6 |
 
 Read `hybridScheduler.ts` with its test file `tests/browser/hybridScheduler.test.ts` open. The test uses a
@@ -72,7 +80,7 @@ fake clock; advancing time by hand is how you test timing code without waiting.
 
 ## 6. The worker: `src/entrypoints/background.ts`
 
-About 140 lines. Check against lesson 4: top-level synchronous listeners ✔, no state in variables ✔,
+Under 300 lines. Check against lesson 4: top-level synchronous listeners ✔, no state in variables ✔,
 `restoreAll()` at each start ✔, storage as the bus between editor and worker ✔ (`storage.onChanged` +
 `diffWorkflows`).
 
@@ -160,16 +168,18 @@ can already read this directory.
 
 ## Project exercises (pick any, in rising difficulty)
 
-1. **Delay-free logger block.** New block `log` that writes `{{message}}` to the run log and passes the
-   payload on. Steps: `src/core/blocks/log.ts` → register in `index.ts` → a test using `fakeHost.ts`.
-   The editor needs no change.
+1. **Delay-free logger block**: already built (`log.ts`). Read it, then write a **Counter** block that
+   adds `count` (kept in `ctx.state`) to the payload and passes it on. Steps: `src/core/blocks/counter.ts`
+   → register in `index.ts` → a test using `fakeHost.ts`. The editor needs no change.
 2. **Notification block** (already built in `notify.ts`: read it, then add a different Host method, e.g. clipboard). Needs the `notifications` permission and a new `Host` method (`notify`). Touch
    `types.ts`, `fakeHost.ts`, `host.ts`, `wxt.config.ts`. This is how you extend the Host.
 3. **IF block** with two outputs: already built (`ifBlock.ts`, `ports.ts`). Read how `routeTo` and
    `edgePort` work, then write a **Switch** block with one output per case.
 4. **Hover-and-read block** using the page agent: add an op to `src/core/page.ts`, handle it in
    `src/dom/agent.ts` (test it in `tests/dom/agent.test.ts` first), then a block that calls it.
-5. **Cron-ish Timer** ("every day at 09:00"): needs `when` alarms and `restoreAll()` thinking.
+5. **Cron-ish Timer** ("every day at 09:00"): already built as Schedule (`scheduleBlock.ts`,
+   `src/core/schedule.ts`). Read how it plans one one-shot timer at a time, then add a "last day of the
+   month" option with tests.
 6. **Import/export workflows** as JSON: already built (`library.ts`). Compare it with how you would have done it.
 
 Rule for all of them (from `CLAUDE.md`): `src/core` stays free of browser APIs; payloads stay

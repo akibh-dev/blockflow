@@ -25,8 +25,8 @@ Checklist when something silently fails:
 | Layer | Tool | BlockFlow example | What it proves |
 | --- | --- | --- | --- |
 | Pure logic | Vitest in Node | `tests/core/*` | Engine, templating, validation |
-| DOM code | Vitest + jsdom (or real Chromium) | `tests/dom/*` | Selector generation, picker |
-| Real browser | Load the unpacked build and drive it (Playwright, `--load-extension`) | see below | The wiring, which the other two cannot see |
+| DOM code | Vitest + jsdom (or real Chromium) | `tests/dom/*` | Selector generation, picker, locators, page agent, recorder |
+| Real browser | Load the unpacked build and drive it (Playwright, `--load-extension`) | `npm run e2e` (`tests/e2e/run.mjs`) | The wiring, which the other two cannot see |
 
 **Make code testable by separating it from the browser.** BlockFlow's `Host` interface and the
 `HybridScheduler`'s ports (alarms/store/clock/ping) exist for this. If the logic imports `chrome.*`
@@ -69,8 +69,12 @@ clicked from a script (open `popup.html` as a tab instead; note `activeTab` does
 ## What to learn after this
 
 - `chrome.declarativeNetRequest` (block/redirect requests, uBlock-style).
-- Side panel API, context menus, commands (keyboard shortcuts).
-- Offscreen documents (a DOM in MV3 for things like parsing HTML or playing audio).
+- Side panel API, commands (keyboard shortcuts), context menus (BlockFlow's Context Menu block:
+  `contextMenus` in `background.ts`).
+- Offscreen documents (a DOM in MV3 for things like parsing HTML or playing audio; BlockFlow parses
+  fetched HTML in one: `src/entrypoints/offscreen/`, `src/browser/htmlParse.ts`).
+- The `debugger` (Chrome DevTools Protocol) and `userScripts` APIs, as optional permissions:
+  `src/browser/cdp.ts` and the Run Script block.
 - `chrome.identity` for OAuth with a backend (your SaaS skills apply directly).
 
 Back to the [index](README.md).

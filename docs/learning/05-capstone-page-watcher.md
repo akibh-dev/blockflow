@@ -323,7 +323,7 @@ a tab, copy its address, use selector `#now`, every 0.1 minutes. (Open it from d
 | This capstone | BlockFlow |
 | --- | --- |
 | One hard-coded watch | Any number of Watch Element *blocks* in any flow |
-| Reports to a history list | Passes `{value, previous, changed}` to the next block (Open URL, ...) |
+| Reports to a history list | Passes `{value, previous, url, changedAt}` to the next block (Open Tab, Notify, ...) |
 | Comparison inline | `src/core/blocks/watchElement.ts` with a baseline signature (url+selector) |
 | Poll tab by sleeping/polling | `src/browser/pageReader.ts`, same idea, plus a per-URL tab registry |
 | Alarms only | `HybridScheduler` for sub-30s |

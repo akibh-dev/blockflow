@@ -30,8 +30,10 @@ the extension, like a file in `app/` becomes a route.
 | content script with `registration: 'runtime'` | injected on demand | `scripting.executeScript({files})` |
 | `options/index.html` | options page | `options_ui` |
 
-In BlockFlow: `background.ts`, `picker.content.ts` (runtime-registered), `editor/` (React app). Compare
-with `wxt.config.ts` for the manifest parts WXT cannot infer (permissions).
+In BlockFlow: `background.ts`, `picker.content.ts`, `agent.content.ts` and `recorder.content.ts` (all
+runtime-registered), `editor/` (React app) and `offscreen/` (a hidden page Chrome's worker uses for
+`DOMParser`). Compare with `wxt.config.ts` for the manifest parts WXT cannot infer (permissions, optional
+permissions, a separate e2e build).
 
 ## Start a fresh WXT project (do this yourself)
 
