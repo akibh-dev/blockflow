@@ -33,4 +33,5 @@ finishing and extending, not replacing.
 
 - [Capabilities and Limitations](Capabilities-and-Limitations.md): today's ✅ / ❌ per feature
 - [docs/PLAN.md](../PLAN.md): the full plan, the bug list and the decisions
+- [docs/IMPLEMENTATION.md](../IMPLEMENTATION.md): how each milestone is built, task by task, with progress
 - [What is BlockFlow](What-is-BlockFlow.md) · [Home](Home.md)

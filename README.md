@@ -291,7 +291,7 @@ needed.
 ## Roadmap ideas
 
 The product plan (Playwright-compatible automation in your browser, for people and LLMs; milestones M0–M6) is
-[docs/PLAN.md](docs/PLAN.md). Phases A–F, already built, are in [docs/PLAN-automation.md](docs/PLAN-automation.md).
+[docs/PLAN.md](docs/PLAN.md), built task by task per [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md). Phases A–F, already built, are in [docs/PLAN-automation.md](docs/PLAN-automation.md).
 
 Folders for workflows, per-workflow permissions, If with several conditions, resuming an interrupted run,
 Web Store packaging. (Done since the first version of this list: If with true/false outputs, reading

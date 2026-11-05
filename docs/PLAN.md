@@ -1,6 +1,6 @@
 # BlockFlow product plan: Playwright-compatible automation in your browser
 
-> **Status:** agreed, 2026-11-05 (decisions in §8). This plan replaces the
+> **Status:** agreed, 2026-11-05 (decisions in §8). Task-level steps: [IMPLEMENTATION.md](IMPLEMENTATION.md). This plan replaces the
 > phase list in [PLAN-automation.md](PLAN-automation.md) (phases A–F, all built) as the guide for what comes next.
 
 ## 1. Goal
