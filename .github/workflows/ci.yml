@@ -14,10 +14,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # Switch to `npm ci` once package-lock.json is committed.
-      - run: npm install
+      - run: npm ci
       - run: npm run typecheck
       - run: npm test
       - run: npm run learn:check
+      - run: npm run guide:check
+      - run: npm run wiki:check
       - run: npm run build
       - run: npm run build:firefox

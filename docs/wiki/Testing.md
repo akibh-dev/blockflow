@@ -1,0 +1,289 @@
+# Testing
+
+How BlockFlow is tested: the Vitest unit suites (engine, blocks, page agent, editor model), the fake host they
+share, the Playwright-driven end-to-end run against a real browser, and CI. Read this before adding a test or
+when a test fails and you need to know what it exercises. The reasoning behind the layers is in
+[ARCHITECTURE.md, Testing strategy](../ARCHITECTURE.md#testing-strategy); this page is the reference.
+
+**Source:** [vitest.config.ts](../../vitest.config.ts) · [tests/helpers/fakeHost.ts](../../tests/helpers/fakeHost.ts) ·
+[tests/e2e/run.mjs](../../tests/e2e/run.mjs) · [tests/e2e/server.mjs](../../tests/e2e/server.mjs) ·
+[tests/fixtures/site/](../../tests/fixtures/site) · [docs/manual-test/clock.html](../manual-test/clock.html) ·
+[.github/workflows/ci.yml](../../.github/workflows/ci.yml)
+
+## Commands
+
+| Command | What runs |
+| --- | --- |
+| `npm test` | `vitest run`: every `tests/**/*.test.ts` once (27 files, about 300 tests, a few seconds) |
+| `npm run test:watch` | `vitest` in watch mode |
+| `npx vitest run tests/core/engine.test.ts` | One file; add `-t "name"` to filter by test name |
+| `npm run check` | typecheck + tests + `learn:check` + `guide:check` (+ `wiki:check`), see [Tooling and Scripts](Tooling-and-Scripts.md) |
+| `npm run e2e` | `BF_E2E=1 wxt build` then `node tests/e2e/run.mjs` (real browser, see [below](#end-to-end-tests-testse2e)) |
+
+## Layout
+
+| Folder | Environment | Tests |
+| --- | --- | --- |
+| `tests/core/` | node | Engine, blocks and pure `src/core` modules, through `FakeHost` |
+| `tests/browser/` | node | `src/browser/hybridScheduler.ts` with an injected fake clock, alarms and store |
+| `tests/dom/` | jsdom (per-file docblock) | `src/dom/*`: page agent, locators, selectors, picker, recorder |
+| `tests/editor/` | node | Pure editor model (`flow/convert.ts`), no React rendering |
+| `tests/helpers/` | n/a | `fakeHost.ts`: `FakeHost`, `harness()`, `flow()` |
+| `tests/e2e/` | Node script, not Vitest | Real browser run via `playwright-core` |
+| `tests/fixtures/site/` | n/a | HTML pages served to the e2e run |
+
+### Environments
+
+[vitest.config.ts](../../vitest.config.ts) includes `tests/**/*.test.ts` and sets `environment: 'node'` for
+everything. `src/core` has no DOM or browser API (see [Core Engine](Core-Engine.md)), so Node is enough.
+Files that need a DOM opt in with a docblock on their first line:
+
+```ts
+// @vitest-environment jsdom
+```
+
+All five `tests/dom/*.test.ts` files do this. No other setup file, globals or path aliases exist: tests
+import from `vitest` and use relative paths (`../../src/core/...`), as the codebase rule requires.
+
+jsdom is not a browser. If a `tests/dom` test fails, suspect jsdom gaps (selector engine, `composedPath`,
+layout: everything has a zero-size box) before suspecting the code. The DOM tests were originally written
+against real Chromium.
+
+## What each test file covers
+
+| File | Covers |
+| --- | --- |
+| [core/engine.test.ts](../../tests/core/engine.test.ts) | Timer as a start block (one-shot, repeating, `{{tick}}`), Open URL, Watch Element as a start block, composing blocks in any order, lifecycle (start/stop, a fresh runner continuing after a "worker restart") |
+| [core/runs.test.ts](../../tests/core/runs.test.ts) | If true/false ports, `runOnce` (Run button), step settings (timeout, retries, `onError`, disabled), runs from schedules, conditions, run records |
+| [core/blocks.test.ts](../../tests/core/blocks.test.ts) | Set Variable → If → Notify, HTTP Request, Read Element → If → Notify state tracking |
+| [core/pageBlocks.test.ts](../../tests/core/pageBlocks.test.ts) | Open Tab and the run's session tab, page actions send the right `AgentRequest`s, Wait For, Read Element on the run's tab, `urlMatches` |
+| [core/advanced.test.ts](../../tests/core/advanced.test.ts) | Upload File, Wait for Popup, Dialogs, Run Script, Wait For response |
+| [core/dataBlocks.test.ts](../../tests/core/dataBlocks.test.ts) | Extract List / Table, For Each, Repeat, Filter, Transform, Data Table, Paginate, datasets and downloads |
+| [core/testing.test.ts](../../tests/core/testing.test.ts) | Assert, screenshots, Run Workflow (sub-workflows), secrets, Manual Step, Stop, Log |
+| [core/triggers.test.ts](../../tests/core/triggers.test.ts) | Schedule, Start block, Page Visited / Context Menu triggers |
+| [core/config.test.ts](../../tests/core/config.test.ts) | `withDefaults`, `resolveConfig`, `validateConfig` |
+| [core/validate.test.ts](../../tests/core/validate.test.ts) | `validateWorkflow` |
+| [core/workflow.test.ts](../../tests/core/workflow.test.ts) | `diffWorkflows`, `behaviourSignature`, `createWorkflow`, sample workflows, timer keys, `uid` |
+| [core/library.test.ts](../../tests/core/library.test.ts) | `uniqueName`, clone / duplicate, export / import |
+| [core/expression.test.ts](../../tests/core/expression.test.ts) | Expression language and templates with expressions |
+| [core/template.test.ts](../../tests/core/template.test.ts) | `render`, `hasTemplate`, `getPath` |
+| [core/csv.test.ts](../../tests/core/csv.test.ts) | CSV parse / write |
+| [core/url.test.ts](../../tests/core/url.test.ts) | `normalizeHttpUrl` |
+| [core/report.test.ts](../../tests/core/report.test.ts) | JUnit / HTML report generation from run records |
+| [core/recordingSchedule.test.ts](../../tests/core/recordingSchedule.test.ts) | Schedule parsing, recorded actions → blocks |
+| [core/playwright.test.ts](../../tests/core/playwright.test.ts) | Locators and whole workflows → Playwright test source |
+| [core/guideExamples.test.ts](../../tests/core/guideExamples.test.ts) | Every `docs/guide/examples/*.blockflow.json` imports with `parseImport` and has no validation errors (one test per file) |
+| [browser/hybridScheduler.test.ts](../../tests/browser/hybridScheduler.test.ts) | Timers ≥ 30 s (alarms), < 30 s (in-memory + keep-alive), clearing, worker restart, end to end with the engine. Uses local `FakeClock`, `FakeAlarms`, `MemoryTimerStore`. See [Scheduling and Timers](Scheduling-and-Timers.md) |
+| [dom/agent.test.ts](../../tests/dom/agent.test.ts) | Page agent ops: click, fill/type, select/check/press, read/wait/detect-form, scraping, frames, upload and locate. See [Page Agent](Page-Agent.md) |
+| [dom/locator.test.ts](../../tests/dom/locator.test.ts) | `parseLocator`, `resolveLocator`, ARIA name/role, `locatorCandidates`. See [Locators](Locators.md) |
+| [dom/selector.test.ts](../../tests/dom/selector.test.ts) | `cssEscape`, stable id/class heuristics, `generateSelector` (incl. a property test: every element gets a selector matching only itself), `ElementNavigator`, `sampleText`, `readSelectorInPage` |
+| [dom/picker.test.ts](../../tests/dom/picker.test.ts) | Element picker overlay. See [Picker and Recorder](Picker-and-Recorder.md) |
+| [dom/recorder.test.ts](../../tests/dom/recorder.test.ts) | Recorder captures user actions in a page |
+| [editor/convert.test.ts](../../tests/editor/convert.test.ts) | Workflow ⇄ React Flow canvas conversion, ports and step settings. See [Editor](Editor.md) |
+
+## fakeHost.ts
+
+[tests/helpers/fakeHost.ts](../../tests/helpers/fakeHost.ts) implements the whole `Host` interface
+(`src/core/types.ts`, see [Core Engine](Core-Engine.md) and [Browser Host](Browser-Host.md)) in memory. Every
+capability **records** what it was asked in a public array and **answers** through a replaceable property.
+
+### Exports
+
+| Export | Kind | Purpose |
+| --- | --- | --- |
+| `FakeScheduler` | class (`Scheduler`) | Timers in a `Map` (`timers`). Nothing fires on its own. `take(key)` deletes one-shot timers, keeps periodic ones. `keysNamed(name)` finds keys whose timer name (the part after the third `::`) starts with `name` |
+| `MemoryState` | class (`StateStore`) | `Map` in `data` |
+| `PageReader` | type | `(options: ReadElementOptions) => Promise<ReadElementResult>` |
+| `FakeHost` | class (`Host`) | The fake host, below |
+| `Harness` | interface | What `harness()` returns |
+| `harness(workflow, host?, maxSteps?)` | function | Builds a `WorkflowRunner` with `createDefaultRegistry()`, collecting logs and runs |
+| `flow(nodes, edges)` | function | Compact workflow builder |
+
+### FakeHost: what to replace (inputs)
+
+| Property | Default | Answers |
+| --- | --- | --- |
+| `pageReader` | `{ found: true, text: '' }` | `page.readElement` (Watch Element, Read Element) |
+| `pageTexts(...texts)` | method | Sets `pageReader` to return the texts one per read, repeating the last |
+| `agent(tabId, request)` | `{}` | `page.act`: the page agent's reply. Throw to simulate a failure |
+| `httpHandler(options)` | `200`, empty body | `http.fetch` |
+| `htmlAgent(html, baseUrl, request)` | `{}` | `html.act` (scraping fetched HTML, no tab) |
+| `scriptResult` | `null` | `page.runScript` return value |
+| `shownDialogs` | `[]` | What `page.dialogs` reports as shown |
+| `promptAnswer` | `true` | `prompt.ask` (Manual Step: continue or not) |
+| `currentTab` | `null` | `tabs.current()` (Run on Page Visited / Context Menu) |
+| `popups` | `[]` | Push `{ openerTabId, tabId, url }` for `tabs.waitForPopup` to consume |
+| `responses` | `[]` | Push `{ tabId, url, status }` for `tabs.waitForResponse` |
+| `savedWorkflows` | empty `Map` | `workflows.get(id)` (Run Workflow) |
+| `secretValues` | `{}` | `secrets.all()` |
+| `datasetRows` | empty `Map` | `datasets.read` / `write` (append or replace) |
+| `tabUrls` | empty `Map` | Open tabs (id → URL). Pre-seed to simulate an existing tab |
+
+### FakeHost: what to assert on (records)
+
+| Property | Filled by |
+| --- | --- |
+| `opened` | `tabs.open` options (new tab ids start at 100; `reuseTabId` reuses an open tab) |
+| `navigations`, `loads` | `tabs.navigate`, `tabs.waitForLoad` and `open` with a `waitUntil` |
+| `actions` | `page.act`: `{ tabId, request, timeoutMs }` |
+| `realInputs` | `page.act`: whether `realInput` was requested, in order |
+| `reads` | `page.readElement` options |
+| `requests` | `http.fetch` options |
+| `notifications` | `notify` |
+| `dialogSettings`, `scripts` | `page.dialogs`, `page.runScript` |
+| `screenshotsTaken` | `screenshots.capture` (returns `shot-1`, `shot-2`, …) |
+| `downloaded` | `downloads.save` |
+| `prompts` | `prompt.ask` messages |
+| `sleeps` | Every `host.sleep(ms)` (timeouts, retry backoff, Assert polling) |
+| `scheduler.timers`, `state.data` | Pending timers and block state |
+
+Behaviour worth knowing:
+
+- `page.act` and `tabs.navigate` throw `The tab was closed` if the tab id is not in `tabUrls`.
+- `tabs.waitForPopup`, `waitForResponse`, `waitForUrl` throw timeout-style errors immediately when nothing
+  matches, so tests of the error path need no waiting.
+- **Two kinds of time.** `now()` is a fake wall clock starting at `2026-01-01T00:00:00.000Z`, moved only by
+  `advance(ms)`. `sleep(ms)` is virtual: sleeps resolve in order of their due time, one per macrotask, without
+  real waiting (a 250 ms poll resolves before a 10 s timeout). `advance` does not fire timers.
+- `http.download(url)` returns a fake PNG named after the URL's last segment.
+
+### harness() and flow()
+
+```ts
+import { flow, harness } from '../helpers/fakeHost';
+
+const h = harness(
+  flow(
+    [
+      { id: 't', type: 'timer', config: { seconds: 10, repeat: true } },
+      { id: 'o', type: 'open-url', config: { url: 'https://example.com/{{tick}}' } },
+    ],
+    [['t', 'o']], // [from, to] or [from, to, port], e.g. ['if', 'x', 'true']
+  ),
+);
+await h.runner.start();
+await h.fire('tick');                       // runs runner.handleTimer for the first timer named "tick…"
+expect(h.host.opened[0].url).toBe('https://example.com/1');
+```
+
+| `Harness` member | Meaning |
+| --- | --- |
+| `host`, `runner`, `logs` | The FakeHost, the `WorkflowRunner`, every `LogEntry` |
+| `runs` | Latest copy of each `RunRecord` by id, in start order (from the runner's `onRun`) |
+| `lastRun()` | The most recently started run |
+| `restart()` | A **new** runner for the same workflow and host, like the background worker waking up |
+| `fire(name)` | Fires the first scheduled timer whose name starts with `name`; throws if none |
+| `messages(level?)` | Logged messages, optionally filtered by level |
+
+`flow()` gives each workflow a unique id (`wf1`, `wf2`, …), `enabled: true`, `schemaVersion: 1`, positions
+along x, and edge ids `source-port-target`. Node `step` settings pass through. `harness(wf, host, maxSteps)`
+passes `maxSteps` to the runner (loop guard tests).
+
+## Writing a new test
+
+1. **A block or engine behaviour:** put it in the matching `tests/core/*.test.ts`. Build the workflow with
+   `flow()`, wire the host's answers (`h.host.agent = async (tabId, request) => …`), run with
+   `h.runner.runOnce()` or `start()` + `fire()`, then assert on `h.lastRun()`, `h.host.actions` and friends.
+   For a page block, assert on the `AgentRequest` it sends; the agent itself is tested in `tests/dom`.
+   See [Adding a Block](Adding-a-Block.md).
+2. **A page ability:** add the op to `src/core/page.ts`, implement it in `src/dom/agent.ts`, and test it in
+   `tests/dom/agent.test.ts` against a jsdom document (`document.body.innerHTML = …`). See
+   [Page Protocol](Page-Protocol.md).
+3. **Worker restarts:** call `h.restart()` and drive the new runner. State must come from `host.state`, not
+   memory.
+4. **Never real timers.** Use `fire()` and `advance()`; `host.sleep` is already virtual.
+5. **Guide examples** are covered automatically: drop a valid `*.blockflow.json` into `docs/guide/examples/`.
+6. Something that needs a real browser API: add a scenario to `tests/e2e/run.mjs` (and a fixture page).
+
+## End-to-end tests (tests/e2e)
+
+`npm run e2e` runs `BF_E2E=1 wxt build` and then `node tests/e2e/run.mjs`. It is not part of `npm test`,
+`npm run check` or CI: it needs a desktop browser and takes minutes.
+
+### The e2e build
+
+With `BF_E2E=1`, [wxt.config.ts](../../wxt.config.ts) writes to `.output-e2e/` (never mixed up with the build
+you load by hand) and moves `debugger` and `userScripts` from `optional_permissions` into `permissions`,
+because an automated browser cannot click the permission prompt. See [Build and Release](Build-and-Release.md).
+
+### run.mjs
+
+| Step | Detail |
+| --- | --- |
+| Pick a browser | First existing of: `$BF_BROWSER`, Brave (`/opt/brave.com/brave-origin/brave`, `/opt/brave.com/brave/brave`), `/usr/bin/chromium`, `/usr/bin/chromium-browser`, `/usr/bin/google-chrome`, macOS Chrome, newest `~/.cache/ms-playwright/chromium-*`. Fails if none, or if `.output-e2e/chrome-mv3/manifest.json` is missing |
+| Serve fixtures | `startServer()` from `server.mjs` on `127.0.0.1:<random port>` |
+| Launch | `chromium.launchPersistentContext` (playwright-core) with a temp profile, `--load-extension`, headed by default; `BF_HEADLESS=1` adds `--headless=new` |
+| Find the extension | Waits for the service worker; its URL gives the extension id; opens `chrome-extension://<id>/editor.html` |
+| Run a workflow | `run(wf)` sends `{ type: 'bf:run-workflow', workflow }` from the editor page, then polls `bf:runs` in `chrome.storage.local` every 200 ms until a finished run appears (90 s limit). See [Message Protocol](Message-Protocol.md) and [Storage Keys](Storage-Keys.md) |
+| Seed state | `seedWorkflows(list)` closes the editor (it saves on close), writes `bf:workflows`, reopens it. Secrets go to `bf:secrets` |
+| Report | `check(name, ok, detail)` prints ✓/✗; exit code 1 if any check failed. Last check: no uncaught errors in the editor page |
+
+Scenarios, in order:
+
+| Scenario | Fixtures | Exercises |
+| --- | --- | --- |
+| Classic login | `login.html` → `welcome.html` | Fill Form by label (text, password, select by option text, checkbox), submit, Wait For URL, Read Element, If |
+| Wrong password | `login.html` | `onError: 'port'` routing, timeout message, Wait For text |
+| Single-page app | `spa.html` | Covered-element detection (cookie overlay), controlled inputs, type mode, select, custom checkbox, disabled button, `pushState` route, shadow DOM (`>>>`) |
+| Clear failures | `login.html` | Strict mode (2 matches, `nth=0` hint), missing element timeout message |
+| Detect fields | `login.html` + editor UI | Fill Form "Detect fields" through the picker |
+| Phase C | `login.html`, `welcome.html` | Run Workflow in the same tab, Assert (hard/soft), failure screenshot, secrets kept out of run records, Manual Step prompt in the editor, Reports tab, JUnit and HTML export |
+| Phase D | `/products` (dynamic), `table.html`, `feed.html`, `login.html` | Paginate + Extract List + Save Dataset + Download CSV, IndexedDB dataset, HTTP Request + Extract Table/List from HTML (offscreen parser), Scroll on an infinite feed, data-driven For Each login, Data tab preview |
+| Phase E | `login.html`, `welcome.html`, `table.html` | Recorder → blocks and replay, Pick on page with alternatives, undo/redo/copy/paste, templates, `{{` autocomplete, Page Visited trigger |
+| Phase F | `upload.html`, `popup.html`, `dialogs.html`, `/frames.html` + `frame-inner.html`, `api.html`, `trusted.html`, `login.html` | Upload File, Wait for Popup (`window.open`, `target=_blank`), Dialogs, same- and cross-origin iframes, Wait For response, real (trusted) input via debugger, background-tab screenshot, Run Script (passes or explains Chrome 135+), Playwright export run with `npx playwright test` |
+
+The Playwright export step writes `.output-e2e/playwright/exported.spec.ts` plus a config and runs it with
+`LOGINPASSWORD` set, so `@playwright/test` is a dev dependency only for this.
+
+### server.mjs
+
+Exports `PASSWORD` (`Op3n-Sesame!`, the only password the fixture login accepts) and `startServer()`.
+
+| Route | Response |
+| --- | --- |
+| `POST /login` | 303 to `/welcome.html?name=…&country=…&remember=…` if the password matches and an email was sent, else `/login.html?error=1` |
+| `GET /api/slow` | After 700 ms, JSON `{ order }` with a rising number |
+| `POST /api/save` | After 400 ms, `201 {"saved":true}` |
+| `/frames.html` | Two iframes of `frame-inner.html`: `#same` (127.0.0.1) and `#other` (`localhost`, so cross-origin) |
+| `/products?page=1..3` | 3 product cards per page, `a.next` except on page 3 |
+| `/spa/*` | `spa.html` (client-side routes) |
+| `/` | `login.html` |
+| anything else | File from `tests/fixtures/site`, or 404 |
+
+### Fixture pages
+
+| Page | What it is |
+| --- | --- |
+| `login.html` | Server-rendered form (email, password, country select, remember checkbox, Sign in, "Forgot password?") that posts and loads a new page |
+| `welcome.html` | `#greeting` "Welcome, name!" and the submitted country / remember values |
+| `spa.html` | Single-page app: cookie banner overlay, controlled inputs, plan select, custom checkbox, disabled-until-valid button, `pushState` to `/spa/done`, `#order`, `<fancy-counter>` web component with shadow DOM |
+| `table.html` | `#prices` table with relative links, `h1` "Prices" |
+| `feed.html` | Infinite scroll feed of `article.post` (40 in total) |
+| `popup.html` | `window.open` button and a `target=_blank` link |
+| `dialogs.html` | `confirm` (`#del`) and `prompt` (`#ask`) writing to `#result` |
+| `frame-inner.html` | Card number field + Pay button showing which origin it ran in |
+| `api.html` | Save button that POSTs to `/api/save` |
+| `trusted.html` | Only reacts to trusted events (`event.isTrusted`), like some anti-bot checks |
+| `upload.html` | Custom upload button over a hidden file input; echoes name, type and content |
+
+## Manual test page
+
+[docs/manual-test/clock.html](../manual-test/clock.html) shows the load time (changes on every reload) and a
+line that never changes. Serve it (`npx serve docs/manual-test`) and follow README
+[Try it end to end](../../README.md#try-it-end-to-end) to check Watch Element firing on change and not firing
+on the stable line. Results of manual runs are logged in README
+[What has been verified](../../README.md#what-has-been-verified).
+
+## CI
+
+[.github/workflows/ci.yml](../../.github/workflows/ci.yml) runs on pushes to `main` and on pull requests:
+Node 22, `npm install`, `typecheck`, `npm test`, `learn:check`, `build`, `build:firefox`. It does **not** run
+`guide:check`, `wiki:check` or `e2e`; run `npm run check` locally. Details in
+[Tooling and Scripts](Tooling-and-Scripts.md#ci-workflow).
+
+## See also
+
+- [ARCHITECTURE.md, Testing strategy](../ARCHITECTURE.md#testing-strategy)
+- [Lesson 8: Testing, debugging, publishing](../learning/08-testing-debugging-publishing.md)
+- [Adding a Block](Adding-a-Block.md) · [Core Engine](Core-Engine.md) · [Page Agent](Page-Agent.md) · [Scheduling and Timers](Scheduling-and-Timers.md)
+- [Build and Release](Build-and-Release.md) · [Tooling and Scripts](Tooling-and-Scripts.md)
