@@ -18,6 +18,7 @@ import type { PickedMessage } from '../shared/messages';
 
 const PICKER_SCRIPT = '/content-scripts/picker.js';
 
+/** Stored in `bf:pending-pick` while the picker is open. */
 interface PendingPick {
   editorTabId: number | undefined;
   mode?: 'element' | 'form';
@@ -61,6 +62,10 @@ async function tellEditor(message: unknown): Promise<void> {
   }
 }
 
+/**
+ * Handles `bf:start-pick`: finds or opens the target tab, focuses it and injects the picker.
+ * Failures are reported to the editor as `bf:pick-error`, never thrown.
+ */
 export async function startPicking(
   editorTabId: number | undefined,
   url: string | undefined,
@@ -94,6 +99,10 @@ async function returnToEditor(pending: PendingPick | undefined): Promise<void> {
   }
 }
 
+/**
+ * Handles `bf:picked`: in form mode asks the agent for the form's fields (`detect-form`), then sends
+ * `bf:pick-result` (or `bf:pick-error`) to the editor and focuses the editor tab again.
+ */
 export async function finishPicking(message: PickedMessage, pickedTabId: number | undefined): Promise<void> {
   const pending = await takePending();
   let fields: FormFieldRow[] | undefined;
@@ -119,6 +128,7 @@ export async function finishPicking(message: PickedMessage, pickedTabId: number 
   await returnToEditor(pending);
 }
 
+/** Handles `bf:pick-cancelled`: forgets the pending pick and focuses the editor tab. Sends the editor nothing. */
 export async function cancelPicking(): Promise<void> {
   await returnToEditor(await takePending());
 }

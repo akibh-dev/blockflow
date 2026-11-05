@@ -6,12 +6,15 @@
 
 const DB_NAME = 'blockflow';
 const DB_VERSION = 2;
+/** Object store of `Screenshot`, keyPath `id`. Pruned to the newest MAX_SCREENSHOTS. */
 export const SCREENSHOTS = 'screenshots';
+/** Object store of `Dataset`, keyPath `name` (added in DB version 2). */
 export const DATASETS = 'datasets';
 const MAX_SCREENSHOTS = 150;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
+/** Opens (and on first use creates/upgrades) the `blockflow` database. Cached; a failed open is retried next call. */
 export function openDb(): Promise<IDBDatabase> {
   dbPromise ??= new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -29,6 +32,7 @@ export function openDb(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
+/** Promise for one IndexedDB request. */
 export function done<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
@@ -36,10 +40,12 @@ export function done<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
+/** An object store in a fresh single-store transaction. */
 export async function store(name: string, mode: IDBTransactionMode = 'readonly'): Promise<IDBObjectStore> {
   return (await openDb()).transaction(name, mode).objectStore(name);
 }
 
+/** A screenshot taken after a step (per its screenshot setting; by default when it went wrong). Runs refer to it by `id`. */
 export interface Screenshot {
   id: string;
   runId: string;
@@ -48,6 +54,7 @@ export interface Screenshot {
   dataUrl: string;
 }
 
+/** Stores a screenshot and deletes the oldest beyond MAX_SCREENSHOTS. */
 export async function saveScreenshot(shot: Screenshot): Promise<void> {
   await done((await store(SCREENSHOTS, 'readwrite')).put(shot));
   // Keep the newest MAX_SCREENSHOTS.
@@ -59,24 +66,29 @@ export async function saveScreenshot(shot: Screenshot): Promise<void> {
   }
 }
 
+/** One screenshot by id (editor: run inspector, Reports page). */
 export async function loadScreenshot(id: string): Promise<Screenshot | undefined> {
   return (await done((await store(SCREENSHOTS)).get(id))) as Screenshot | undefined;
 }
 
+/** Deletes every screenshot. Not called anywhere yet. */
 export async function clearScreenshots(): Promise<void> {
   await done((await store(SCREENSHOTS, 'readwrite')).clear());
 }
 
+/** A named table saved by Save to Dataset; rows are whatever the block wrote. */
 export interface Dataset {
   name: string;
   rows: unknown[];
   updatedAt: number;
 }
 
+/** One dataset by name (`Host.datasets.read` returns its rows, or []). */
 export async function readDataset(name: string): Promise<Dataset | undefined> {
   return (await done((await store(DATASETS)).get(name))) as Dataset | undefined;
 }
 
+/** `Host.datasets.write`: appends to or replaces a dataset; returns its new row count. */
 export async function writeDataset(name: string, rows: unknown[], mode: 'append' | 'replace'): Promise<number> {
   const existing = mode === 'append' ? ((await readDataset(name))?.rows ?? []) : [];
   const next = [...existing, ...rows];
@@ -84,10 +96,12 @@ export async function writeDataset(name: string, rows: unknown[], mode: 'append'
   return next.length;
 }
 
+/** Every dataset (editor's Data page). */
 export async function listDatasets(): Promise<Dataset[]> {
   return (await done((await store(DATASETS)).getAll())) as Dataset[];
 }
 
+/** Deletes one dataset (editor's Data page). */
 export async function deleteDataset(name: string): Promise<void> {
   await done((await store(DATASETS, 'readwrite')).delete(name));
 }

@@ -1,5 +1,6 @@
 /** CSV in and out (RFC 4180: quotes, commas and line breaks inside quoted cells). */
 
+/** Cells by row. Rows with only blank cells are dropped. */
 export function parseCsv(text: string, delimiter = ','): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -42,6 +43,7 @@ export function csvToObjects(text: string): Record<string, string>[] {
   return rows.map((cells) => Object.fromEntries(keys.map((key, index) => [key, (cells[index] ?? '').trim()])));
 }
 
+/** One cell, quoted when needed. Objects are written as JSON. */
 function csvCell(value: unknown): string {
   const text = value === undefined || value === null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;

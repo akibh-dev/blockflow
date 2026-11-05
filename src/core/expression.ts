@@ -16,6 +16,7 @@
  *               default(x, fallback) matches(text, '/re/i') extract(text, '/re(group)/')
  */
 
+/** A syntax or evaluation error in an expression (templates render it as ''). */
 export class ExpressionError extends Error {}
 
 type Token =
@@ -26,6 +27,7 @@ type Token =
 
 const OPERATORS = ['===', '!==', '==', '!=', '<=', '>=', '&&', '||', '??', '<', '>', '+', '-', '*', '/', '%', '!', '?', ':', '(', ')', '[', ']', ',', '.'];
 
+/** Source text to tokens: numbers, strings, identifiers and operators. */
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
@@ -101,6 +103,7 @@ const PRECEDENCE: Record<string, number> = {
   '%': 7,
 };
 
+/** Recursive-descent parser: conditional > binary (precedence climbing) > unary > postfix > primary. */
 class Parser {
   private index = 0;
   constructor(
@@ -229,6 +232,7 @@ class Parser {
 
 // --- helpers ------------------------------------------------------------------
 
+/** Property access limited to own properties (plus `length` of strings and arrays). */
 function own(object: unknown, key: unknown): unknown {
   if (object === null || object === undefined) return undefined;
   if (typeof object === 'string' && key === 'length') return object.length;
@@ -247,6 +251,7 @@ export function toNumber(value: unknown): number {
   return cleaned === '' ? Number.NaN : Number(cleaned);
 }
 
+/** Value as text: null/undefined = '', objects as JSON. */
 export function toText(value: unknown): string {
   if (value === undefined || value === null) return '';
   if (typeof value === 'string') return value;
@@ -285,6 +290,7 @@ function compareValues(a: unknown, b: unknown): number {
   return toText(a).localeCompare(toText(b));
 }
 
+/** Functions callable from expressions; an unknown name is a parse error. */
 const FUNCTIONS: Record<string, (...args: unknown[]) => unknown> = {
   upper: (x) => toText(x).toUpperCase(),
   lower: (x) => toText(x).toLowerCase(),
@@ -427,6 +433,7 @@ export function parseExpression(source: string): Node {
   return node;
 }
 
+/** Parses (cached) and evaluates `source` with `scope` as the data. Throws ExpressionError. */
 export function evaluate(source: string, scope: Record<string, unknown>): unknown {
   return evaluateNode(parseExpression(source), scope);
 }

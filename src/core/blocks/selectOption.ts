@@ -1,12 +1,14 @@
 import { PAGE_ACCENT, PAGE_TIMEOUT_SECONDS, inPage, locatorField, tabField } from './pageCommon';
 import type { BlockDefinition } from '../types';
 
+/** Select Option settings. `value` may hold several options separated by `|` (multi-selects). */
 export interface SelectOptionConfig {
   tab: string;
   locator: string;
   value: string;
 }
 
+/** Select Option: one `select` agent request (matches option text or value); adds `selected`. */
 export const selectOptionBlock: BlockDefinition<SelectOptionConfig> = {
   type: 'select-option',
   label: 'Select Option',

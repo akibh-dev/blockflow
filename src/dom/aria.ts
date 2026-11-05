@@ -77,6 +77,11 @@ const NAME_FROM_CONTENT = new Set([
   'row',
 ]);
 
+/**
+ * Explicit `role` (first token) or the implicit role from INPUT_ROLES / TAG_ROLES and a few special
+ * cases (links need href, select is combobox or listbox, img with alt="" is presentation, section
+ * is region only when named). Null when the element has no role in this model.
+ */
 export function getRole(element: Element): string | null {
   const explicit = element.getAttribute('role')?.trim().split(/\s+/)[0];
   if (explicit) return explicit;
@@ -102,6 +107,7 @@ function normalize(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/** Name-from-content text: skips aria-hidden/hidden/script/style, uses aria-label and img alt, spaces block elements. */
 function textOf(node: Node, seen: Set<Node>): string {
   if (seen.has(node)) return '';
   seen.add(node);

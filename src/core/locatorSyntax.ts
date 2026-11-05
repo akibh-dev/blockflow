@@ -4,13 +4,16 @@
  * Playwright exporter. No DOM here.
  */
 
+/** A locator string that cannot be parsed. */
 export class LocatorSyntaxError extends Error {}
 
+/** One `>>`-separated step: which engine and its argument. */
 export interface LocatorStep {
   engine: string;
   body: string;
 }
 
+/** Recognised `engine=` prefixes. */
 export const ENGINES = new Set(['css', 'text', 'role', 'label', 'placeholder', 'testid', 'alt', 'title', 'xpath', 'nth', 'frame']);
 
 /** Splits on `>>` outside quotes and brackets, leaving the shadow-piercing `>>>` alone. */
@@ -39,6 +42,7 @@ function splitSteps(source: string): string[] {
   return parts.map((part) => part.trim());
 }
 
+/** Splits a locator into steps. No prefix: `//…` is xpath, a quoted string is text, anything else CSS. */
 export function parseLocatorSteps(source: string): LocatorStep[] {
   if (!source.trim()) throw new LocatorSyntaxError('The locator is empty');
   return splitSteps(source.trim()).map((part) => {

@@ -19,6 +19,7 @@ import { accessibleName, checkedState, getRole, isHiddenForAria } from './aria';
  *   A >> nth=0, nth=-1                           first / last of the matches so far
  */
 
+/** An invalid locator (syntax, unknown engine, bad CSS/XPath/regex). The agent reports it as a Fatal error. */
 export class LocatorError extends Error {}
 
 /**
@@ -37,6 +38,7 @@ export class FrameBoundaryError extends LocatorError {
 const TEST_ID_ATTRIBUTES = ['data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-qa'];
 const SKIP_TEXT = new Set(['script', 'style', 'noscript', 'template', 'head', 'title', 'meta', 'link']);
 
+/** {@link parseLocatorSteps}, with syntax errors rethrown as {@link LocatorError}. */
 export function parseLocator(source: string): Step[] {
   try {
     return parseLocatorSteps(source);
@@ -77,6 +79,7 @@ export function textMatcher(body: string, exact = false): (text: string) => bool
   return (text) => normalize(text).toLowerCase().includes(lower);
 }
 
+/** The scope (if an element) and every descendant, including inside open shadow roots, in tree order. */
 function allElements(scope: ParentNode): Element[] {
   const list: Element[] = [];
   if (scope instanceof Element) list.push(scope);
@@ -130,6 +133,7 @@ function queryText(body: string, scope: ParentNode): Element[] {
   });
 }
 
+/** Parsed `role=name[name=...][exact][checked][level=N][include-hidden]`. */
 interface RoleQuery {
   role: string;
   name?: (text: string) => boolean;
@@ -181,6 +185,7 @@ function queryRole(body: string, scope: ParentNode): Element[] {
   });
 }
 
+/** Controls of matching `<label>`s (by `.control` or the first field inside), plus elements whose aria-label or aria-labelledby text matches. */
 function queryLabel(body: string, scope: ParentNode): Element[] {
   const matches = textMatcher(body);
   const results = new Set<Element>();
@@ -212,11 +217,13 @@ function queryAttribute(attribute: string, body: string, scope: ParentNode): Ele
   });
 }
 
+/** Exact (case-sensitive) value of any of TEST_ID_ATTRIBUTES. Does not use textMatcher. */
 function queryTestId(body: string, scope: ParentNode): Element[] {
   const { value } = unquote(body);
   return allElements(scope).filter((element) => TEST_ID_ATTRIBUTES.some((attribute) => element.getAttribute(attribute) === value));
 }
 
+/** XPath evaluated with the scope as context node. Does not see into shadow roots. */
 function queryXpath(body: string, scope: ParentNode): Element[] {
   const doc = scope instanceof Document ? scope : (scope as Node).ownerDocument;
   if (!doc) return [];
@@ -259,6 +266,7 @@ function queryStep(step: Step, scope: ParentNode): Element[] {
   }
 }
 
+/** Deduplicated and sorted by document position. */
 function inDocumentOrder(elements: Element[]): Element[] {
   return [...new Set(elements)].sort((a, b) => {
     if (a === b) return 0;

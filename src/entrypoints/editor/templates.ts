@@ -7,14 +7,19 @@ const files = import.meta.glob('../../../docs/guide/examples/*.blockflow.json', 
   { workflows: { name: string }[] }
 >;
 
+/** One entry of the "+ New" menu, built from a file in `docs/guide/examples`. */
 export interface Template {
+  /** File name without `.blockflow.json`. */
   id: string;
+  /** Shown in the menu: the name of the file's last workflow. */
   name: string;
   /** The export-format JSON, ready for parseImport. */
   text: string;
+  /** How many workflows the file adds (shown when more than one). */
   workflows: number;
 }
 
+/** Every template, sorted by name. Bundled at build time by Vite's eager `import.meta.glob`. */
 export const templates: Template[] = Object.entries(files)
   .map(([path, file]) => ({
     id: path.split('/').pop()?.replace('.blockflow.json', '') ?? path,

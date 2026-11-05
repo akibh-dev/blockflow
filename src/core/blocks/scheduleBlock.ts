@@ -2,6 +2,7 @@ import { nextOccurrence, parseDays, parseTime } from '../schedule';
 import type { ScheduleSpec } from '../schedule';
 import type { BlockContext, BlockDefinition } from '../types';
 
+/** Schedule settings. Which fields matter depends on `every` (day: at + days, hour: minute, minutes: minutes). */
 export interface ScheduleConfig {
   every: 'day' | 'hour' | 'minutes';
   at: string;
@@ -10,12 +11,14 @@ export interface ScheduleConfig {
   minutes: number;
 }
 
+/** Maps the flat editor config onto schedule.ts's ScheduleSpec. */
 function spec(config: ScheduleConfig): ScheduleSpec {
   if (config.every === 'hour') return { every: 'hour', minute: config.minute };
   if (config.every === 'minutes') return { every: 'minutes', minutes: config.minutes };
   return { every: 'day', at: config.at, days: parseDays(config.days) };
 }
 
+/** Sets the one-shot `next` timer for the next occurrence (at least 1s away), carrying `scheduledFor`. */
 async function planNext(ctx: BlockContext<ScheduleConfig>): Promise<Date> {
   const now = ctx.host.now();
   const next = nextOccurrence(now, spec(ctx.config));

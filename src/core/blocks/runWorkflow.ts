@@ -1,5 +1,6 @@
 import type { BlockDefinition } from '../types';
 
+/** Run Workflow settings: the id of the saved workflow to call. */
 export interface RunWorkflowConfig {
   workflow: string;
 }

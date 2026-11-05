@@ -2,6 +2,7 @@ import { normalizeText, truncate } from '../text';
 import { normalizeHttpUrl } from '../url';
 import type { BlockContext, BlockDefinition, Payload } from '../types';
 
+/** Watch Element settings. `intervalSeconds` is only used when the block is a root. */
 export interface WatchElementConfig {
   selector: string;
   url: string;
@@ -19,6 +20,13 @@ interface LastRead {
 /** Checks that are currently running, so a slow page never gets two overlapping checks. */
 const inFlight = new Set<string>();
 
+/**
+ * One read of the element, compared with the last value in `ctx.state` (key `last`). Returns the
+ * payload to send, or null for "nothing to report" (no change, baseline read, element missing,
+ * or a check for this node is already in flight). `always` (Run button) reports the current value
+ * even when unchanged. Stores the new value before deciding, so a failing downstream run never
+ * makes the same change fire twice.
+ */
 async function check(ctx: BlockContext<WatchElementConfig>, always = false): Promise<Payload | null> {
   const flightKey = `${ctx.workflowId}/${ctx.nodeId}`;
   if (inFlight.has(flightKey)) {

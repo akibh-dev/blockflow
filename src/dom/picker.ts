@@ -1,15 +1,19 @@
 import { locatorCandidates } from './bestLocator';
 import { ElementNavigator, countMatches, generateSelector, sampleText } from './selector';
 
+/** What the picker reports on confirm; sent to the background as `bf:picked` by picker.content.ts. */
 export interface PickResult {
   /** A structural CSS selector (stable when the element's text changes, as watched prices do). */
   selector: string;
   /** Readable locators that find exactly this element, best first (see bestLocator.ts). */
   candidates: string[];
+  /** `location.href` of the page the element was picked on. */
   url: string;
+  /** The element's text, whitespace-collapsed, up to 120 characters. */
   sample: string;
 }
 
+/** Callbacks for {@link startPicker}. Exactly one of them is called, once, unless `stop()` comes first. */
 export interface PickerOptions {
   onPick(result: PickResult): void;
   onCancel(): void;
@@ -17,9 +21,11 @@ export interface PickerOptions {
   document?: Document;
 }
 
+/** Returned by {@link startPicker}. */
 export interface PickerHandle {
   /** Removes the picker without calling onPick/onCancel. */
   stop(): void;
+  /** For tests: the current CSS selector, how many elements it matches, and whether a click locked it. */
   state(): { selector: string | null; matches: number; locked: boolean };
 }
 
@@ -58,7 +64,11 @@ const TEMPLATE = `
   </div>
 `;
 
-/** Point-and-click element picker. Shows a highlight on hover; click locks, then refine. */
+/**
+ * Point-and-click element picker. Shows a highlight on hover; click locks, then refine.
+ * Adds a shadow-root overlay (`#blockflow-picker-host`) and capture-phase listeners on the window
+ * that swallow the page's own pointer events until it confirms, cancels or is stopped.
+ */
 export function startPicker(options: PickerOptions): PickerHandle {
   const doc = options.document ?? document;
   const win = doc.defaultView as Window & typeof globalThis;

@@ -26,6 +26,7 @@ export function valueAt(expression: string, input: Payload, label = 'List'): unk
   }
 }
 
+/** Like `valueAt`, but the value must be an array; the error says whether it is missing or the wrong type. */
 export function listAt(expression: string, input: Payload, label = 'List'): unknown[] {
   const value = valueAt(expression, input, label);
   if (Array.isArray(value)) return value;

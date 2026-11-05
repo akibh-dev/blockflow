@@ -1,6 +1,7 @@
 import { PAGE_ACCENT, PAGE_TIMEOUT_SECONDS, inPage, locatorField, tabField } from './pageCommon';
 import type { BlockDefinition } from '../types';
 
+/** Click settings. `force` skips the agent's actionability checks (visible, enabled, not covered). */
 export interface ClickConfig {
   tab: string;
   locator: string;
@@ -8,6 +9,10 @@ export interface ClickConfig {
   force: boolean;
 }
 
+/**
+ * Click: one `click` agent request in the run's tab, then passes its input on unchanged. When the
+ * page navigates away mid-action, pageDriver answers `{navigated: true}` instead of retrying.
+ */
 export const clickBlock: BlockDefinition<ClickConfig> = {
   type: 'click',
   label: 'Click',

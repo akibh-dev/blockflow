@@ -1,5 +1,6 @@
 import type { BlockDefinition } from '../types';
 
+/** Notify settings (both templated). */
 export interface NotifyConfig {
   title: string;
   message: string;

@@ -1,5 +1,6 @@
 import type { BlockDefinition } from '../types';
 
+/** Manual Step settings: the instruction shown in the notification and editor banner. */
 export interface ManualStepConfig {
   message: string;
 }

@@ -1,6 +1,7 @@
 # BlockFlow
 
-Build small browser automations by connecting blocks, like n8n or AutoHotkey, but inside your browser.
+**Playwright-compatible automation in your browser.** Build automations by connecting blocks (n8n style) in a
+visual editor, or write them as JSON scripts, by hand or with an LLM.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
 
 **Status: prototype 1.** 42 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
@@ -47,7 +48,7 @@ Use data from the previous block in any settings field with `{{name}}`, e.g. an 
 `{{url}}` opens the page the Watch Element block noticed a change on. `{{$json.name}}` (n8n style),
 `{{item.name}}` and `{{rows[0]}}` also work.
 
-Things you can build with just these three:
+Things you can build with a few blocks:
 
 ```text
 Timer ──▶ Open URL                              open a page every 5 minutes
@@ -130,7 +131,7 @@ Requires Node 20+.
 
 ```bash
 npm install          # also runs `wxt prepare`
-npm run check        # typecheck + tests
+npm run check        # typecheck + tests + generated docs and learning examples in sync
 npm run dev          # opens Chrome with the extension loaded and hot reload
 ```
 
@@ -169,40 +170,72 @@ npm run build:all
 src/
   core/                  The engine. Plain TypeScript, no browser APIs, fully unit-tested.
     types.ts             Workflow model, block definition, Host interface
-    engine.ts            WorkflowRunner: start blocks, pass data along connections, timers
-    blocks/              timer, openUrl, watchElement, ifBlock, setVariable, httpRequest, notify, index.ts (registry of built-ins)
+    engine.ts            WorkflowRunner: start blocks, pass data along connections, timers, runs, sub-workflows
+    registry.ts          BlockRegistry (lookup by type)
+    blocks/              one file per block (42), index.ts = registry of built-ins and palette groups;
+                         pageCommon.ts / dataCommon.ts hold shared fields and helpers
     template.ts          {{value}} templating
+    expression.ts        safe expression language for {{ }} and Transform/Filter (no eval)
     config.ts            defaults, templating and validation of block settings
     validate.ts          checks a whole workflow (used by the editor)
     library.ts           duplicate, export and import of workflows
+    samples.ts           the example workflows seeded on first install
     ports.ts             block outputs (out / true / false / error) and routeTo()
-    runs.ts              run and step records
+    runs.ts              run and step records, secret masking
     condition.ts         comparisons shared by If and Assert
     report.ts            JUnit XML and HTML reports from runs
-    expression.ts        safe expression language for {{ }} and Transform/Filter (no eval)
     csv.ts               CSV parse/write
     session.ts, page.ts  the run's named tabs; requests to the page agent
+    locatorSyntax.ts     locator parsing shared by the page agent and the Playwright export
+    url.ts, urlPattern.ts URL checks; `*` / `**` / regex URL patterns
+    schedule.ts          next run time for the Schedule block
+    timerKey.ts          timer and state keys (bf::<workflow>::<node>::<name>)
+    recording.ts         turns recorded steps into blocks
+    playwright.ts        exports a workflow as a Playwright .spec.ts
     workflow.ts          diffWorkflows() decides what the background must start/stop
+    id.ts, text.ts       small helpers
   dom/                   Code that runs inside web pages
     selector.ts          CSS selector generation + widen/narrow navigation
+    bestLocator.ts       readable locators (role=, label=…) with alternatives, for picker, recorder, Detect fields
     picker.ts            the click-to-pick overlay (shadow DOM)
+    recorder.ts          the recorder: turns clicks and typing into steps
     readElement.ts       function injected into a page to read an element (CSS only, kept for reference)
-    locator.ts, aria.ts  Playwright-style locators: css, text=, role=, label=, testid=, >>, nth=
-    agent.ts             the page agent: auto-wait, click, fill, select, check, press, read, wait, detect form
+    locator.ts, aria.ts  Playwright-style locators: css, text=, role=, label=, testid=, frame=, >>, nth=
+    agent.ts             the page agent: auto-wait, click, fill, select, check, press, read, wait, extract, detect form
   browser/               Real implementations of the Host (alarms, tabs, storage, scripting)
-  shared/                Storage keys and message types
+    host.ts              assembles the Host
+    hybridScheduler.ts, scheduler.ts  timers: alarms + in-memory timers + keep-alive
+    pageDriver.ts        calls the page agent (frames, real input), navigation.ts waits for load / URL / network
+    pageReader.ts, tabs.ts  Watch/Read Element's own background tab; tab helpers
+    cdp.ts               real mouse and keyboard through the debugger API (Chromium, optional permission)
+    popups.ts            popups and new tabs opened by a run's tab
+    htmlParse.ts         runs the agent on fetched HTML (offscreen document in Chrome)
+    blobStore.ts         IndexedDB: screenshots and datasets
+    stores.ts            storage.local wrappers (workflows, logs, runs)
+    picking.ts, recording.ts  start/finish the picker and the recorder
+    prompts.ts           Manual Step questions (notification + editor banner)
+    ownTabs.ts           tabs BlockFlow opened (never trigger Page Visited)
+  shared/                Storage keys and message types (keys.ts, messages.ts)
   entrypoints/
     background.ts        runs enabled workflows; restart-safe
     picker.content.ts    injects the picker on demand
+    recorder.content.ts  the recorder, injected on demand into the recording tab
     agent.content.ts     the page agent, injected on demand by src/browser/pageDriver.ts
+    offscreen/           Chrome only: parses fetched HTML (the service worker has no DOM)
     editor/              React + React Flow editor page
-tests/                   Vitest. core/ and editor/ run in Node, dom/ runs in jsdom.
+tests/                   Vitest. core/, editor/ and browser/ run in Node, dom/ runs in jsdom.
+                         e2e/ drives the real build in Chromium against fixtures/site (npm run e2e)
 docs/ARCHITECTURE.md     how it fits together and why
+docs/wiki/               internals wiki, file by file (start at docs/wiki/Home.md)
 docs/manual-test/        a page that changes on every load, for end-to-end testing
 docs/learning/           hand-coding course: build your own extension step by step (start at its README)
 docs/guide/              usage guide for people and AI tools, generated block reference, example workflows
+docs/PLAN-automation.md  the plan for phases A to F (form filling, testing, scraping, harder pages)
 scripts/guide.ts         generates docs/guide/blocks.md, blocks.json, workflow.schema.json (npm run guide:sync)
 ```
+
+Going deeper: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and the reasons behind it,
+the [internals wiki](docs/wiki/Home.md) for a file-by-file reference.
 
 ## Adding a block
 
@@ -245,17 +278,21 @@ needed.
   check by default. Pages that need a login work if you are signed in in the same browser profile.
 - Broad site access (`<all_urls>`) for now; only `debugger` and `userScripts` are optional (asked when a block needs
   them). Per-workflow site permissions are not built: browsers only ask on a click, which scheduled runs cannot give.
-- No templates or undo yet. Two editor tabs open at once overwrite each other's changes.
+- Two editor tabs open at once overwrite each other's changes.
 - `npm run e2e` picks Brave first. If a browser hangs at launch under automation (Brave did after an update on
   2026-10-23), run `BF_BROWSER=/path/to/chromium npm run e2e`; Playwright's Chromium in
   `~/.cache/ms-playwright` is used automatically when nothing else is found.
-- Page actions use synthetic events (`isTrusted: false`); a few sites reject them. Iframes, closed shadow
-  roots, file uploads and native dialogs are not supported yet (plan: phase F).
+- Page actions use synthetic events (`isTrusted: false`) unless the step's **Use real mouse and keyboard**
+  is on (Chromium only, not inside cross-origin iframes). Closed shadow roots, drag and drop and file drop
+  zones are not supported. Run Script needs Chrome 135+ with user scripts allowed. Full list: the usage
+  guide's [Limits](docs/guide/README.md#17-limits-what-a-browser-extension-cannot-do-or-blockflow-does-not-do-yet).
 - No "Resume" for an interrupted run yet, and If has one condition (several joined with and/or come later).
 
 ## Roadmap ideas
 
-The full plan for form filling, testing and scraping is in [docs/PLAN-automation.md](docs/PLAN-automation.md).
+The product plan (Playwright-compatible automation in your browser, for people and LLMs; milestones M0–M6) is
+[docs/PLAN.md](docs/PLAN.md). Phases A–F, already built, are in [docs/PLAN-automation.md](docs/PLAN-automation.md).
 
-IF with true/false outputs, extract-text block, folders for workflows,
-a recorder that turns your clicks into blocks, per-workflow permissions, Web Store packaging.
+Folders for workflows, per-workflow permissions, If with several conditions, resuming an interrupted run,
+Web Store packaging. (Done since the first version of this list: If with true/false outputs, reading
+elements, the recorder.)

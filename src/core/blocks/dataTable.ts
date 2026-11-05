@@ -2,6 +2,7 @@ import { csvToObjects } from '../csv';
 import { DATA_ACCENT } from './dataCommon';
 import type { BlockDefinition } from '../types';
 
+/** Data Table settings: CSV or JSON text, and the payload key for the rows. */
 export interface DataTableConfig {
   text: string;
   into: string;

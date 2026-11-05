@@ -2,6 +2,7 @@ import { routeTo } from '../ports';
 import { DATA_ACCENT, listAt, listField } from './dataCommon';
 import type { BlockDefinition } from '../types';
 
+/** For Each settings: an expression for the list, and the payload key each item is put under. */
 export interface ForEachConfig {
   list: string;
   as: string;

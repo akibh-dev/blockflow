@@ -3,6 +3,7 @@ import { PAGE_ACCENT, locatorField, pageWaitMs, tabField } from './pageCommon';
 import type { AgentRequest, ExtractField } from '../page';
 import type { BlockContext, BlockDefinition, Payload, Row, TextField } from '../types';
 
+/** Where Extract List / Extract Table read from: a tab of the run, or HTML in the data. */
 export interface SourceConfig {
   source: 'tab' | 'html';
   tab: string;
@@ -25,6 +26,11 @@ export const sourceFields: (TextField | { key: 'source'; label: string; kind: 's
   { key: 'baseUrl', label: 'Page address', kind: 'text', templated: true, placeholder: '{{url}}', help: 'Makes relative links absolute (HTML mode).' },
 ];
 
+/**
+ * Runs one agent request against the configured source: `Host.html.act` on `config.html` (no tab,
+ * no layout) or `Host.page.act` on the session tab. Unlike `inPage` it never passes `realInput`
+ * (scraping ops do not need it).
+ */
 export async function inSource(ctx: BlockContext<SourceConfig>, input: Payload, request: AgentRequest): Promise<Record<string, unknown>> {
   if (ctx.config.source === 'html') {
     if (!ctx.config.html.trim()) throw new Error('HTML is empty. Connect an HTTP Request block and use {{body}}.');
@@ -41,6 +47,7 @@ export function tableToObjects(result: Record<string, unknown>): Record<string, 
   return values.map((row) => Object.fromEntries(columns.map((column, index) => [column, row[index] ?? ''])));
 }
 
+/** Extract List settings. `fields` rows are `{name, locator, attribute}`; `limit` 0 means all. */
 export interface ExtractListConfig extends SourceConfig {
   locator: string;
   fields: Row[];

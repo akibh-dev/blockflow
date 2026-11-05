@@ -5,7 +5,9 @@ import type { AnyBlockDefinition, EdgeDef, NodeDef, Payload } from './types';
  * Any block gets an extra "error" output when its step settings say "On error → error output".
  */
 
+/** The output every block has unless it declares `ports`. */
 export const DEFAULT_PORT = 'out';
+/** Extra output added when a node's step settings say `onError: 'port'`. */
 export const ERROR_PORT = 'error';
 
 /** A payload sent out of a specific output. Blocks create it with `routeTo()`. */
@@ -16,6 +18,7 @@ export class Routed {
   ) {}
 }
 
+/** Return this from `run` to send `payload` out of `port` instead of the first output. */
 export function routeTo(port: string, payload: Payload): Routed {
   return new Routed(port, payload);
 }

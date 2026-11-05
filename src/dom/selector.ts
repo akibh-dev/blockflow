@@ -10,7 +10,7 @@
  * ancestors until the selector matches exactly one element.
  */
 
-// The CSS.escape algorithm from the CSSOM spec (jsdom does not ship CSS.escape).
+/** The CSS.escape algorithm from the CSSOM spec (jsdom does not ship CSS.escape). */
 export function cssEscape(value: string): string {
   const string = String(value);
   const length = string.length;
@@ -66,6 +66,7 @@ export function isStableId(id: string): boolean {
   );
 }
 
+/** Rejects state classes (`active`, `open`...), CSS-in-JS prefixes, 3+ digit runs and random-looking hashes. */
 export function isStableClass(name: string): boolean {
   if (!/^[A-Za-z_][\w-]{0,30}$/.test(name)) return false;
   if (STATE_CLASSES.has(name)) return false;
@@ -82,6 +83,7 @@ function quoteAttribute(value: string): string {
   return `"${value.replace(/["\\]/g, '\\$&')}"`;
 }
 
+/** One element's own selector: stable id, else STABLE_ATTRIBUTES (value ≤ 60 chars), else tag + up to two stable classes. */
 function baseSegment(element: Element): { text: string; isId: boolean } {
   const tag = element.tagName.toLowerCase();
   const id = element.getAttribute('id');
@@ -98,6 +100,7 @@ function baseSegment(element: Element): { text: string; isId: boolean } {
   return { text: tag + classes.map((name) => `.${cssEscape(name)}`).join(''), isId: false };
 }
 
+/** baseSegment plus `:nth-of-type(n)` when another sibling matches it too. */
 function segmentFor(element: Element): string {
   const { text, isId } = baseSegment(element);
   if (isId) return text;
@@ -111,6 +114,7 @@ function segmentFor(element: Element): string {
   return `${text}:nth-of-type(${sameTag.indexOf(element) + 1})`;
 }
 
+/** How many elements a plain CSS selector matches in `doc` (0 when the selector is invalid). */
 export function countMatches(doc: Document, selector: string): number {
   try {
     return doc.querySelectorAll(selector).length;
@@ -166,6 +170,7 @@ export class ElementNavigator {
     return this.chain[this.index] as Element;
   }
 
+  /** False at the child of `<body>`: body and html are never offered. */
   canBroaden(): boolean {
     const parent = this.current.parentElement;
     const doc = this.current.ownerDocument;

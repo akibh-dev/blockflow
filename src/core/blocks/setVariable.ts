@@ -1,5 +1,6 @@
 import type { BlockDefinition } from '../types';
 
+/** Set Variable settings: the key, and its (templated, so always string) value. */
 export interface SetVariableConfig {
   name: string;
   value: string;

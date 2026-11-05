@@ -17,8 +17,10 @@ const AGENT_FILE = '/content-scripts/agent.js';
 const SLICE_MS = 2_000;
 const ACTIONS = new Set<AgentRequest['op']>(['click', 'fill', 'set-field', 'select', 'check', 'press']);
 
+/** What one call can return: the agent's answer, `missing` (no agent in the page yet) or `vanished` (the page went away mid-call). */
 type Outcome = AgentResponse | { status: 'missing' } | { status: 'vanished' };
 
+/** One `executeScript` that asks the already-injected agent (`globalThis.__blockflowAgent`) to run `call`. */
 async function callOnce(tabId: number, call: AgentCall, frameId?: number): Promise<Outcome> {
   const [injection] = await browser.scripting.executeScript({
     target: frameId === undefined ? { tabId } : { tabId, frameIds: [frameId] },
@@ -33,6 +35,7 @@ async function callOnce(tabId: number, call: AgentCall, frameId?: number): Promi
   return (injection?.result as Outcome | undefined) ?? { status: 'vanished' };
 }
 
+/** `callOnce`, injecting `content-scripts/agent.js` first if the page has no agent yet. */
 async function callAgent(tabId: number, call: AgentCall, frameId?: number): Promise<Outcome> {
   const outcome = await callOnce(tabId, call, frameId);
   if (outcome.status !== 'missing') return outcome;
@@ -48,6 +51,7 @@ async function frameShowing(tabId: number, src: string): Promise<number | undefi
   return (exact ?? loose)?.frameId;
 }
 
+/** Errors that mean the browser will never let us script this page (no point retrying). */
 function restricted(message: string): boolean {
   return /cannot access|cannot be scripted|extensions gallery|chrome:\/\/|about:|missing host permission/i.test(message);
 }
@@ -96,10 +100,19 @@ async function actWithRealInput(tabId: number, request: AgentRequest, timeoutMs:
   }
 }
 
+/**
+ * `Host.page.act`: carries out one page request. Actions with `realInput` go through the debugger
+ * (`actWithRealInput`); everything else through the page agent (`actInTab`).
+ */
 export async function act(tabId: number, request: AgentRequest, timeoutMs: number, options?: { realInput?: boolean }): Promise<Record<string, unknown>> {
   return options?.realInput && ACTIONS.has(request.op) ? actWithRealInput(tabId, request, timeoutMs) : actInTab(tabId, request, timeoutMs);
 }
 
+/**
+ * Asks the page agent in slices of at most SLICE_MS until it answers done/error or `timeoutMs` runs out.
+ * Follows `{status: 'frame'}` answers into cross-origin iframes by frame id. An action whose page vanished
+ * returns `{ navigated: true }` instead of being repeated. Throws `Timed out after Ns: <last reason>`.
+ */
 export async function actInTab(tabId: number, original: AgentRequest, timeoutMs: number): Promise<Record<string, unknown>> {
   const deadline = Date.now() + Math.max(timeoutMs, 0);
   let reason = 'the page did not answer';

@@ -23,6 +23,7 @@ import type { AgentRequest, WaitUntil } from '../../src/core/page';
 import type { RunRecord } from '../../src/core/runs';
 import { createDefaultRegistry } from '../../src/core/blocks';
 
+/** What FakeScheduler keeps per key: the timer options plus the JSON payload stored with it. */
 interface StoredTimer extends TimerOptions {
   data?: Payload;
 }
@@ -31,6 +32,7 @@ interface StoredTimer extends TimerOptions {
 export class FakeScheduler implements Scheduler {
   readonly timers = new Map<string, StoredTimer>();
 
+  /** Stores (or replaces) the timer. Nothing fires by itself: call `harness.fire(name)` or `runner.handleTimer(key)`. */
   async set(key: string, options: TimerOptions, data?: Payload): Promise<void> {
     this.timers.set(key, { ...options, ...(data ? { data } : {}) });
   }
@@ -45,6 +47,7 @@ export class FakeScheduler implements Scheduler {
     }
   }
 
+  /** Like the real scheduler: returns the timer's record, deleting one-shot timers and keeping periodic ones. */
   async take(key: string): Promise<TimerRecord | undefined> {
     const timer = this.timers.get(key);
     if (!timer) return undefined;
@@ -59,6 +62,7 @@ export class FakeScheduler implements Scheduler {
   }
 }
 
+/** In-memory `StateStore` (block state, run records' per-node state). Inspect `data` in assertions. */
 export class MemoryState implements StateStore {
   readonly data = new Map<string, unknown>();
 
@@ -71,8 +75,15 @@ export class MemoryState implements StateStore {
   }
 }
 
+/** Signature of `FakeHost.pageReader`, which answers `host.page.readElement` (Watch Element, Read Element). */
 export type PageReader = (options: ReadElementOptions) => Promise<ReadElementResult>;
 
+/**
+ * A complete in-memory `Host` for engine and block tests. Every capability records what it was asked to
+ * do in a public array (`opened`, `actions`, `requests`, `notifications`, `sleeps`, …) and answers through
+ * a replaceable hook (`pageReader`, `agent`, `httpHandler`, `htmlAgent`, `scriptResult`, `promptAnswer`, …).
+ * Time is virtual: `now()` starts at 2026-01-01T00:00:00Z and moves only with `advance(ms)`.
+ */
 export class FakeHost implements Host {
   readonly scheduler = new FakeScheduler();
   readonly state = new MemoryState();
@@ -93,6 +104,7 @@ export class FakeHost implements Host {
     body: '',
   });
 
+  /** Records each request in `requests` and answers with `httpHandler`; `download` returns a fake PNG. */
   http = {
     fetch: async (options: HttpRequestOptions) => {
       this.requests.push(options);
@@ -101,6 +113,7 @@ export class FakeHost implements Host {
     download: async (url: string) => ({ base64: btoa(`file at ${url}`), mime: 'image/png', name: url.split('/').pop() ?? 'file' }),
   };
 
+  /** Records each notification in `notifications`. */
   notify = async (options: NotifyOptions) => {
     this.notifications.push(options);
   };
@@ -129,6 +142,11 @@ export class FakeHost implements Host {
   /** Replace to control what the page agent answers (throw to simulate a failure). */
   agent: (tabId: number, request: AgentRequest) => Promise<Record<string, unknown>> = async () => ({});
 
+  /**
+   * Fake tabs backed by `tabUrls`. New tabs get ids from 100 up; `reuseTabId` reuses an open tab.
+   * Navigating or acting on a closed tab throws "The tab was closed". `waitForPopup` / `waitForResponse`
+   * consume entries a test pushed into `popups` / `responses`, and throw a timeout error when none match.
+   */
   tabs = {
     open: async (options: OpenTabOptions) => {
       this.opened.push(options);
@@ -173,6 +191,7 @@ export class FakeHost implements Host {
     },
   };
 
+  /** Page access: `readElement` goes to `pageReader`, `act` to `agent` (after recording it in `actions`). */
   page = {
     readElement: async (options: ReadElementOptions) => {
       this.reads.push(options);
@@ -214,6 +233,7 @@ export class FakeHost implements Host {
     },
   };
 
+  /** Datasets by name; `write` appends or replaces and returns the new row count. */
   readonly datasetRows = new Map<string, unknown[]>();
   datasets = {
     read: async (name: string) => [...(this.datasetRows.get(name) ?? [])],
@@ -224,6 +244,7 @@ export class FakeHost implements Host {
     },
   };
 
+  /** Files "saved" by Download, in order. */
   readonly downloaded: { filename: string; content: string; mime: string }[] = [];
   downloads = {
     save: async (filename: string, content: string, mime: string) => {
@@ -278,10 +299,12 @@ export class FakeHost implements Host {
     }, 0);
   }
 
+  /** The fake clock (starts at 2026-01-01T00:00:00Z). */
   now(): Date {
     return new Date(this.clock);
   }
 
+  /** Moves `now()` forward. Does not fire timers or finish sleeps: those are separate on purpose. */
   advance(ms: number): void {
     this.clock += ms;
   }
@@ -297,6 +320,7 @@ export class FakeHost implements Host {
   }
 }
 
+/** What `harness()` returns: a runner wired to a FakeHost, with its logs and run records collected. */
 export interface Harness {
   host: FakeHost;
   logs: LogEntry[];
@@ -309,9 +333,21 @@ export interface Harness {
   restart(): WorkflowRunner;
   /** Fires the first timer whose name starts with `name`. */
   fire(name: string): Promise<void>;
+  /** Logged messages, optionally only those of one level. */
   messages(level?: LogEntry['level']): string[];
 }
 
+/**
+ * Builds a `WorkflowRunner` for `workflow` with the default block registry and `host` (a new FakeHost
+ * unless given). Logs and run records are collected; `maxSteps` caps steps per run (loop tests).
+ *
+ * ```ts
+ * const h = harness(flow([{ id: 't', type: 'timer', config: { seconds: 10, repeat: true } }, { id: 'o', type: 'open-url', config: { url: 'https://example.com/{{tick}}' } }], [['t', 'o']]));
+ * await h.runner.start();
+ * await h.fire('tick');
+ * expect(h.host.opened[0].url).toBe('https://example.com/1');
+ * ```
+ */
 export function harness(workflow: Workflow, host: FakeHost = new FakeHost(), maxSteps?: number): Harness {
   const logs: LogEntry[] = [];
   const runs = new Map<string, RunRecord>();

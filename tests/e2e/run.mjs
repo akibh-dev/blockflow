@@ -1,6 +1,7 @@
-// End-to-end tests: loads the built extension (.output/chrome-mv3) into a Chromium-based browser
-// with a throwaway profile, serves tests/fixtures/site, runs workflows through the real background
-// worker and checks their runs. Usage: npm run e2e   (BF_BROWSER=/path/to/chrome to pick a browser)
+// End-to-end tests: loads the e2e build of the extension (.output-e2e/chrome-mv3, built with BF_E2E=1)
+// into a Chromium-based browser with a throwaway profile, serves tests/fixtures/site, runs workflows
+// through the real background worker and checks their runs.
+// Usage: npm run e2e   (BF_BROWSER=/path/to/chrome to pick a browser, BF_HEADLESS=1 for --headless=new)
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -50,6 +51,7 @@ let [worker] = context.serviceWorkers();
 worker ??= await context.waitForEvent('serviceworker');
 const extensionId = worker.url().split('/')[2];
 const pageErrors = [];
+/** Opens the extension's editor page in a new tab, collecting its uncaught errors in `pageErrors`. */
 async function openEditor() {
   const page = await context.newPage();
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -59,6 +61,7 @@ async function openEditor() {
 let editor = await openEditor();
 
 let failures = 0;
+/** Prints ✓/✗ for one assertion (with `detail` on failure) and counts failures for the exit code. */
 const check = (name, ok, detail = '') => {
   if (!ok) failures += 1;
   console.log(`${ok ? '  ✓' : '  ✗'} ${name}${ok || !detail ? '' : `\n      ${detail}`}`);
@@ -81,6 +84,10 @@ function workflow(name, nodes, edges) {
   };
 }
 
+/**
+ * Runs `wf` through the background worker (`bf:run-workflow` message from the editor page), then polls
+ * `bf:runs` in storage every 200 ms until a finished run of that workflow appears (90 s limit).
+ */
 async function run(wf) {
   await editor.evaluate((w) => chrome.runtime.sendMessage({ type: 'bf:run-workflow', workflow: w }), wf);
   const deadline = Date.now() + 90_000;
@@ -101,7 +108,9 @@ async function seedWorkflows(list) {
   editor = await openEditor();
 }
 
+/** The step record of node `id` in a run record (the first one, for nodes inside loops). */
 const step = (record, id) => record.steps.find((candidate) => candidate.nodeId === id);
+/** One-line `node:status (error)` trail of a run, printed when a check fails. */
 const summary = (record) => record.steps.map((s) => `${s.nodeId}:${s.status}${s.error ? ` (${s.error})` : ''}`).join(' → ');
 
 // --- scenarios ------------------------------------------------------------------

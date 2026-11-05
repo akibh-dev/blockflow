@@ -18,6 +18,11 @@ interface LogPanelProps {
   workflowName(id: string): string;
 }
 
+/**
+ * Bottom panel with two tabs: "Run log" (log lines, auto-scrolled to the end) and "Runs" (newest
+ * first; clicking one shows it on the canvas and in the step inspector). Purely presentational:
+ * filtering by workflow and clearing are done by `Editor` through the props.
+ */
 export function LogPanel(props: LogPanelProps) {
   const { entries, labelFor, showAll, onToggleAll, onClear, runs, inspectedRunId, onInspect, onClearRuns } = props;
   const [tab, setTab] = useState<'log' | 'runs'>('log');

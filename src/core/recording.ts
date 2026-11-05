@@ -15,6 +15,7 @@ export type RecordedStep =
   | { kind: 'assert-text'; locator: string; text: string }
   | { kind: 'assert-visible'; locator: string };
 
+/** What the recorder captured: the page it started on and the user's actions. */
 export interface Recording {
   startUrl: string;
   steps: RecordedStep[];
@@ -23,6 +24,7 @@ export interface Recording {
 /** Fills right after each other (≥ this many) become one Fill Form block. */
 const FORM_MIN_FIELDS = 2;
 
+/** A recorded navigation as a Wait For URL pattern: just its path. */
 function urlPattern(url: string): string {
   try {
     const parsed = new URL(url);
@@ -50,6 +52,7 @@ export function tidySteps(steps: RecordedStep[]): RecordedStep[] {
   return out;
 }
 
+/** Blocks produced from a recording, wired in one line. */
 export interface RecordedBlocks {
   nodes: NodeDef[];
   edges: EdgeDef[];

@@ -1,12 +1,14 @@
 import { PAGE_ACCENT, PAGE_TIMEOUT_SECONDS, inPage, locatorField, tabField } from './pageCommon';
 import type { BlockDefinition } from '../types';
 
+/** Check settings: the checkbox/radio/switch and the state it should end in. */
 export interface CheckConfig {
   tab: string;
   locator: string;
   state: 'check' | 'uncheck';
 }
 
+/** Check: one `check` agent request; the agent only clicks when the state differs (`result.changed`). */
 export const checkBlock: BlockDefinition<CheckConfig> = {
   type: 'check',
   label: 'Check',

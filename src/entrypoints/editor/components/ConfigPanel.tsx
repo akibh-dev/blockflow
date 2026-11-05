@@ -38,6 +38,15 @@ type PickTarget =
   | { kind: 'cell'; nodeId: string; field: RowsField; row: number; column: string }
   | { kind: 'form'; nodeId: string; field: RowsField };
 
+/**
+ * Right column on the canvas view: the settings of the selected block, generated from the block's
+ * `fields` (so new blocks need no editor changes), plus "Pick on page" for selector/locator fields
+ * and rows cells, the last step's input/output, step settings and the list of outputs.
+ *
+ * Picking: `startPick` sends `bf:start-pick` and remembers the target in `pending`; the answer comes
+ * back as a `bf:pick-result` / `bf:pick-error` runtime message, which this component listens for.
+ * Messages that arrive with no pending target (another editor tab started the pick) are ignored.
+ */
 export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, lastStep, workflows, suggestions }: ConfigPanelProps) {
   const [pick, setPick] = useState<PickState & { fieldKey?: string }>({ status: 'idle' });
   const pending = useRef<PickTarget | null>(null);
@@ -244,6 +253,7 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
   );
 }
 
+/** Editable table for a `rows` field (Fill Form, Extract List, Manual Start...), with per-cell picking and "Detect fields". */
 function RowsInput({
   field,
   rows,
@@ -321,6 +331,7 @@ function RowsInput({
   );
 }
 
+/** The input for one scalar field kind: checkbox, number, select, or text (a `TemplateInput` when templated). */
 function FieldInput({
   field,
   value,
@@ -391,6 +402,7 @@ function FieldInput({
   }
 }
 
+/** "Step settings" disclosure (on error, retries, timeout, screenshot, real input, disabled, note); open when any is set. */
 function StepSettingsEditor({
   step,
   onChange,
@@ -465,6 +477,7 @@ function StepSettingsEditor({
   );
 }
 
+/** The selected block's step in the inspected run: status, error, screenshot, input and output JSON. */
 function StepResult({ step }: { step: StepRecord }) {
   return (
     <details className={`bf-step-result ${step.status}`} open>
@@ -488,6 +501,7 @@ function json(value: unknown): string {
   return value === undefined ? '—' : JSON.stringify(value, null, 2);
 }
 
+/** Human duration: `850 ms`, `2.5 s`, `12 s`. Also used by `LogPanel` and `ReportsPage`. */
 export function formatMs(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
 }

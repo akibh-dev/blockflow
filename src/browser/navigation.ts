@@ -5,12 +5,14 @@ import type { WaitUntil } from '../core/page';
 
 /** Waiting for pages: load, network idle, URL changes (including single-page-app route changes). */
 
+/** What blocks need to know about a tab. `url` falls back to `pendingUrl` while a navigation starts. */
 export interface TabInfo {
   url: string;
   title: string;
   loading: boolean;
 }
 
+/** The tab's URL, title and loading state, or null when the tab no longer exists. */
 export async function tabInfo(tabId: number): Promise<TabInfo | null> {
   try {
     const tab = await browser.tabs.get(tabId);
@@ -77,6 +79,10 @@ async function waitForComplete(tabId: number, timeoutMs: number): Promise<void> 
   }
 }
 
+/**
+ * Waits for `until`: 'none' returns at once, 'load' polls until the tab is not loading, 'networkidle'
+ * additionally waits for 500 ms without requests (in the time left of `timeoutMs`, at least 1 s).
+ */
 export async function waitForLoad(tabId: number, until: WaitUntil, timeoutMs: number): Promise<void> {
   if (until === 'none') return;
   const started = Date.now();
@@ -114,6 +120,10 @@ interface Response {
 
 const logs = new Map<number, Response[]>();
 
+/**
+ * Starts a per-tab response log (last 300 entries, in memory) for Wait For "response". Idempotent; the
+ * listeners are removed when the tab closes. Lost if the worker restarts.
+ */
 export function watchNetwork(tabId: number): void {
   if (logs.has(tabId)) return;
   const entries: Response[] = [];
@@ -144,6 +154,10 @@ export function statusMatches(status: number, wanted: string): boolean {
   return options.some((option) => (/^\dxx$/.test(option) ? Math.floor(status / 100) === Number(option[0]) : Number(option) === status));
 }
 
+/**
+ * Resolves with the first unused logged response of this tab whose URL matches `pattern` and whose status
+ * matches `status`, looking back `lookBackMs` before the call. A response is consumed once matched.
+ */
 export async function waitForResponse(
   tabId: number,
   pattern: string,

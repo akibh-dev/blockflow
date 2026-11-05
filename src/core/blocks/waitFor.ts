@@ -3,8 +3,10 @@ import { PAGE_ACCENT, PAGE_TIMEOUT_SECONDS, inPage, locatorField, pageWaitMs, ta
 import type { WaitState } from '../page';
 import type { BlockDefinition } from '../types';
 
+/** Agent wait states plus the modes handled by the host's tab APIs (url, load, networkidle, response). */
 export type WaitMode = WaitState | 'url' | 'load' | 'networkidle' | 'response';
 
+/** Wait For settings. Which of `locator` / `text` / `url` / `status` matter depends on `mode`. */
 export interface WaitForConfig {
   tab: string;
   mode: WaitMode;
@@ -17,6 +19,7 @@ export interface WaitForConfig {
 /** Wait For "response" also accepts a response that finished just before (during the Click before it). */
 const RESPONSE_LOOK_BACK_MS = 10_000;
 
+/** Modes that are meaningless without a locator (checked before calling the agent). */
 const NEEDS_ELEMENT: WaitMode[] = ['visible', 'hidden', 'attached', 'detached', 'enabled'];
 
 /**

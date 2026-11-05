@@ -8,6 +8,10 @@ export const PAGE_ACCENT = '#7c3aed';
 /** Page actions fail after this long by default (Playwright's default too). */
 export const PAGE_TIMEOUT_SECONDS = 30;
 
+/**
+ * The "Tab" setting every page block ends with: the name of a tab in `$session.tabs`
+ * (see session.ts). Empty means DEFAULT_TAB ("main"). Not templated.
+ */
 export const tabField: TextField = {
   key: 'tab',
   label: 'Tab',
@@ -16,6 +20,10 @@ export const tabField: TextField = {
   help: 'The name an Open Tab block gave the tab earlier in this run. Usually "main".',
 };
 
+/**
+ * A templated `kind: 'locator'` field (the editor adds a "Pick on page" button). Spread and override
+ * `help` / `placeholder` for block-specific wording; pass `required = false` for optional elements.
+ */
 export function locatorField(key = 'locator', label = 'Element', required = true): TextField {
   return {
     key,
@@ -33,6 +41,7 @@ export function pageWaitMs(ctx: BlockContext<object>): number {
   return Math.max(1_000, ctx.timeoutMs - 500);
 }
 
+/** Config shape `inPage` needs: every page block config has a `tab`. */
 export interface WithTab {
   tab: string;
 }

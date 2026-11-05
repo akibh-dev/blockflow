@@ -5,6 +5,7 @@ import { locatorField, pageWaitMs, tabField } from './pageCommon';
 import type { ReadKind } from '../page';
 import type { BlockContext, BlockDefinition, Payload } from '../types';
 
+/** What Assert checks: a data value, a page property, or an element state (the yes/no subjects in STATES). */
 export type AssertSubject =
   | 'value'
   | 'text'
@@ -20,6 +21,7 @@ export type AssertSubject =
   | 'enabled'
   | 'disabled';
 
+/** Assert settings. `operator` / `expected` are ignored by the yes/no subjects. */
 export interface AssertConfig {
   subject: AssertSubject;
   value: string;
@@ -42,6 +44,7 @@ const STATES: Partial<Record<AssertSubject, { kind: ReadKind; wanted: string }>>
   disabled: { kind: 'enabled', wanted: 'false' },
 };
 
+/** Read kind for the comparing subjects (url/title/value are not read through the agent). */
 const READS: Partial<Record<AssertSubject, ReadKind>> = { text: 'text', input: 'value', attribute: 'attribute', count: 'count' };
 const RETRY_EVERY_MS = 250;
 /** One look at the page; the retries do the waiting. */
@@ -68,6 +71,7 @@ async function actual(ctx: BlockContext<AssertConfig>, input: Payload): Promise<
   }
 }
 
+/** Whether the value passes: yes/no subjects compare with STATES; the rest use condition.ts's testClause. */
 function passes(config: AssertConfig, value: string | null): boolean {
   const state = STATES[config.subject];
   if (state) return value === state.wanted;
@@ -75,6 +79,7 @@ function passes(config: AssertConfig, value: string | null): boolean {
   return testClause({ left: value, operator: config.operator, right: config.expected });
 }
 
+/** Human-readable statement of the check, for logs, the summary and the default failure message. */
 function describe(config: AssertConfig): string {
   const what = config.subject === 'value' ? 'value' : `${config.subject}${config.locator ? ` of ${config.locator}` : ''}`;
   if (STATES[config.subject]) return `${config.locator} is ${config.subject}`;

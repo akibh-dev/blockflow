@@ -2,6 +2,7 @@ import { browser } from 'wxt/browser';
 
 const LOAD_TIMEOUT_MS = 30_000;
 
+/** The tab's id, or throws: the browser may return a tab without one (devtools windows, some Firefox cases). */
 export function requireTabId(tab: { id?: number }): number {
   if (tab.id === undefined) throw new Error('The browser did not return a tab id');
   return tab.id;
@@ -48,6 +49,7 @@ export async function waitForTabComplete(tabId: number, timeoutMs = LOAD_TIMEOUT
   await waiter.promise;
 }
 
+/** Reloads the tab and resolves on its next "complete" status (listener armed before the reload, so it cannot be missed). */
 export async function reloadAndWait(tabId: number, timeoutMs = LOAD_TIMEOUT_MS): Promise<void> {
   const waiter = nextLoadComplete(tabId, timeoutMs);
   try {
@@ -59,6 +61,7 @@ export async function reloadAndWait(tabId: number, timeoutMs = LOAD_TIMEOUT_MS):
   await waiter.promise;
 }
 
+/** True if `tabs.get` finds the tab (it has not been closed). */
 export async function tabExists(tabId: number): Promise<boolean> {
   try {
     await browser.tabs.get(tabId);
@@ -68,6 +71,7 @@ export async function tabExists(tabId: number): Promise<boolean> {
   }
 }
 
+/** Short in-step pause (polling loops). Not for workflow timing: blocks use `ctx.timers`, see CLAUDE.md. */
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

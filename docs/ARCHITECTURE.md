@@ -8,6 +8,8 @@ state). `src/browser` implements that interface with real extension APIs; tests 
 in-memory fakes. The **background worker** loads enabled workflows and lets the engine run them. The
 **editor** only edits workflows in storage; it never talks to the engine directly.
 
+For a file-by-file reference of the internals, see the [wiki](wiki/Home.md).
+
 ```text
  Editor (React)                Background worker                    Web pages
  ──────────────                ─────────────────                    ─────────
@@ -126,8 +128,8 @@ Page blocks send one request each to `Host.page.act(tabId, request, timeoutMs)` 
 - Watch Element and Read Element with a Page URL still use BlockFlow's own background tab per URL, but read
   through the agent too, so every locator works there.
 
-Known gaps (see docs/PLAN-automation.md, phase F): events are `isTrusted: false`, so sites that check it
-need the future CDP driver; iframes and closed shadow roots are not reached yet.
+Events are `isTrusted: false` unless the step asks for real input, and iframes need `frame=`: both are
+covered in "Harder pages (phase F)" below. Closed shadow roots are still out of reach.
 
 ## Data and scraping
 
@@ -194,8 +196,9 @@ need the future CDP driver; iframes and closed shadow roots are not reached yet.
 1. Reuse the background tab BlockFlow previously opened for that URL (or open one, inactive). It never
    reuses your own tabs, so it never reloads a page you are working in.
 2. Reload it if `reload` is on, wait for load.
-3. `scripting.executeScript` runs `readSelectorInPage(selector)` in the page. If the element is not there
-   yet it retries for ~6 seconds, for single-page apps.
+3. Read it through the page agent (`read` op, so every locator works), waiting up to 6 seconds for the
+   element, for single-page apps. (`src/dom/readElement.ts`'s `readSelectorInPage` is the older CSS-only
+   reader, kept for reference.)
 
 The block compares the whitespace-normalised text with the last value in `ctx.state`. The first read only
 records a baseline. If the URL or selector changes, the baseline resets, so editing a workflow never
@@ -217,17 +220,21 @@ moves to the parent or back, Enter confirms, Esc cancels.
 
 ## Testing strategy
 
-- `npm run e2e` (`tests/e2e/run.mjs`) builds, loads `.output/chrome-mv3` into a Chromium-based browser with a
-  throwaway profile (Brave, Chromium or Chrome; `BF_BROWSER` to choose), serves `tests/fixtures/site` (a
-  classic login form, a single-page app with a controlled form, an overlay, a custom checkbox, a web
-  component) and runs workflows through the real background worker.
-
-
+- `npm run e2e` (`tests/e2e/run.mjs`) builds with `BF_E2E=1` (optional permissions granted up front,
+  output in `.output-e2e/chrome-mv3` so it never mixes with your own build), loads it into a
+  Chromium-based browser with a throwaway profile (Brave, Chromium or Chrome; `BF_BROWSER` to choose),
+  serves `tests/fixtures/site` plus a few generated pages (`tests/e2e/server.mjs`: a classic login
+  form, a single-page app with a controlled form, an overlay, a custom checkbox, a web component,
+  paginated products and an infinite feed, popups, dialogs, uploads, iframes, an API, a trusted-events
+  check) and runs workflows through the real background
+  worker.
 - `tests/core`: engine and blocks through `tests/helpers/fakeHost.ts`. Timers are "fired" by calling
   `runner.handleTimer`, so no real time passes. There is a test that a brand-new runner continues a flow,
   which is exactly what happens after the worker sleeps.
 - `tests/dom`: selector generation (including a property test: every element on a complex page gets a
-  selector matching only itself) and the picker, in jsdom.
+  selector matching only itself), the picker, locators, the page agent (a React form filled in jsdom)
+  and the recorder, in jsdom.
+- `tests/browser`: `HybridScheduler` with a fake clock.
 - `tests/editor`: pure conversion between saved workflows and canvas nodes.
-- Not covered by automated tests yet: real browser APIs and React Flow interactions. See the README's
-  "What has been verified" and use `docs/manual-test`.
+- Covered only by `npm run e2e` or by hand: real browser APIs, and React Flow interactions such as
+  dragging and connecting. See the README's "What has been verified" and use `docs/manual-test`.

@@ -7,6 +7,7 @@ import type { StepStatus } from '../../../core/runs';
 import type { BlockNodeData } from '../flow/convert';
 import { registry } from '../registry';
 
+/** A React Flow node as the editor stores it in state: `type: 'block'` with `BlockNodeData`. */
 export type BlockFlowNode = Node<BlockNodeData, 'block'>;
 
 /** nodeId → problems found by validation, so each block can show a warning badge. */
@@ -23,6 +24,13 @@ const STATUS_ICON: Record<StepStatus, string> = {
   skipped: '⤼',
 };
 
+/**
+ * How one block is drawn on the canvas (registered as node type `block`). Shows icon, label, the
+ * block's `summary()` of its settings, a note, a run-status badge (from `RunStatusContext`) and a
+ * problem badge (from `IssuesContext`). One input handle on the left; one output handle per port
+ * on the right (`nodePorts`, so an `error` port appears when On error is "port"). Handle ids are
+ * the port names, which become the edges' `sourceHandle`.
+ */
 export function BlockNode({ id, data, selected }: NodeProps<BlockFlowNode>) {
   const def = registry.get(data.blockType);
   const problems = useContext(IssuesContext).get(id) ?? [];
@@ -77,6 +85,7 @@ export function BlockNode({ id, data, selected }: NodeProps<BlockFlowNode>) {
   );
 }
 
+/** Config with defaults filled in, cast for `def.summary` (whose config type is block-specific). */
 function withDefaults(defaults: object, config: Record<string, unknown>) {
   return { ...defaults, ...config } as never;
 }

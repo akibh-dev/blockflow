@@ -1,6 +1,7 @@
 import { currentTabPayload } from './pageVisited';
 import type { BlockContext, BlockDefinition } from '../types';
 
+/** Context Menu settings, read by the background worker when it (re)creates the menu items. */
 export interface ContextMenuConfig {
   title: string;
   contexts: 'page' | 'selection' | 'link' | 'image' | 'all';

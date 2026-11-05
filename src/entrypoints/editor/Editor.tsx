@@ -39,8 +39,10 @@ import { SecretsPage } from './components/SecretsPage';
 import { DataPage } from './components/DataPage';
 import { registry } from './registry';
 
+/** React Flow node renderers by node `type`; every BlockFlow node is `'block'`. Module-level so it is stable. */
 const nodeTypes = { block: BlockNode };
 const defaultEdgeOptions = { type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } };
+/** Debounce between the last change and the write of `bf:workflows`. */
 const SAVE_DELAY_MS = 400;
 const HISTORY_MERGE_MS = 600;
 const HISTORY_LIMIT = 100;
@@ -56,6 +58,16 @@ function portOfEdge(workflow: Workflow, edge: EdgeDef): string {
   return edgePort(edge, nodePorts(node ? registry.get(node.type) : undefined, node ?? {}));
 }
 
+/**
+ * The whole editor page: owns the workflow list and the canvas of the open workflow, and renders the
+ * header, sidebar, the current view (canvas + config panel, or one of the manage/reports/data/secrets
+ * pages) and the bottom log panel.
+ *
+ * Data flow: storage → `workflows` (loaded once) → `toFlow` → `nodes`/`edges` (React Flow state) →
+ * `fromFlow` → `workflows` → debounced `saveWorkflows`. The background worker reacts to that write.
+ * Runs, logs, prompts, secrets and the recorder state come in live through the hooks in `hooks.ts`.
+ * Run/Stop/Record talk to the background with `runtime.sendMessage`.
+ */
 export function Editor() {
   const { screenToFlowPosition } = useReactFlow();
   const [workflows, setWorkflows] = useState<Workflow[] | null>(null);
@@ -75,6 +87,7 @@ export function Editor() {
 
   // --- loading -----------------------------------------------------------
 
+  /** Put a workflow on the canvas. Resets the inspected run and the undo history. */
   const open = useCallback((workflow: Workflow) => {
     const flow = toFlow(workflow, (edge) => portOfEdge(workflow, edge));
     setNodes(flow.nodes as BlockFlowNode[]);
@@ -182,6 +195,7 @@ export function Editor() {
     });
   }, []);
 
+  /** Add a block with its default config, selected; without a position it is cascaded near the top left. */
   const addBlock = useCallback((type: string, position?: { x: number; y: number }) => {
     const def = registry.get(type);
     if (!def) return;
@@ -221,6 +235,7 @@ export function Editor() {
     );
   }, []);
 
+  /** Merge step settings into a node, dropping values back at their default so saved workflows stay small. */
   const updateStep = useCallback((nodeId: string, patch: Partial<StepSettings>) => {
     setNodes((current) =>
       current.map((node) => {
@@ -454,6 +469,7 @@ export function Editor() {
 
   // --- undo / redo / copy / paste --------------------------------------------
 
+  /** Put an undo/redo snapshot on the canvas; `restoring` keeps that change out of the history. */
   const showGraph = useCallback(
     (graph: Graph) => {
       const workflow = latest.current?.find((candidate) => candidate.id === activeIdRef.current);
@@ -487,6 +503,7 @@ export function Editor() {
     showGraph(next);
   }, [showGraph]);
 
+  /** Copy the selected blocks and the connections between them to the module `clipboard`. False if none selected. */
   const copySelection = useCallback(() => {
     const picked = nodesRef.current.filter((node) => node.selected);
     if (picked.length === 0) return false;
@@ -500,6 +517,7 @@ export function Editor() {
     return true;
   }, []);
 
+  /** Paste the clipboard with fresh ids, offset 40px, selected. The clipboard then holds the pasted copy. */
   const paste = useCallback(() => {
     if (!clipboard) return;
     const idMap = new Map(clipboard.nodes.map((node) => [node.id, uid()]));
@@ -543,6 +561,7 @@ export function Editor() {
 
   const [recording] = useStorageValue<RecordingState | null>(STORAGE_KEYS.recording, null);
 
+  /** Ask for a start URL (suggesting the first Open URL block's), then ask the background to record there. */
   const startRecording = () => {
     if (!active) return;
     const firstUrl = active.nodes.find((node) => node.type === 'open-url')?.config.url;

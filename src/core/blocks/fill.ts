@@ -2,6 +2,7 @@ import { truncate } from '../text';
 import { PAGE_ACCENT, PAGE_TIMEOUT_SECONDS, inPage, locatorField, tabField } from './pageCommon';
 import type { BlockDefinition } from '../types';
 
+/** Fill settings. `mode: 'type'` sends key events one character at a time (autocomplete boxes). */
 export interface FillConfig {
   tab: string;
   locator: string;
@@ -9,6 +10,7 @@ export interface FillConfig {
   mode: 'fill' | 'type';
 }
 
+/** Fill: one `fill` agent request (native value setter + input/change events), then passes its input on. */
 export const fillBlock: BlockDefinition<FillConfig> = {
   type: 'fill',
   label: 'Fill',

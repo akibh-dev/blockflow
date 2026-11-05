@@ -8,14 +8,15 @@ WXT + React + TypeScript + React Flow. Read `README.md` for the product and `doc
 ```bash
 npm install            # runs `wxt prepare` (generates .wxt/ types)
 npm run typecheck      # tsc --noEmit
-npm test               # vitest run (core + editor in Node, tests/dom in jsdom)
-npm run check          # typecheck + tests + learning examples in sync
+npm test               # vitest run (core + editor + browser in Node, tests/dom in jsdom)
+npm run check          # typecheck + tests + learning examples and generated guide in sync + wiki links
 npm run e2e            # BF_E2E=1 build into .output-e2e (optional permissions granted) + drive it in Brave/Chromium
                        # (tests/e2e, fixtures in tests/fixtures/site; BF_BROWSER=/path/to/chrome to choose)
 npm run guide:sync     # regenerate docs/guide/blocks.* from the registry (guide:check is part of npm run check)
 npm run learn:sync     # regenerate docs/learning/examples from the lessons (learn:check verifies)
+npm run wiki:publish   # push docs/wiki to the Forgejo + GitHub wikis (wiki:check, in npm run check, verifies links)
 npm run dev            # Chrome with hot reload; `npm run dev:firefox` for Firefox
-npm run build / build:firefox / build:safari
+npm run build / build:firefox / build:safari / build:all   (npm run zip / zip:firefox to package)
 ```
 
 ## First thing to do on a fresh checkout (prototype 1 status)
@@ -56,6 +57,7 @@ Prototype 1 was written where npm was blocked, so it was verified only partially
   carried out by `src/dom/agent.ts`), and find their tab with `requireSessionTab(input, ctx.config.tab)`.
   New page abilities: add an op to `page.ts`, implement it in `agent.ts` with a jsdom test, then the block.
 - `src/dom/*` runs inside web pages: DOM only; it may import pure `src/core` modules (no browser APIs).
+- Changed a module's API, a message, a storage key or a page op: update the matching page in `docs/wiki/`.
 - New or changed blocks: run `npm run guide:sync` (the usage guide's reference is generated) and keep
   `docs/guide/README.md` and its examples correct; `npm run check` fails otherwise.
 
@@ -75,4 +77,7 @@ or update the matching lesson in the same change.** Read `docs/learning/MAINTAIN
 ## Where things are
 
 See the layout in `README.md`. Entry points: `src/entrypoints/background.ts` (runs workflows),
-`src/entrypoints/editor/` (UI), `src/entrypoints/picker.content.ts` (element picker, injected on demand).
+`src/entrypoints/editor/` (UI), `src/entrypoints/picker.content.ts` (element picker, injected on demand),
+`agent.content.ts` (page agent) and `recorder.content.ts` (recorder), both injected on demand, and
+`src/entrypoints/offscreen/` (Chrome only: parses fetched HTML).
+Internals wiki, file by file: `docs/wiki/Home.md`. Usage guide and block reference: `docs/guide/`.

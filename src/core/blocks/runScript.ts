@@ -2,6 +2,7 @@ import { requireSessionTab } from '../session';
 import { PAGE_ACCENT, tabField } from './pageCommon';
 import type { BlockDefinition } from '../types';
 
+/** Run Script settings: the async function body, and the payload key its return value goes into. */
 export interface RunScriptConfig {
   tab: string;
   code: string;

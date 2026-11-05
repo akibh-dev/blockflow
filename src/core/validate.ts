@@ -4,6 +4,7 @@ import { edgePort, nodePorts } from './ports';
 import type { BlockRegistry } from './registry';
 import type { Workflow } from './types';
 
+/** A problem found by `validateWorkflow`, pinned to a block or connection when possible. */
 export interface Issue {
   level: 'error' | 'warning';
   nodeId?: string;
@@ -109,6 +110,7 @@ export function validateWorkflow(workflow: Workflow, registry: BlockRegistry): I
   return issues;
 }
 
+/** Ids reachable along edges from `startIds` (breadth-first, ports ignored). */
 function reachableFrom(startIds: string[], workflow: Workflow): Set<string> {
   const seen = new Set<string>(startIds);
   const queue = [...startIds];
@@ -124,6 +126,7 @@ function reachableFrom(startIds: string[], workflow: Workflow): Set<string> {
   return seen;
 }
 
+/** True when the edges contain a directed cycle (depth-first search). */
 function hasCycle(workflow: Workflow): boolean {
   const state = new Map<string, 'visiting' | 'done'>();
   const visit = (id: string): boolean => {

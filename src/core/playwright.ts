@@ -15,6 +15,7 @@ export interface ExportOptions {
   lookup?(id: string): Workflow | undefined;
 }
 
+/** A value as a JS string literal. */
 const js = (text: unknown) => JSON.stringify(String(text ?? ''));
 
 /** A BlockFlow locator as a Playwright locator expression on `base` (a page or locator expression). */
@@ -98,10 +99,12 @@ function template(text: unknown): string {
     .join('')}\``;
 }
 
+/** The generated expression for the block's tab (`tabs["main"]`). */
 function tab(config: Record<string, unknown>): string {
   return `tabs[${js(config.tab || 'main')}]`;
 }
 
+/** Builds the test body: walks the graph from each root and writes one statement (or block) per node. */
 class Writer {
   private lines: string[] = [];
   private depth = 1;
@@ -382,12 +385,14 @@ class Writer {
   }
 }
 
+/** A camelCase function name for a called workflow, made unique with part of its id. */
 function functionName(workflow: Workflow): string {
   const words = workflow.name.replace(/[^A-Za-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
   const base = words.map((word, index) => (index === 0 ? word.toLowerCase() : word[0]?.toUpperCase() + word.slice(1).toLowerCase())).join('') || 'workflow';
   return `${/^\d/.test(base) ? '_' : ''}${base}_${workflow.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 6)}`;
 }
 
+/** The statements of one workflow; Run Workflow targets are added to `calls`. */
 function bodyOf(workflow: Workflow, options: ExportOptions, calls: Set<string>): string {
   const writer = new Writer(workflow, options, calls);
   const fed = new Set(workflow.edges.map((edge) => edge.target));
@@ -396,6 +401,7 @@ function bodyOf(workflow: Workflow, options: ExportOptions, calls: Set<string>):
   return writer.out();
 }
 
+/** Helper functions appended to every exported test (mirror BlockFlow's own semantics). */
 const HELPERS = `
 // --- helpers (exported by BlockFlow) ---------------------------------------
 
@@ -500,6 +506,10 @@ function compare(left: string, operator: string, right: string): boolean {
 }
 `;
 
+/**
+ * The full `.spec.ts` text: one `test()`, called workflows as functions, then the helpers.
+ * Secrets become environment variables (`{{secret.api_key}}` = `process.env.API_KEY`).
+ */
 export function workflowToPlaywright(workflow: Workflow, options: ExportOptions): string {
   const calls = new Set<string>();
   const main = bodyOf(workflow, options, calls);

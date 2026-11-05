@@ -1,6 +1,7 @@
 import { withSessionTab } from '../session';
 import type { BlockContext, BlockDefinition, Payload } from '../types';
 
+/** Page Visited settings, read by the background worker's webNavigation listeners (not by the block). */
 export interface PageVisitedConfig {
   url: string;
   when: 'load' | 'any';

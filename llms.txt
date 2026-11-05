@@ -16,4 +16,5 @@ To change BlockFlow's code:
 
 - [CLAUDE.md](CLAUDE.md): commands and codebase rules
 - [Architecture](docs/ARCHITECTURE.md)
+- [Internals wiki](docs/wiki/Home.md): file-by-file reference of the code
 - [Plan and status](docs/PLAN-automation.md)

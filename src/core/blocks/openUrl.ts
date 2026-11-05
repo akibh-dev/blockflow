@@ -3,6 +3,7 @@ import { normalizeHttpUrl } from '../url';
 import type { WaitUntil } from '../page';
 import type { BlockDefinition } from '../types';
 
+/** Open Tab settings. */
 export interface OpenUrlConfig {
   url: string;
   /** new: a new tab · workflow: this block's own tab, reused every run · current: the tab you are on · window: a new window */
@@ -14,6 +15,7 @@ export interface OpenUrlConfig {
   newTab?: boolean;
 }
 
+/** "Continue when" options, shared by Open Tab, Navigate and Wait for Popup. */
 export const WAIT_UNTIL_OPTIONS = [
   { value: 'load', label: 'the page has loaded' },
   { value: 'networkidle', label: 'the network is quiet (for pages that load data after load)' },

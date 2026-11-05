@@ -3,10 +3,12 @@ import { sleep } from './tabs';
 
 /**
  * Tabs opened by other tabs (window.open, target=_blank), remembered for Wait for Popup. The
- * background records them from tabs.onCreated; popups can open before the block starts waiting.
+ * background records them from webNavigation.onCreatedNavigationTarget (see background.ts for why not
+ * tabs.onCreated); popups can open before the block starts waiting. Kept in storage.session.
  */
 const KEY = 'bf:popups';
 
+/** One tab opened by another tab, kept for two minutes (the last 50). */
 interface PopupRecord {
   tabId: number;
   openerTabId: number;
@@ -17,12 +19,17 @@ async function list(): Promise<PopupRecord[]> {
   return ((await browser.storage.session.get(KEY))[KEY] as PopupRecord[] | undefined) ?? [];
 }
 
+/** Called by the background for every `webNavigation.onCreatedNavigationTarget`. */
 export async function recordPopup(tabId: number, openerTabId: number): Promise<void> {
   // Both listeners may report the same tab.
   const records = (await list()).filter((record) => Date.now() - record.at < 120_000 && record.tabId !== tabId);
   await browser.storage.session.set({ [KEY]: [...records, { tabId, openerTabId, at: Date.now() }].slice(-50) });
 }
 
+/**
+ * `Host.tabs.waitForPopup`: the id of a tab opened by `openerTabId` since `lookBackMs` ago, polling
+ * every 200 ms. Claims the record, so each popup is returned once.
+ */
 export async function waitForPopup(openerTabId: number, lookBackMs: number, timeoutMs: number): Promise<number> {
   const since = Date.now() - lookBackMs;
   const deadline = Date.now() + timeoutMs;

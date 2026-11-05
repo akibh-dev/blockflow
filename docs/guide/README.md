@@ -24,9 +24,11 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
    sidebar or the All workflows page. Imported workflows always arrive **off**, with new ids.
 2. Block `type` values and `config` keys must come from [`blocks.md`](blocks.md). Unknown keys are
    ignored; unknown types are an error. Missing keys take the block's default.
-3. Every page block (Click, Fill, Fill Form, Select Option, Check, Press Key, Wait For, Assert on the
-   page, Read Element without a URL, Navigate, Close Tab) needs an **Open Tab** (`type: "open-url"`)
-   **earlier on the same path**, with the same `tab` name (default `"main"`).
+3. Every page block (Click, Fill, Fill Form, Select Option, Check, Press Key, Upload File, Scroll,
+   Dialogs, Wait For, Run Script, Assert on the page, Read Element without a URL, Extract List / Extract
+   Table / Page Info / Paginate from a tab, Navigate, Wait for Popup, Close Tab) needs an **Open Tab**
+   (`type: "open-url"`) **earlier on the same path**, with the same `tab` name (default `"main"`).
+   (Page Visited and Context Menu start blocks also provide `main`.)
 4. Connect blocks with `edges`. A block with no incoming edge is a **start block**. Use
    `sourcePort` only for blocks with several outputs: `"true"`/`"false"` on If, `"error"` when the
    source has `step.onError: "port"`.
@@ -51,8 +53,8 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
   the block before it, and passes data on, usually the same object plus a few keys it adds
   (Read Element adds `value`, `previous`, `changed`, `count`, `url`). Later blocks use it in
   settings with `{{key}}`.
-- **Start block**: a block nothing feeds. Timer and Watch Element have their own schedule. Any other
-  block at the start runs once with empty data.
+- **Start block**: a block nothing feeds. Timer, Schedule, Page Visited, Context Menu and Watch
+  Element have their own trigger (section 8). Any other block at the start runs once with empty data.
 - **Run**: one trip of data through the workflow, started by the **▶ Run** button (once, now,
   workflow on or off), by a start block's schedule when the workflow is **On**, or by a Run Workflow
   block. Each block it passes is a **step** with a status: passed, failed, handled (error dealt with),
@@ -118,7 +120,6 @@ data just before the block runs:
 | `{{data.items[0].title}}` | nested keys and array indexes |
 | `{{secret.loginPassword}}` | a secret (section 9) |
 | `{{error}}` | the error text, on the `error` output |
-
 | `{{ price * 1.1 }}`, `{{ upper(name) }}` | an expression (below) |
 
 Missing keys render as an empty string; objects render as JSON. The result is always a string.
@@ -181,8 +182,9 @@ Assert text) use the first match.
 - Each action **auto-waits** until its element: exists exactly once, is visible, enabled (and
   editable for Fill), has stopped moving, and is not covered by something else (a cookie banner, a
   modal). A timeout tells you which of these failed ("is covered by div#overlay").
-- Default timeouts: page actions 30 s, Open Tab and Navigate 45 s, Assert 10 s, Manual Step 600 s,
-  Run Workflow 300 s, everything else 60 s. Change per block with `step.timeoutSeconds`.
+- Default timeouts: page actions 30 s, Open Tab and Navigate 45 s, Assert 10 s, Dialogs 15 s,
+  Scroll 120 s, Manual Step 600 s, Run Workflow 300 s, Paginate 1800 s, For Each and Repeat 3600 s
+  (a loop's timeout covers all its iterations), everything else 60 s (`blocks.md` lists each block's). Change per block with `step.timeoutSeconds`.
 - **Assert** on the page retries until it passes or the timeout ends, like Playwright's `expect`.
 - **Wait For** modes: `visible`, `hidden`, `attached`, `detached`, `enabled` (need `locator`);
   `text`, `no-text` (need `text`; `locator` optional to look only inside it); `url` (needs `url`

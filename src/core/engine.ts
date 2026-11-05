@@ -22,11 +22,13 @@ import type {
 export const DEFAULT_MAX_STEPS = 1000;
 /** A step that takes longer than this fails, unless its step settings say otherwise. */
 export const DEFAULT_TIMEOUT_SECONDS = 60;
+/** Upper bound for `StepSettings.retries`. */
 export const MAX_RETRIES = 5;
 /** Run Workflow inside Run Workflow inside…: stop at this depth (a workflow calling itself). */
 export const MAX_CALL_DEPTH = 8;
 const SCREENSHOT_TIMEOUT_MS = 8_000;
 
+/** Everything a `WorkflowRunner` needs. The background builds a fresh runner per event. */
 export interface RunnerOptions {
   workflow: Workflow;
   registry: BlockRegistry;
@@ -98,6 +100,7 @@ export class WorkflowRunner {
     for (const edge of this.workflow.edges) this.hasIncoming.add(edge.target);
   }
 
+  /** Id of the workflow this runner runs. */
   get workflowId(): string {
     return this.workflow.id;
   }
@@ -121,6 +124,7 @@ export class WorkflowRunner {
     for (const node of roots) await this.startRoot(node);
   }
 
+  /** Stops the workflow: clears its timers and makes this runner ignore further timers and emits. */
   async stop(): Promise<void> {
     this.stopped = true;
     await this.host.scheduler.clearPrefix(workflowTimerPrefix(this.workflow.id));
@@ -390,6 +394,7 @@ export class WorkflowRunner {
     }
   }
 
+  /** Applies the node's `onError` setting to a failed step: continue, send to the error port, or fail. */
   private async handleFailure(
     run: ActiveRun,
     step: StepRecord,
@@ -422,6 +427,7 @@ export class WorkflowRunner {
     }
   }
 
+  /** Marks the step and the run failed; this path ends here. */
   private async failStep(run: ActiveRun, step: StepRecord, node: NodeDef, input: Payload, message: string): Promise<void> {
     this.log('error', node.id, message);
     run.failed = true;
@@ -467,6 +473,7 @@ export class WorkflowRunner {
     if (!sent) run.lastOutput = payload;
   }
 
+  /** Runs another saved workflow as a child run; throws (with `childRunId`) unless it passed. */
   private async callWorkflow(workflowId: string, input: Payload, run: ActiveRun): Promise<{ output: Payload; runId: string }> {
     if (this.callDepth + 1 >= MAX_CALL_DEPTH) {
       throw new Error(`Run Workflow is nested more than ${MAX_CALL_DEPTH} levels deep. Does a workflow call itself?`);
@@ -488,6 +495,7 @@ export class WorkflowRunner {
     return { output, runId: record.id };
   }
 
+  /** Races `promise` against `Host.sleep`. The losing block call is not cancelled; it keeps running. */
   private withTimeout<T>(promise: Promise<T>, seconds: number): Promise<T> {
     const timeout = this.host.sleep(seconds * 1000).then(() => {
       throw new Error(`Timed out after ${seconds}s`);
@@ -495,6 +503,7 @@ export class WorkflowRunner {
     return Promise.race([promise, timeout]);
   }
 
+  /** Adds a running step record (masked, compacted input). Past `MAX_STEPS_KEPT` it is only counted. */
   private beginStep(run: ActiveRun, node: NodeDef, input: Payload): StepRecord {
     const step: StepRecord = {
       nodeId: node.id,
@@ -510,6 +519,7 @@ export class WorkflowRunner {
     return step;
   }
 
+  /** Finishes a step record (status, duration, masked output/port/error) and publishes the run. */
   private endStep(
     run: ActiveRun,
     step: StepRecord,
@@ -524,6 +534,7 @@ export class WorkflowRunner {
     this.publish(run);
   }
 
+  /** Sends a copy of the run record to `onRun`. */
   private publish(run: ActiveRun): void {
     this.observer?.(snapshot(run.record));
   }
@@ -534,6 +545,7 @@ export class WorkflowRunner {
 
   // -------------------------------------------------------------------------
 
+  /** Runs a start/onTimer hook outside any run: an error is logged, never thrown. */
   private async guard(node: NodeDef, def: AnyBlockDefinition, fn: () => Promise<void>): Promise<void> {
     try {
       await fn();
@@ -610,6 +622,7 @@ export class WorkflowRunner {
     return ctx as BlockContext<never>;
   }
 
+  /** Writes a masked line to the log sink. */
   private log(level: LogLevel, nodeId: string | undefined, message: string): void {
     this.sink?.({
       ts: this.host.now().toISOString(),
@@ -628,14 +641,17 @@ export function stepTimeoutSeconds(node: Pick<NodeDef, 'step'>, def: Pick<AnyBlo
   return def?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
 }
 
+/** Message of a thrown value, whatever was thrown. */
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** Integer within [min, max]; non-finite values become `min`. */
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.floor(Number.isFinite(value) ? value : min)));
 }
 
+/** Copy of a run record (and its steps) safe to hand to observers. */
 function snapshot(record: RunRecord): RunRecord {
   return { ...record, steps: record.steps.map((step) => ({ ...step })) };
 }

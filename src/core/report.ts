@@ -13,6 +13,7 @@ export interface ReportOptions {
   title?: string;
 }
 
+/** Counts over a list of runs. failed includes interrupted; other = cancelled or still running. */
 export interface RunSummary {
   total: number;
   passed: number;
@@ -21,10 +22,12 @@ export interface RunSummary {
   durationMs: number;
 }
 
+/** Run length in ms (0 while it is still running). */
 export function durationOf(run: RunRecord): number {
   return run.endedAt ? Math.max(0, Date.parse(run.endedAt) - Date.parse(run.startedAt)) : 0;
 }
 
+/** Totals for the report header and JUnit attributes. */
 export function summarize(runs: RunRecord[]): RunSummary {
   return {
     total: runs.length,

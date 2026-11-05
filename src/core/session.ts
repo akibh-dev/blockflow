@@ -6,7 +6,9 @@ import type { Payload } from './types';
  * block finds its tab here.
  */
 
+/** Payload key holding the run's tabs. */
 export const SESSION_KEY = '$session';
+/** Tab name used when a block's Tab setting is empty. */
 export const DEFAULT_TAB = 'main';
 
 interface Session {
@@ -21,11 +23,13 @@ function readSession(payload: Payload): Session {
   return { tabs: {} };
 }
 
+/** Tab id stored under `name` (blank = `main`), or undefined. */
 export function sessionTab(payload: Payload, name: string): number | undefined {
   const id = readSession(payload).tabs[name.trim() || DEFAULT_TAB];
   return typeof id === 'number' ? id : undefined;
 }
 
+/** Like `sessionTab`, but throws a user-facing error when the tab is not in the run. */
 export function requireSessionTab(payload: Payload, name: string): number {
   const tab = name.trim() || DEFAULT_TAB;
   const id = sessionTab(payload, tab);
@@ -35,12 +39,14 @@ export function requireSessionTab(payload: Payload, name: string): number {
   return id;
 }
 
+/** Copy of `payload` with `tabId` stored under `name`. */
 export function withSessionTab(payload: Payload, name: string, tabId: number): Payload {
   const session = readSession(payload);
   session.tabs[name.trim() || DEFAULT_TAB] = tabId;
   return { ...payload, [SESSION_KEY]: session };
 }
 
+/** Copy of `payload` without the tab `name` (Close Tab). */
 export function withoutSessionTab(payload: Payload, name: string): Payload {
   const session = readSession(payload);
   delete session.tabs[name.trim() || DEFAULT_TAB];

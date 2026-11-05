@@ -16,14 +16,23 @@ import type { AgentCall, AgentRequest, AgentResponse, FormFieldRow } from '../co
  * Only `import type` from the extension: this file is bundled into the content script.
  */
 
+/** Pause between attempts while `run` keeps retrying inside its budget. */
 const RETRY_EVERY_MS = 50;
 
+/** Not possible yet (missing, hidden, disabled, moving, covered): retried, then answered as `pending`. */
 class Pending extends Error {}
+/** Will never work (bad locator, strict-mode violation, wrong element type): answered as `error` at once. */
 class Fatal extends Error {}
 
+/** The `result` of a `done` answer. Must stay structured-cloneable: it goes back through `executeScript`. */
 type Done = Record<string, unknown>;
 
+/** One agent per document. Stored on `globalThis.__blockflowAgent` by agent.content.ts. */
 export interface Agent {
+  /**
+   * Carries out one request, retrying every 50 ms for up to `call.budgetMs`. Never throws: every
+   * outcome (including unexpected exceptions) is an {@link AgentResponse}.
+   */
   run(call: AgentCall): Promise<AgentResponse>;
 }
 
@@ -45,6 +54,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   // --- finding ------------------------------------------------------------
 
+  /** Every match. Invalid locators become Fatal; FrameBoundaryError passes through to `run`. */
   function all(locator: string): Element[] {
     try {
       return resolveLocator(locator, doc);
@@ -71,6 +81,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   // --- state checks ---------------------------------------------------------
 
+  /** `[hidden]` on it or an ancestor, `display:none` on it or an ancestor, or `visibility:hidden|collapse` on itself. */
   function hiddenByStyle(element: Element): boolean {
     if (element.closest('[hidden]')) return true;
     for (let current: Element | null = element; current; current = current.parentElement) {
@@ -81,6 +92,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return false;
   }
 
+  /** Connected, not hidden by style, and (when there is layout) a non-empty box. Opacity is not checked. */
   function isVisible(element: Element): boolean {
     if (!element.isConnected || hiddenByStyle(element)) return false;
     if (!hasLayout()) return true;
@@ -88,6 +100,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return rect.width > 0 && rect.height > 0;
   }
 
+  /** Not `disabled`, not inside a disabled fieldset (outside its legend), no `aria-disabled="true"` ancestor. */
   function isEnabled(element: Element): boolean {
     if ((element as HTMLButtonElement).disabled === true) return false;
     if (element.closest('fieldset[disabled]') && !element.closest('legend')) return false;
@@ -109,6 +122,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return previous === key;
   }
 
+  /** Center of the element's box in its own document's viewport coordinates. */
   function center(element: Element): { x: number; y: number } {
     const rect = element.getBoundingClientRect();
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
@@ -169,6 +183,10 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     metaKey: boolean;
   }
 
+  /**
+   * Dispatches one synthetic pointer/mouse event (composed, so it crosses shadow boundaries).
+   * Pointer events are skipped where `PointerEvent` does not exist. Returns false if it was cancelled.
+   */
   function mouse(target: Element, type: string, x: number, y: number, button: number, detail: number): boolean {
     const init: MouseEventInit = {
       bubbles: type !== 'mouseenter' && type !== 'mouseleave',
@@ -188,12 +206,17 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return target.dispatchEvent(new win.MouseEvent(type, init));
   }
 
+  /** Focuses the element, or its closest focusable ancestor (a click on a span inside a button focuses the button). */
   function focus(element: Element): void {
     const focusable = (element.closest('a[href], button, input, select, textarea, [tabindex], [contenteditable=""], [contenteditable="true"]') ??
       element) as HTMLElement;
     if (typeof focusable.focus === 'function') focusable.focus();
   }
 
+  /**
+   * The full synthetic sequence: hover events, then per press pointerdown, mousedown (+ focus unless
+   * cancelled), pointerup, mouseup, click (or contextmenu); `dblclick` after two presses.
+   */
   function click(element: Element, action: 'click' | 'double' | 'right' | 'hover'): void {
     const { x, y } = hasLayout() ? center(element) : { x: 0, y: 0 };
     const button = action === 'right' ? 2 : 0;
@@ -245,6 +268,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   const TEXT_INPUTS = new Set(['', 'text', 'email', 'password', 'search', 'tel', 'url', 'number', 'date', 'time', 'datetime-local', 'month', 'week', 'color', 'range']);
 
+  /** What kind of text field the element is, or null when it cannot be typed into. */
   function textKind(element: Element): 'input' | 'textarea' | 'editable' | null {
     if (element.localName === 'textarea') return 'textarea';
     if (element.localName === 'input') return TEXT_INPUTS.has((element as HTMLInputElement).type) ? 'input' : null;
@@ -252,6 +276,11 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return null;
   }
 
+  /**
+   * `fill`: set the whole value at once (native setter + input + change). `type`: clear, then per
+   * character keydown/keypress/input/keyup, honouring a cancelled keydown or keypress.
+   * Contenteditable uses `execCommand('insertText')` when available.
+   */
   function fill(element: Element, value: string, mode: 'fill' | 'type'): void {
     const kind = textKind(element);
     if (!kind) {
@@ -296,6 +325,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return option.value === wanted || option.label.trim() === wanted.trim() || (option.textContent ?? '').trim() === wanted.trim();
   }
 
+  /** Picks options of a native `<select>` by value, label or text. A missing or disabled option is Pending. */
   function select(element: Element, values: string[]): Done {
     if (element.localName !== 'select') throw new Fatal(`${describeElement(element)} is not a <select>. Use Click to open custom dropdowns.`);
     const field = element as HTMLSelectElement;
@@ -321,6 +351,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return { selected: chosen.map((option) => option.value) };
   }
 
+  /** Clicks a checkbox/radio/switch only when its state differs, then verifies the new state. */
   function check(element: Element, checked: boolean): Done {
     const before = checkedState(element);
     if (before === null) throw new Fatal(`${describeElement(element)} is not a checkbox, radio or switch`);
@@ -350,6 +381,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   // --- keyboard -------------------------------------------------------------
 
+  /** "Control+Shift+a" → key "a" plus modifier flags (ctrl/control, shift, alt, meta/cmd/command). */
   function parseKey(combo: string): KeyInfo {
     const parts = combo.split('+').map((part) => part.trim());
     const keyName = parts.pop() || combo;
@@ -363,11 +395,13 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     };
   }
 
+  /** Dispatches one synthetic KeyboardEvent; returns false when the page cancelled it. */
   function key(target: Element, type: 'keydown' | 'keypress' | 'keyup', info: KeyInfo): boolean {
     const code = info.key.length === 1 ? (/[a-z]/i.test(info.key) ? `Key${info.key.toUpperCase()}` : /\d/.test(info.key) ? `Digit${info.key}` : '') : info.key;
     return target.dispatchEvent(new win.KeyboardEvent(type, { ...info, code, bubbles: true, cancelable: true, composed: true }));
   }
 
+  /** Visible, enabled, tabIndex >= 0 elements in DOM order (positive tabindex ordering is not modelled). */
   function tabbables(): HTMLElement[] {
     return Array.from(
       doc.querySelectorAll<HTMLElement>('a[href], button, input, select, textarea, [tabindex], [contenteditable=""], [contenteditable="true"]'),
@@ -422,6 +456,10 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   // --- reading ------------------------------------------------------------
 
+  /**
+   * Not strict: uses the first match. count/exists/visible/checked/enabled answer even with no match;
+   * text/value/attribute/has-class wait (Pending) for one.
+   */
   function read(request: Extract<AgentRequest, { op: 'read' }>): Done {
     const found = all(request.locator);
     const count = found.length;
@@ -443,6 +481,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return { found: true, text, count };
   }
 
+  /** Pending until the state holds. Text states search `innerText` of the locator's matches (or of body). */
   function wait(request: Extract<AgentRequest, { op: 'wait' }>): Done {
     const { state, locator, text } = request;
     if (state === 'text' || state === 'no-text') {
@@ -486,6 +525,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return (element.textContent ?? '').replace(/\s+/g, ' ').trim();
   }
 
+  /** Attribute value; URL attributes (href, src, action, poster, data-src) are made absolute against `doc.baseURI`. */
   function attributeOf(element: Element, name: string): string {
     const value = element.getAttribute(name) ?? '';
     if (!value || !URL_ATTRIBUTES.has(name)) return value;
@@ -518,6 +558,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return { columns: fields.map((field) => field.name), values, count: values.length };
   }
 
+  /** Strict match; the table is the element, its closest table, or the first table inside it. */
   function table(locator: string): Done {
     const found = one(locator);
     const tableElement = found.localName === 'table' ? found : found.closest('table') ?? found.querySelector('table');
@@ -557,6 +598,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     };
   }
 
+  /** localStorage / sessionStorage / `document.cookie` (HttpOnly cookies are invisible here). */
   function storage(request: Extract<AgentRequest, { op: 'storage' }>): Done {
     if (request.area === 'cookies') {
       // Cookies the page can see (not HttpOnly ones).
@@ -594,6 +636,10 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return { height: scroller.scrollHeight, y: win.scrollY };
   }
 
+  /**
+   * Puts files on an `<input type=file>` through a DataTransfer. The locator may point at the input,
+   * a label for it, or an element containing it. No visibility check: the input is often hidden.
+   */
   function upload(locator: string, files: { name: string; type: string; base64: string }[]): Done {
     const found = one(locator);
     const input = (found.localName === 'input' ? found : (found as HTMLLabelElement).control ?? found.querySelector('input[type="file"]')) as HTMLInputElement | null;
@@ -614,6 +660,10 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return { files: files.map((file) => file.name) };
   }
 
+  /**
+   * For real (debugger) input: same waits as the action, then the center in this document's viewport
+   * coordinates. Inside an iframe these are frame-local, not top-level, coordinates.
+   */
   function locate(request: Extract<AgentRequest, { op: 'locate' }>): Done {
     const element = one(request.locator);
     const kind = element.localName === 'select' ? 'select' : checkedState(element) !== null ? 'check' : textKind(element) ? 'text' : 'other';
@@ -624,6 +674,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   // --- forms ----------------------------------------------------------------
 
+  /** "Email · email", "Country · select: BD, US", for the Fill Form editor. */
   function hint(element: Element): string {
     const name = accessibleName(element) || element.getAttribute('name') || '';
     if (element.localName === 'select') {
@@ -653,6 +704,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   // --- dispatch -------------------------------------------------------------
 
+  /** One try at the request. Throws Pending (retry), Fatal (give up) or FrameBoundaryError (hand over). */
   function attempt(request: AgentRequest): Done {
     switch (request.op) {
       case 'click': {

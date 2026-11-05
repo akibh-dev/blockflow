@@ -14,6 +14,7 @@ export type { ReadKind } from './page';
 /** Data passed from one block to the next. Must stay JSON-serialisable. */
 export type Payload = Record<string, unknown>;
 
+/** Severity of a run-log line. */
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 // ---------------------------------------------------------------------------
@@ -48,6 +49,7 @@ export interface StepSettings {
   realInput?: boolean;
 }
 
+/** One block placed in a workflow (a React Flow node when edited). */
 export interface NodeDef {
   id: string;
   /** Block type, e.g. "timer". Looked up in the BlockRegistry. */
@@ -66,6 +68,7 @@ export interface EdgeDef {
   sourcePort?: string;
 }
 
+/** A saved workflow: a graph of blocks and connections. Stored as a list under `bf:workflows`. */
 export interface Workflow {
   schemaVersion: 1;
   id: string;
@@ -76,6 +79,7 @@ export interface Workflow {
   edges: EdgeDef[];
 }
 
+/** One line of the run log. */
 export interface LogEntry {
   /** ISO timestamp. */
   ts: string;
@@ -85,12 +89,14 @@ export interface LogEntry {
   message: string;
 }
 
+/** Receives every log line a runner writes (already secret-masked). */
 export type LogSink = (entry: LogEntry) => void;
 
 // ---------------------------------------------------------------------------
 // Block definition (what a block type is)
 // ---------------------------------------------------------------------------
 
+/** Properties shared by every setting field kind. */
 interface FieldBase {
   key: string;
   label: string;
@@ -98,6 +104,7 @@ interface FieldBase {
   required?: boolean;
 }
 
+/** A one-line or multi-line text setting (also URLs, selectors and locators). */
 export interface TextField extends FieldBase {
   /**
    * "selector" (CSS) and "locator" (any locator syntax, see src/dom/locator.ts) render a
@@ -118,6 +125,7 @@ export interface TextField extends FieldBase {
   pickPrefers?: 'readable' | 'stable';
 }
 
+/** A numeric setting; numeric strings are coerced by `withDefaults`. */
 export interface NumberField extends FieldBase {
   kind: 'number';
   min?: number;
@@ -125,10 +133,12 @@ export interface NumberField extends FieldBase {
   step?: number;
 }
 
+/** An on/off setting. */
 export interface BooleanField extends FieldBase {
   kind: 'boolean';
 }
 
+/** A choice from fixed options; the stored value must be one of `options[].value`. */
 export interface SelectField extends FieldBase {
   kind: 'select';
   options: { value: string; label: string }[];
@@ -154,26 +164,36 @@ export interface WorkflowField extends FieldBase {
   kind: 'workflow';
 }
 
+/** Every setting kind a block can declare; the editor renders a control per kind. */
 export type FieldSpec = TextField | NumberField | BooleanField | SelectField | RowsField | WorkflowField;
 
+/** One row of a `rows` field. */
 export type Row = Record<string, string>;
 
+/** Documents one key a block adds to its output payload. */
 export interface OutputSpec {
   key: string;
   description: string;
 }
 
+/** Untyped block settings, as stored in `NodeDef.config`. */
 export type BlockConfig = Record<string, unknown>;
 
+/** When a block timer fires: once after `delayMs`, then every `periodMs` if set. */
 export interface TimerOptions {
   delayMs: number;
   /** When set, the timer repeats at this interval after the first delay. */
   periodMs?: number;
 }
 
+/**
+ * What the engine hands a block on every call (`start`, `trigger`, `run`, `onTimer`).
+ * Built per call by `WorkflowRunner.makeContext`; never keep it between calls.
+ */
 export interface BlockContext<C extends object = BlockConfig> {
   workflowId: string;
   workflowName: string;
+  /** Id of this block's node in the workflow. */
   nodeId: string;
   /** Config with defaults applied and templated fields rendered against the input payload. */
   config: C;
@@ -198,7 +218,9 @@ export interface BlockContext<C extends object = BlockConfig> {
   host: Host;
   /** Send a payload to every block connected to one of this block's outputs (default "out"). */
   emit(payload: Payload, port?: string): Promise<void>;
+  /** Writes a run-log line tagged with this block. */
   log(level: LogLevel, message: string): void;
+  /** Timers scoped to this block (keyed by workflow, node and `name`). Fire `onTimer`. */
   timers: {
     set(name: string, options: TimerOptions, data?: Payload): Promise<void>;
     clear(name: string): Promise<void>;
@@ -210,8 +232,10 @@ export interface BlockContext<C extends object = BlockConfig> {
   };
 }
 
+/** Palette group of a block. */
 export type BlockCategory = 'start' | 'browser' | 'page' | 'read' | 'test' | 'logic' | 'data' | 'output';
 
+/** Palette heading for each category. */
 export const CATEGORY_LABELS: Record<BlockCategory, string> = {
   start: 'Start',
   browser: 'Tabs',
@@ -223,6 +247,7 @@ export const CATEGORY_LABELS: Record<BlockCategory, string> = {
   output: 'Send & log',
 };
 
+/** A block type: its settings, editor metadata and lifecycle hooks. `C` is its config shape. */
 export interface BlockDefinition<C extends object = BlockConfig> {
   type: string;
   label: string;
@@ -286,14 +311,19 @@ export type AnyBlockDefinition = BlockDefinition<any>;
 // Host: everything the engine needs from the outside world
 // ---------------------------------------------------------------------------
 
+/** What the scheduler stored for a timer, handed back by `Scheduler.take`. */
 export interface TimerRecord {
   data?: Payload;
   periodic: boolean;
 }
 
+/** Durable timers keyed by `makeTimerKey(...)`. Implemented by `HybridScheduler` in the browser. */
 export interface Scheduler {
+  /** Creates or replaces the timer `key`, storing `data` with it (must be JSON-serialisable). */
   set(key: string, options: TimerOptions, data?: Payload): Promise<void>;
+  /** Removes one timer; unknown keys are ignored. */
   clear(key: string): Promise<void>;
+  /** Removes every timer whose key starts with `prefix` (a workflow's timers on start/stop). */
   clearPrefix(prefix: string): Promise<void>;
   /**
    * Called when a timer fires. Returns the stored record, and removes it if the timer was
@@ -302,11 +332,13 @@ export interface Scheduler {
   take(key: string): Promise<TimerRecord | undefined>;
 }
 
+/** Durable key/value store behind `ctx.state` (keys come from `stateKey(...)`). */
 export interface StateStore {
   get(key: string): Promise<unknown>;
   set(key: string, value: unknown): Promise<void>;
 }
 
+/** Options for `Host.tabs.open` (Open Tab block). */
 export interface OpenTabOptions {
   url: string;
   /** false = navigate the current tab instead of opening a new one. */
@@ -321,6 +353,7 @@ export interface OpenTabOptions {
   timeoutMs?: number;
 }
 
+/** Options for `Host.tabs.navigate` (Navigate block). */
 export interface NavigateOptions {
   action: 'goto' | 'back' | 'forward' | 'reload';
   url?: string;
@@ -328,12 +361,14 @@ export interface NavigateOptions {
   timeoutMs: number;
 }
 
+/** What `Host.tabs.info` / `current` report about a tab. */
 export interface TabInfo {
   url: string;
   title: string;
   loading: boolean;
 }
 
+/** Options for `Host.page.readElement` (reading a URL in BlockFlow's own background tab). */
 export interface ReadElementOptions {
   url: string;
   selector: string;
@@ -343,6 +378,7 @@ export interface ReadElementOptions {
   reload: boolean;
 }
 
+/** Answer of `Host.page.readElement`. */
 export interface ReadElementResult {
   found: boolean;
   /** The value that was read, as text ("true"/"false" for has-class and exists). */
@@ -353,6 +389,7 @@ export interface ReadElementResult {
   error?: string;
 }
 
+/** Request for `Host.http.fetch` (HTTP Request block). */
 export interface HttpRequestOptions {
   url: string;
   method: string;
@@ -360,6 +397,7 @@ export interface HttpRequestOptions {
   body?: string;
 }
 
+/** Response of `Host.http.fetch`. */
 export interface HttpResult {
   status: number;
   ok: boolean;
@@ -367,11 +405,16 @@ export interface HttpResult {
   body: string;
 }
 
+/** A desktop notification. */
 export interface NotifyOptions {
   title: string;
   message: string;
 }
 
+/**
+ * Everything the engine and blocks may do outside pure computation. Implemented by
+ * `src/browser/host.ts` with extension APIs and by `tests/helpers/fakeHost.ts` in memory.
+ */
 export interface Host {
   /** Wait without blocking. Used for step timeouts and retry backoff. */
   sleep(ms: number): Promise<void>;
@@ -448,5 +491,6 @@ export interface Host {
   prompt: {
     ask(options: { runId: string; workflowName: string; message: string; timeoutMs: number }): Promise<boolean>;
   };
+  /** Current time; blocks and the engine use this instead of `new Date()` so tests can fake it. */
   now(): Date;
 }

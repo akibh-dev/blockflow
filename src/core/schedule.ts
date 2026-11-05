@@ -9,6 +9,7 @@ export type ScheduleSpec =
   | { every: 'hour'; minute: number }
   | { every: 'minutes'; minutes: number };
 
+/** `"HH:MM"` (24-hour) to hour and minute, or null. */
 export function parseTime(text: string): { hour: number; minute: number } | null {
   const match = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
   if (!match) return null;
@@ -17,6 +18,7 @@ export function parseTime(text: string): { hour: number; minute: number } | null
   return hour < 24 && minute < 60 ? { hour, minute } : null;
 }
 
+/** The first time strictly after `now` (seconds zeroed) that matches `spec`. Throws for a bad time. */
 export function nextOccurrence(now: Date, spec: ScheduleSpec): Date {
   const next = new Date(now.getTime());
   next.setSeconds(0, 0);

@@ -7,6 +7,7 @@ import { ImportButton } from './ImportButton';
 import { NewMenu } from './NewMenu';
 import type { WorkflowActions } from './WorkflowActions';
 
+/** `dataTransfer` type used to drag a block type from the palette onto the canvas (read in `Editor`'s `onDrop`). */
 export const DRAG_MIME = 'application/x-blockflow-block';
 
 interface SidebarProps extends WorkflowActions {
@@ -15,6 +16,11 @@ interface SidebarProps extends WorkflowActions {
   onAddBlock(type: string): void;
 }
 
+/**
+ * Left column: the workflow list (toggle, open, rename by double click, duplicate, export,
+ * Playwright export, delete; a search box once there are more than 4) and the block palette
+ * grouped by `CATEGORY_LABELS`, filterable, where a block is added by click or by drag.
+ */
 export function Sidebar({ workflows, activeId, onAddBlock, ...actions }: SidebarProps) {
   const [query, setQuery] = useState('');
   const [renaming, setRenaming] = useState<string | null>(null);
