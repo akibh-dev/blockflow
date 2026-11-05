@@ -45,7 +45,7 @@ describe('recorder', () => {
     $('#go b').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(steps).toEqual([
       { kind: 'fill', locator: 'label="Email"', value: 'me@x.co' },
-      { kind: 'fill', locator: 'label="Password"', value: '', secret: true },
+      { kind: 'fill', locator: 'label="Password"', value: '', secret: true, field: 'Password' },
       { kind: 'check', locator: 'label="Remember me"', checked: true },
       { kind: 'select', locator: 'label="Plan"', value: 'Pro' },
       { kind: 'click', locator: 'role=button[name="Sign in"]', text: 'Sign in' },
@@ -79,5 +79,56 @@ describe('recorder', () => {
     toolbar('stop');
     expect(steps).toEqual([]);
     expect(stopped).toBe(1);
+  });
+});
+
+describe('recorder and shadow DOM', () => {
+  it('records the element inside an open shadow root, not its host', () => {
+    const host = document.createElement('x-login');
+    document.body.append(host);
+    const root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = '<div class="row"><label for="u">User name</label><input id="u"></div><div class="row"><button class="go"><span>Log in</span></button></div><input id="code" class="code">';
+    const user = root.getElementById('u') as HTMLInputElement;
+    user.value = 'akib';
+    user.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    user.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    (root.querySelector('.go span') as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    const code = root.getElementById('code') as HTMLInputElement;
+    code.value = '42';
+    code.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    expect(steps).toEqual([
+      { kind: 'fill', locator: 'label="User name"', value: 'akib' },
+      { kind: 'click', locator: 'role=button[name="Log in"]', text: 'Log in' },
+      // No readable locator: CSS that pierces the shadow root.
+      { kind: 'fill', locator: 'x-login >>> #code', value: '42' },
+    ]);
+  });
+});
+
+describe('recorder in a frame', () => {
+  it('has no toolbar, and follows the assert mode chosen on the top toolbar', () => {
+    recorder.stop();
+    let listener: ((mode: 'record' | 'assert-text' | 'assert-visible') => void) | undefined;
+    const posted: string[] = [];
+    recorder = startRecorder({
+      onStep: (step) => steps.push(step),
+      onStop: () => (stopped += 1),
+      toolbar: false,
+      channel: {
+        post: (mode) => posted.push(mode),
+        listen: (handler) => {
+          listener = handler;
+          return () => (listener = undefined);
+        },
+      },
+    });
+    expect(document.querySelector('blockflow-recorder')).toBeNull();
+    listener?.('assert-text');
+    $('#h').click();
+    expect(steps).toEqual([{ kind: 'assert-text', locator: 'role=heading[name="Welcome"]', text: 'Welcome' }]);
+    // Back to recording, and the other frames are told.
+    expect(posted).toEqual(['record']);
+    $('#go').click();
+    expect(steps.at(-1)).toMatchObject({ kind: 'click' });
   });
 });

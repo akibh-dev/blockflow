@@ -29,7 +29,7 @@ import { WorkflowsPage } from './components/WorkflowsPage';
 import { downloadText, fileNameFor, readFiles } from './files';
 import { fromFlow, sameGraph, toFlow } from './flow/convert';
 import { useLogs, usePrompts, useRuns, useStorageValue } from './hooks';
-import { recordingToBlocks } from '../../core/recording';
+import { recordingIntoWorkflow } from '../../core/recording';
 import { workflowToPlaywright } from '../../core/playwright';
 import { STORAGE_KEYS } from '../../shared/keys';
 import type { RecordingState } from '../../browser/recording';
@@ -612,7 +612,14 @@ export function Editor() {
     void browser.runtime.sendMessage({ type: 'bf:start-recording', workflowId: active.id, url: url.trim() });
   };
 
-  // A stopped recording becomes blocks in its workflow, to the right of what is there.
+  // Read by the effect below without re-running it on every canvas change.
+  const selectedIdRef = useRef<string | undefined>(undefined);
+  selectedIdRef.current = nodes.find((node) => node.selected)?.id;
+
+  // A stopped recording becomes blocks in its workflow. In an empty workflow: the recorded chain
+  // (Open Tab first). Otherwise it continues after the selected block (or the last block of the main
+  // path), to its right, connected to it, without a second Open Tab when the site is already opened
+  // (see recordingIntoWorkflow).
   useEffect(() => {
     if (!recording || recording.status !== 'stopped') return;
     const target = latest.current?.find((workflow) => workflow.id === recording.workflowId);
@@ -624,17 +631,36 @@ export function Editor() {
       open(target);
       return; // runs again once that workflow is on the canvas
     }
-    const right = Math.max(0, ...target.nodes.map((node) => node.position.x + 240));
-    const top = target.nodes.length > 0 ? Math.max(...target.nodes.map((node) => node.position.y)) + 160 : 120;
-    const blocks = recordingToBlocks({ startUrl: recording.startUrl, steps: recording.steps }, { x: target.nodes.length > 0 ? 60 : right + 60, y: top });
+    const blocks = recordingIntoWorkflow(target, { startUrl: recording.startUrl, steps: recording.steps }, selectedIdRef.current);
     const flow = toFlow({ ...target, nodes: blocks.nodes, edges: blocks.edges });
     setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...(flow.nodes as BlockFlowNode[])]);
     setEdges((current) => [...current, ...flow.edges]);
     void browser.storage.local.remove(STORAGE_KEYS.recording);
     if (blocks.secrets.length > 0) {
-      window.alert(`Passwords were not recorded. Create a secret named “${blocks.secrets.join('”, “')}” on the Secrets page; the recorded blocks use it.`);
+      const names = blocks.secrets.map((name) => `“${name}”`).join(', ');
+      window.alert(`Passwords were not recorded. On the Secrets page, create ${blocks.secrets.length === 1 ? 'a secret named' : 'secrets named'} ${names}; the recorded blocks use ${blocks.secrets.length === 1 ? 'it' : 'them'}.`);
     }
   }, [recording, open]);
+
+  /** For the picker: the URL of the nearest Open Tab before the selected block (none when it is templated). */
+  const upstreamUrl = useMemo(() => {
+    const selectedId = nodes.find((node) => node.selected)?.id;
+    if (!selectedId) return undefined;
+    const byId = new Map(nodes.map((node) => [node.id, node]));
+    const seen = new Set<string>([selectedId]);
+    let frontier = [selectedId];
+    while (frontier.length > 0) {
+      const sources = edges.filter((edge) => frontier.includes(edge.target)).map((edge) => edge.source).filter((id) => !seen.has(id));
+      for (const id of sources) {
+        seen.add(id);
+        const node = byId.get(id);
+        const url = node?.data.blockType === 'open-url' ? node.data.config.url : undefined;
+        if (typeof url === 'string' && url.trim() && !url.includes('{{')) return url.trim();
+      }
+      frontier = sources;
+    }
+    return undefined;
+  }, [nodes, edges]);
 
   const selectedNode = nodes.find((node) => node.selected);
   const [secrets] = useStorageValue<Record<string, string>>(STORAGE_KEYS.secrets, {});
@@ -813,6 +839,7 @@ export function Editor() {
           workflows={workflows.filter((workflow) => workflow.id !== activeId)}
           lastStep={lastStepOfSelected}
           suggestions={suggestions}
+          upstreamUrl={upstreamUrl}
         />
         )}
 

@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser';
 import { createExtensionHost } from '../browser/host';
 import { createBrowserScheduler } from '../browser/scheduler';
-import { cancelPicking, finishPicking, startPicking } from '../browser/picking';
+import { cancelPicking, finishPicking, relayPickerSync, startPicking } from '../browser/picking';
 import { answerPrompt, clearStalePrompts, promptRunId } from '../browser/prompts';
 import { appendLog, loadWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
 import { createDefaultRegistry } from '../core/blocks';
@@ -11,7 +11,7 @@ import { withSessionTab } from '../core/session';
 import { urlMatches } from '../core/urlPattern';
 import { isOwnTab } from '../browser/ownTabs';
 import { recordPopup } from '../browser/popups';
-import { onRecordedTabUpdated, recordStep, startRecording, stopRecording } from '../browser/recording';
+import { onRecordedPopup, onRecordedTabUpdated, recordStep, relayRecorderSync, startRecording, stopRecording } from '../browser/recording';
 import type { RunRecord } from '../core/runs';
 import { sampleWorkflows } from '../core/samples';
 import { parseTimerKey, workflowTimerPrefix } from '../core/timerKey';
@@ -219,6 +219,7 @@ export default defineBackground(() => {
   // active tab instead. onCreatedNavigationTarget always names the page that opened it.
   browser.webNavigation.onCreatedNavigationTarget.addListener((details) => {
     void recordPopup(details.tabId, details.sourceTabId).catch(report('popup'));
+    void onRecordedPopup(details.tabId, details.sourceTabId, details.url).catch(report('recording'));
   });
 
   browser.tabs.onUpdated.addListener((tabId, change) => {
@@ -274,13 +275,23 @@ export default defineBackground(() => {
     if (!isExtensionMessage(message)) return;
     switch (message.type) {
       case 'bf:start-pick':
-        void startPicking(sender.tab?.id, message.url, message.mode).catch(report('start picking'));
+        void startPicking(sender.tab?.id, message.url, message.mode, message.urlFrom).catch(report('start picking'));
         break;
       case 'bf:picked':
-        void finishPicking(message, sender.tab?.id).catch(report('finish picking'));
+        void finishPicking(message, { tabId: sender.tab?.id, frameId: sender.frameId, tabUrl: sender.tab?.url }).catch(report('finish picking'));
         break;
       case 'bf:pick-cancelled':
-        void cancelPicking().catch(report('cancel picking'));
+        void cancelPicking(sender.tab?.id).catch(report('cancel picking'));
+        break;
+      case 'bf:pick-error':
+        // Only a picker in a page sends this here (the editor shows it too): end the pick.
+        if (sender.tab?.id !== undefined) void cancelPicking(sender.tab.id).catch(report('cancel picking'));
+        break;
+      case 'bf:picker-sync':
+        void relayPickerSync(message, sender.tab?.id).catch(report('picker'));
+        break;
+      case 'bf:recorder-sync':
+        void relayRecorderSync(message, sender.tab?.id).catch(report('recording'));
         break;
       case 'bf:run-workflow':
         void newRunner(message.workflow).runOnce().catch(report('run'));

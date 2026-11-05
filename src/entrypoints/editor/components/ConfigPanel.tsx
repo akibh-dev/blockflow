@@ -8,6 +8,7 @@ import { Screenshot } from './Screenshot';
 import { TemplateInput } from './TemplateInput';
 import { PermissionNote, requestPermission } from './PermissionNote';
 import { isExtensionMessage } from '../../../shared/messages';
+import type { StartPickMessage } from '../../../shared/messages';
 import { registry } from '../registry';
 import type { BlockFlowNode } from './BlockNode';
 
@@ -23,6 +24,8 @@ interface ConfigPanelProps {
   workflows: { id: string; name: string }[];
   /** Data names offered after typing {{ in templated settings. */
   suggestions: string[];
+  /** URL of the nearest Open Tab before this block: where to pick when the block has no URL of its own. */
+  upstreamUrl?: string;
 }
 
 interface PickState {
@@ -47,7 +50,7 @@ type PickTarget =
  * back as a `bf:pick-result` / `bf:pick-error` runtime message, which this component listens for.
  * Messages that arrive with no pending target (another editor tab started the pick) are ignored.
  */
-export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, lastStep, workflows, suggestions }: ConfigPanelProps) {
+export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, lastStep, workflows, suggestions, upstreamUrl }: ConfigPanelProps) {
   const [pick, setPick] = useState<PickState & { fieldKey?: string }>({ status: 'idle' });
   const pending = useRef<PickTarget | null>(null);
   const configRef = useRef<Record<string, unknown>>({});
@@ -119,15 +122,17 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
           ? 'Switch to the page and click any field of the form. Esc cancels.'
           : 'Switch to the page and click the part you want. Esc cancels.',
     });
+    // The block's own URL (Watch/Read Element), else the nearest Open Tab before it.
     const urlKey = target.kind === 'field' ? target.field.pickerUrlKey : undefined;
     const urlValue = urlKey ? String(config[urlKey] ?? '') : '';
-    const url = urlValue && !hasTemplate(urlValue) ? urlValue : undefined;
-    void browser.runtime
-      .sendMessage({ type: 'bf:start-pick', ...(url ? { url } : {}), mode: target.kind === 'form' ? 'form' : 'element' })
-      .catch(() => {
-        setPick({ status: 'error', fieldKey: target.field.key, text: 'Could not reach the background worker. Try reloading the extension.' });
-      });
-  }, []);
+    const own = urlValue && !hasTemplate(urlValue) ? urlValue : undefined;
+    const url = own ?? upstreamUrl;
+    const mode: StartPickMessage['mode'] = target.kind === 'form' ? 'form' : target.kind === 'field' && target.field.pickPrefers === 'stable' ? 'watch' : 'action';
+    const message: StartPickMessage = { type: 'bf:start-pick', ...(url ? { url, urlFrom: own ? 'block' : 'upstream' } : {}), mode };
+    void browser.runtime.sendMessage(message).catch(() => {
+      setPick({ status: 'error', fieldKey: target.field.key, text: 'Could not reach the background worker. Try reloading the extension.' });
+    });
+  }, [upstreamUrl]);
 
   if (!node) {
     return (
