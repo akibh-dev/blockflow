@@ -314,6 +314,23 @@ Exports `PASSWORD` (`Op3n-Sesame!`, the only password the fixture login accepts)
 | `keys.html` | Search form (`label=Search`) whose submit writes `submitted: <value>` to `#status`; selecting the field writes `selected N of M` |
 | `ticker.html` | `#price` counts up from 100 every 1.5 s, by itself |
 
+## Firefox e2e (tests/e2e/firefox.mjs)
+
+`npm run e2e:firefox` builds `.output-e2e/firefox-mv3` and runs a smoke test in Firefox. Playwright can't
+load extensions into Firefox, so the runner starts Firefox itself (`--headless`, `BF_HEADED=1` to watch,
+`BF_FIREFOX=/path` to choose the binary) and talks WebDriver BiDi: `webExtension.install` loads the build
+as a temporary add-on, with a fixed `moz-extension://` UUID set through the profile's prefs.
+
+Firefox's BiDi can't open `moz-extension://` pages, so the runner can't use the editor. Instead, e2e builds
+register a bridge content script on `http://127.0.0.1/*`
+([e2e-bridge.content.ts](../../src/entrypoints/e2e-bridge.content.ts)). A fixture page posts
+`{ bfE2e, op, arg }` (`send` a runtime message, `get` from `storage.local`, `ping`) and the bridge answers.
+Workflows run through `bf:run-workflow`, exactly like the Chromium specs.
+
+The 14 checks cover forms, HTML parsing without an offscreen document, `storage.session` watch tabs,
+upload, popups, dialogs, IndexedDB datasets, in-run delays, screenshots on failure, Notify, and the
+"Chromium only" errors for Run Script and real input. CI runs it in the `e2e-firefox` job.
+
 ## Manual test pages
 
 [docs/manual-test/playground.html](../manual-test/playground.html) has things to watch, click and fill; the

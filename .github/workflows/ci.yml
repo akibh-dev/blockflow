@@ -47,3 +47,17 @@ jobs:
         run: |
           export BF_BROWSER="$(node -e "console.log(require('playwright-core').chromium.executablePath())")"
           BF_HEADLESS=1 xvfb-run -a npm run e2e
+
+  e2e-firefox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # ubuntu-latest ships Firefox; the runner drives it headless over WebDriver BiDi.
+      - run: firefox --version
+      - run: npm run e2e:firefox
