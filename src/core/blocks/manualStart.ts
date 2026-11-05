@@ -30,6 +30,10 @@ export const manualStartBlock: BlockDefinition<ManualStartConfig> = {
   summary: (config) => (config.inputs ?? []).map((row) => row.name).filter(Boolean).join(', ') || 'Run button',
   outputs: [{ key: '(your names)', description: 'One key per starting value.' }],
 
+  // Nothing to schedule: Start runs only from the Run button or a Run Workflow call. (Without this
+  // hook the engine would treat it as a plain block and run it whenever the workflow is switched on.)
+  async start() {},
+
   async run(ctx, input) {
     const values = Object.fromEntries((ctx.config.inputs ?? []).filter((row) => (row.name ?? '').trim()).map((row) => [(row.name ?? '').trim(), row.value ?? '']));
     // Values given by a calling workflow win over these defaults.

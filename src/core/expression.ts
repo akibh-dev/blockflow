@@ -19,6 +19,15 @@
 /** A syntax or evaluation error in an expression (templates render it as ''). */
 export class ExpressionError extends Error {}
 
+/**
+ * What an evaluation may take from outside the data. `now` is the clock behind now() and today();
+ * the engine passes `Host.now` so runs (and tests with a fixed clock) agree on the time.
+ * Missing = the system clock.
+ */
+export interface EvalEnv {
+  now?: () => Date;
+}
+
 type Token =
   | { type: 'num'; value: number }
   | { type: 'str'; value: string }
@@ -291,7 +300,7 @@ function compareValues(a: unknown, b: unknown): number {
 }
 
 /** Functions callable from expressions; an unknown name is a parse error. */
-const FUNCTIONS: Record<string, (...args: unknown[]) => unknown> = {
+const FUNCTIONS: Record<string, (this: EvalEnv, ...args: unknown[]) => unknown> = {
   upper: (x) => toText(x).toUpperCase(),
   lower: (x) => toText(x).toLowerCase(),
   trim: (x) => toText(x).replace(/\s+/g, ' ').trim(),
@@ -341,8 +350,12 @@ const FUNCTIONS: Record<string, (...args: unknown[]) => unknown> = {
       throw new ExpressionError('parseJson: not valid JSON');
     }
   },
-  now: () => new Date().toISOString(),
-  today: () => new Date().toISOString().slice(0, 10),
+  now() {
+    return (this.now?.() ?? new Date()).toISOString();
+  },
+  today() {
+    return (this.now?.() ?? new Date()).toISOString().slice(0, 10);
+  },
   default: (x, fallback) => (x === undefined || x === null || x === '' ? fallback : x),
   matches: (x, pattern) => regex(toText(pattern)).test(toText(x)),
   extract: (x, pattern) => {
@@ -351,39 +364,39 @@ const FUNCTIONS: Record<string, (...args: unknown[]) => unknown> = {
   },
 };
 
-function evaluateNode(node: Node, scope: Record<string, unknown>): unknown {
+function evaluateNode(node: Node, scope: Record<string, unknown>, env: EvalEnv): unknown {
   switch (node.kind) {
     case 'lit':
       return node.value;
     case 'array':
-      return node.items.map((item) => evaluateNode(item, scope));
+      return node.items.map((item) => evaluateNode(item, scope, env));
     case 'id':
       return node.name === '$json' ? scope : own(scope, node.name);
     case 'member':
-      return own(evaluateNode(node.object, scope), evaluateNode(node.property, scope));
+      return own(evaluateNode(node.object, scope, env), evaluateNode(node.property, scope, env));
     case 'call':
-      return (FUNCTIONS[node.name] as (...args: unknown[]) => unknown)(...node.args.map((arg) => evaluateNode(arg, scope)));
+      return (FUNCTIONS[node.name] as (this: EvalEnv, ...args: unknown[]) => unknown).apply(env, node.args.map((arg) => evaluateNode(arg, scope, env)));
     case 'unary': {
-      const value = evaluateNode(node.arg, scope);
+      const value = evaluateNode(node.arg, scope, env);
       return node.op === '!' ? !truthy(value) : -toNumber(value);
     }
     case 'cond':
-      return truthy(evaluateNode(node.test, scope)) ? evaluateNode(node.then, scope) : evaluateNode(node.else, scope);
+      return truthy(evaluateNode(node.test, scope, env)) ? evaluateNode(node.then, scope, env) : evaluateNode(node.else, scope, env);
     case 'binary': {
       if (node.op === '&&') {
-        const left = evaluateNode(node.left, scope);
-        return truthy(left) ? evaluateNode(node.right, scope) : left;
+        const left = evaluateNode(node.left, scope, env);
+        return truthy(left) ? evaluateNode(node.right, scope, env) : left;
       }
       if (node.op === '||') {
-        const left = evaluateNode(node.left, scope);
-        return truthy(left) ? left : evaluateNode(node.right, scope);
+        const left = evaluateNode(node.left, scope, env);
+        return truthy(left) ? left : evaluateNode(node.right, scope, env);
       }
       if (node.op === '??') {
-        const left = evaluateNode(node.left, scope);
-        return left === undefined || left === null ? evaluateNode(node.right, scope) : left;
+        const left = evaluateNode(node.left, scope, env);
+        return left === undefined || left === null ? evaluateNode(node.right, scope, env) : left;
       }
-      const a = evaluateNode(node.left, scope);
-      const b = evaluateNode(node.right, scope);
+      const a = evaluateNode(node.left, scope, env);
+      const b = evaluateNode(node.right, scope, env);
       switch (node.op) {
         case '+': {
           // Adds when both sides read as numbers ("1,250" + 10 → 1260), otherwise joins text.
@@ -434,6 +447,6 @@ export function parseExpression(source: string): Node {
 }
 
 /** Parses (cached) and evaluates `source` with `scope` as the data. Throws ExpressionError. */
-export function evaluate(source: string, scope: Record<string, unknown>): unknown {
-  return evaluateNode(parseExpression(source), scope);
+export function evaluate(source: string, scope: Record<string, unknown>, env: EvalEnv = {}): unknown {
+  return evaluateNode(parseExpression(source), scope, env);
 }

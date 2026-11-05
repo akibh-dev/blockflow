@@ -1,4 +1,5 @@
 import { resolveConfig } from './config';
+import type { EvalEnv } from './expression';
 import { uid } from './id';
 import { DEFAULT_PORT, ERROR_PORT, Routed, edgePort, nodePorts } from './ports';
 import { MAX_STEPS_KEPT, compactPayload, maskPayload, maskText } from './runs';
@@ -83,6 +84,8 @@ export class WorkflowRunner {
   private readonly callDepth: number;
   private readonly nodesById = new Map<string, NodeDef>();
   private readonly hasIncoming = new Set<string>();
+  /** Expressions in settings read the host's clock (now(), today()). */
+  private readonly evalEnv: EvalEnv = { now: () => this.host.now() };
   private stopped = false;
   /** Secret values seen by this runner, masked in every log line. */
   private secretValues: string[] = [];
@@ -110,8 +113,14 @@ export class WorkflowRunner {
     return this.workflow.nodes.filter((node) => !this.hasIncoming.has(node.id));
   }
 
-  /** (Re)starts the workflow in the background: clears old timers, then starts every root block. */
-  async start(): Promise<void> {
+  /**
+   * (Re)starts the workflow in the background: clears old timers, then starts every root block.
+   * `runPlainRoots` (default true): a root block with no trigger of its own (HTTP Request, Open Tab…)
+   * runs once. Pass false when restarting after an edit or a browser start, so such workflows run
+   * once when the user switches them on, not on every save or startup.
+   */
+  async start(options: { runPlainRoots?: boolean } = {}): Promise<void> {
+    const runPlainRoots = options.runPlainRoots ?? true;
     this.stopped = false;
     await this.host.scheduler.clearPrefix(workflowTimerPrefix(this.workflow.id));
 
@@ -121,7 +130,7 @@ export class WorkflowRunner {
       return;
     }
     this.log('info', undefined, `Workflow "${this.workflow.name}" started`);
-    for (const node of roots) await this.startRoot(node);
+    for (const node of roots) await this.startRoot(node, runPlainRoots);
   }
 
   /** Stops the workflow: clears its timers and makes this runner ignore further timers and emits. */
@@ -182,7 +191,7 @@ export class WorkflowRunner {
     const def = node ? this.registry.get(node.type) : undefined;
     if (!node || !def || !def.onTimer) return;
 
-    const resolved = resolveConfig(def, node.config, {});
+    const resolved = resolveConfig(def, node.config, {}, this.evalEnv);
     if (resolved.errors.length > 0) {
       this.log('error', node.id, `${def.label}: ${resolved.errors.join('; ')}`);
       return;
@@ -196,7 +205,7 @@ export class WorkflowRunner {
   // -------------------------------------------------------------------------
   // Starting
 
-  private async startRoot(node: NodeDef): Promise<void> {
+  private async startRoot(node: NodeDef, runPlainRoots: boolean): Promise<void> {
     const def = this.registry.get(node.type);
     if (!def) {
       this.log('error', node.id, `Unknown block type "${node.type}"`);
@@ -204,10 +213,10 @@ export class WorkflowRunner {
     }
     if (!def.start) {
       // A plain block at the start (e.g. HTTP Request) runs once when the workflow is turned on.
-      if (def.run) await this.inRun('start', (run) => this.runStep(node, {}, run));
+      if (def.run && runPlainRoots) await this.inRun('start', (run) => this.runStep(node, {}, run));
       return;
     }
-    const resolved = resolveConfig(def, node.config, {});
+    const resolved = resolveConfig(def, node.config, {}, this.evalEnv);
     if (resolved.errors.length > 0) {
       this.log('error', node.id, `${def.label}: ${resolved.errors.join('; ')}`);
       return;
@@ -285,6 +294,8 @@ export class WorkflowRunner {
    * handling, screenshots, then passes the result on. `invoke` defaults to the block's `run`.
    */
   private async runStep(node: NodeDef, input: Payload, run: ActiveRun, invoke?: Invoke): Promise<void> {
+    // A branch still in flight when its run ended (after a timed-out loop, say) starts nothing new.
+    if (run.record.status !== 'running') return;
     if (this.stopped || run.cancelled || this.isCancelled(run.record.id)) {
       run.cancelled = true;
       return;
@@ -323,6 +334,12 @@ export class WorkflowRunner {
     }
 
     const outcome = await this.attempt(node, def, input, run, call, step);
+    // Stopped while the block was working (a long wait, say): nothing is passed on.
+    if (this.stopped || run.cancelled || this.isCancelled(run.record.id)) {
+      run.cancelled = true;
+      this.endStep(run, step, 'skipped', { error: 'Stopped' });
+      return;
+    }
     if (!outcome.ok) {
       await this.handleFailure(run, step, node, def, input, outcome.error, ports);
       return;
@@ -359,7 +376,7 @@ export class WorkflowRunner {
     step: StepRecord,
   ): Promise<{ ok: true; output: RunOutput; softError?: string } | { ok: false; error: string }> {
     // {{secret.name}} works in every templated setting, but secrets never enter the payload.
-    const resolved = resolveConfig(def, node.config, Object.keys(run.secrets).length > 0 ? { ...input, secret: run.secrets } : input);
+    const resolved = resolveConfig(def, node.config, Object.keys(run.secrets).length > 0 ? { ...input, secret: run.secrets } : input, this.evalEnv);
     if (resolved.errors.length > 0) return { ok: false, error: resolved.errors.join('; ') };
 
     const settings = node.step ?? {};
@@ -369,11 +386,26 @@ export class WorkflowRunner {
     for (let attempt = 1; ; attempt += 1) {
       step.attempts = attempt;
       const soft = { error: '' };
-      const ctx = this.makeContext(node, resolved.config, run, 'start', timeoutSeconds * 1000, (message) => {
-        soft.error = soft.error ? `${soft.error}; ${message}` : message;
-      });
+      // Set when this attempt times out. A block call cannot be cancelled from outside, so the
+      // abandoned call is fenced off instead: its emits, sub-workflow calls and soft failures are
+      // refused, and its eventual result is ignored. Loops end at their next emit.
+      const fence = { abandoned: false };
+      const ctx = this.makeContext(
+        node,
+        resolved.config,
+        run,
+        'start',
+        timeoutSeconds * 1000,
+        (message) => {
+          if (fence.abandoned) return;
+          soft.error = soft.error ? `${soft.error}; ${message}` : message;
+        },
+        () => fence.abandoned,
+      );
       try {
-        const output = await this.withTimeout(call(ctx, input), timeoutSeconds);
+        const output = await this.withTimeout(call(ctx, input), timeoutSeconds, () => {
+          fence.abandoned = true;
+        });
         const softError = soft.error;
         if (softError) {
           run.failed = true;
@@ -495,12 +527,22 @@ export class WorkflowRunner {
     return { output, runId: record.id };
   }
 
-  /** Races `promise` against `Host.sleep`. The losing block call is not cancelled; it keeps running. */
-  private withTimeout<T>(promise: Promise<T>, seconds: number): Promise<T> {
+  /**
+   * Races `promise` against `Host.sleep`. On timeout `onTimeout` runs (the caller fences off the
+   * block call, which cannot be cancelled), and a later rejection of `promise` is swallowed.
+   */
+  private withTimeout<T>(promise: Promise<T>, seconds: number, onTimeout: () => void = () => {}): Promise<T> {
+    let settled = false;
     const timeout = this.host.sleep(seconds * 1000).then(() => {
+      if (settled) return new Promise<never>(() => {});
+      onTimeout();
       throw new Error(`Timed out after ${seconds}s`);
     });
-    return Promise.race([promise, timeout]);
+    const guarded = promise.finally(() => {
+      settled = true;
+    });
+    guarded.catch(() => {});
+    return Promise.race([guarded, timeout]);
   }
 
   /** Adds a running step record (masked, compacted input). Past `MAX_STEPS_KEPT` it is only counted. */
@@ -565,9 +607,16 @@ export class WorkflowRunner {
     trigger: RunTrigger = 'start',
     timeoutMs = DEFAULT_TIMEOUT_SECONDS * 1000,
     softFail: (message: string) => void = (message) => this.log('error', node.id, message),
+    abandoned: () => boolean = () => false,
   ): BlockContext<never> {
     const workflowId = this.workflow.id;
+    const refuseIfAbandoned = (what: string): void => {
+      if (!abandoned()) return;
+      this.log('warn', node.id, `${what} ignored: this step already timed out`);
+      throw new Error('This step already timed out');
+    };
     const emit = async (payload: Payload, port: string = DEFAULT_PORT): Promise<void> => {
+      refuseIfAbandoned('Output');
       if (run) {
         await this.emitFrom(node.id, payload, port, run);
         return;
@@ -590,9 +639,11 @@ export class WorkflowRunner {
       timeoutMs,
       realInput: node.step?.realInput === true,
       runId: run?.record.id ?? '',
+      aborted: () => abandoned() || this.stopped || (run ? run.cancelled || this.isCancelled(run.record.id) : false),
       softFail,
       callWorkflow: async (id, input) => {
         if (!run) throw new Error('Run Workflow can only be used inside a run');
+        refuseIfAbandoned('Run Workflow');
         const step = run.record.steps.findLast((candidate) => candidate.nodeId === node.id);
         try {
           const result = await this.callWorkflow(id, input, run);

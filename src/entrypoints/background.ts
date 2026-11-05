@@ -1,17 +1,18 @@
 import { browser } from 'wxt/browser';
 import { createExtensionHost } from '../browser/host';
 import { createBrowserScheduler } from '../browser/scheduler';
-import { cancelPicking, finishPicking, startPicking } from '../browser/picking';
+import { cancelPicking, finishPicking, relayPickerSync, startPicking } from '../browser/picking';
 import { answerPrompt, clearStalePrompts, promptRunId } from '../browser/prompts';
-import { appendLog, loadWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
+import { appendLog, clearWorkflowState, loadWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
 import { createDefaultRegistry } from '../core/blocks';
+import { menuClickPayload, menuItemFor, parseMenuItemId } from '../core/blocks/contextMenu';
 import { WorkflowRunner } from '../core/engine';
 import { markInterrupted } from '../core/runs';
 import { withSessionTab } from '../core/session';
 import { urlMatches } from '../core/urlPattern';
 import { isOwnTab } from '../browser/ownTabs';
 import { recordPopup } from '../browser/popups';
-import { onRecordedTabUpdated, recordStep, startRecording, stopRecording } from '../browser/recording';
+import { onRecordedPopup, onRecordedTabUpdated, recordStep, relayRecorderSync, startRecording, stopRecording } from '../browser/recording';
 import type { RunRecord } from '../core/runs';
 import { sampleWorkflows } from '../core/samples';
 import { parseTimerKey, workflowTimerPrefix } from '../core/timerKey';
@@ -19,6 +20,7 @@ import { diffWorkflows } from '../core/workflow';
 import { STORAGE_KEYS } from '../shared/keys';
 import { isExtensionMessage } from '../shared/messages';
 import type { Workflow } from '../core/types';
+import { forgetLegacyWatchTabs } from '../browser/pageReader';
 
 /**
  * Background worker: runs enabled workflows.
@@ -28,6 +30,12 @@ import type { Workflow } from '../core/types';
  * browser alarms; a runner is rebuilt whenever an alarm fires.
  */
 export default defineBackground(() => {
+  // e2e builds only: a bridge content script on the local fixture server, for the Firefox e2e runner.
+  if (import.meta.env.BF_E2E) {
+    void browser.scripting
+      .registerContentScripts([{ id: 'bf-e2e-bridge', matches: ['http://127.0.0.1/*'], js: ['content-scripts/e2e-bridge.js'], runAt: 'document_start' }])
+      .catch(() => {}); // already registered
+  }
   // Short timers (under 30s) fire from memory; longer ones from alarms. Both end up in onAlarm.
   const scheduler = createBrowserScheduler((key) => {
     void onAlarm(key).catch(report('timer'));
@@ -43,9 +51,12 @@ export default defineBackground(() => {
   const onRun = (run: RunRecord) => {
     if (run.status === 'running') {
       liveRuns.set(run.id, { workflowId: run.workflowId, trigger: run.trigger });
+      // Stay awake for the whole run, even while it waits (Manual Step, slow pages, delays).
+      scheduler.hold(`run:${run.id}`);
     } else {
       liveRuns.delete(run.id);
       cancelRequests.delete(run.id);
+      scheduler.release(`run:${run.id}`);
     }
     saveRun(run);
   };
@@ -64,11 +75,15 @@ export default defineBackground(() => {
   // A run still marked "running" from a previous worker can never finish: say so.
   void updateRuns((runs) => markInterrupted(runs, new Set(liveRuns.keys()), new Date().toISOString()));
   void clearStalePrompts().catch(() => {});
+  void forgetLegacyWatchTabs().catch(() => {});
 
-  /** (Re)starts an enabled workflow: `start()` clears its timers and calls its start blocks. */
-  async function startWorkflow(id: string): Promise<void> {
+  /**
+   * (Re)starts an enabled workflow: `start()` clears its timers and calls its start blocks. Plain
+   * start blocks (no trigger of their own) run only when the user has just switched it on.
+   */
+  async function startWorkflow(id: string, runPlainRoots: boolean): Promise<void> {
     const workflow = (await loadWorkflows()).find((candidate) => candidate.id === id);
-    if (workflow?.enabled) await newRunner(workflow).start();
+    if (workflow?.enabled) await newRunner(workflow).start({ runPlainRoots });
   }
 
   /** Clears a workflow's timers and asks its non-manual live runs to stop. */
@@ -80,10 +95,10 @@ export default defineBackground(() => {
     }
   }
 
-  /** On install/update and browser startup: start every enabled workflow. */
+  /** On install/update and browser startup: re-arm every enabled workflow's triggers (plain start blocks do not run). */
   async function startAllEnabled(): Promise<void> {
     for (const workflow of await loadWorkflows()) {
-      if (workflow.enabled) await newRunner(workflow).start();
+      if (workflow.enabled) await newRunner(workflow).start({ runPlainRoots: false });
     }
   }
 
@@ -92,7 +107,10 @@ export default defineBackground(() => {
     const parsed = parseTimerKey(name);
     if (!parsed) return; // not one of ours
     const workflow = (await loadWorkflows()).find((candidate) => candidate.id === parsed.workflowId);
-    if (!workflow || !workflow.enabled) {
+    // A long delay started by the Run button continues even when the workflow is off; switching a
+    // workflow off clears its timers, so anything left for a disabled workflow is such a delay.
+    const isDelay = parsed.name.startsWith('delay:');
+    if (!workflow || (!workflow.enabled && !isDelay)) {
       await host.scheduler.clear(name); // orphaned alarm
       return;
     }
@@ -131,7 +149,6 @@ export default defineBackground(() => {
     }
   }
 
-  const MENU_PREFIX = 'bf-menu::';
   let menuSync: Promise<void> = Promise.resolve();
 
   /** One right-click menu item per Context Menu start block of an enabled workflow. */
@@ -140,12 +157,7 @@ export default defineBackground(() => {
       .then(async () => {
         await browser.contextMenus.removeAll();
         for (const { workflow, nodeId, config } of await eventRoots('context-menu')) {
-          const where = String(config.contexts ?? 'all');
-          browser.contextMenus.create({
-            id: `${MENU_PREFIX}${workflow.id}::${nodeId}`,
-            title: String(config.title || workflow.name),
-            contexts: [where === 'all' ? 'all' : (where as 'page' | 'selection' | 'link' | 'image')],
-          });
+          browser.contextMenus.create(menuItemFor(workflow, nodeId, config));
         }
       })
       .catch(report('context menus'));
@@ -153,12 +165,11 @@ export default defineBackground(() => {
 
   /** Context Menu trigger: item id `bf-menu::<workflowId>::<nodeId>`. */
   async function onMenuClicked(menuItemId: string, info: { pageUrl?: string; selectionText?: string; linkUrl?: string; srcUrl?: string }, tabId: number | undefined): Promise<void> {
-    if (!menuItemId.startsWith(MENU_PREFIX)) return;
-    const [workflowId, nodeId] = menuItemId.slice(MENU_PREFIX.length).split('::');
-    const workflow = (await loadWorkflows()).find((candidate) => candidate.id === workflowId);
-    if (!workflow || !nodeId) return;
-    const payload = { url: info.pageUrl ?? '', selection: info.selectionText ?? '', link: info.linkUrl ?? '', src: info.srcUrl ?? '', tabId: tabId ?? null };
-    await newRunner(workflow).handleEvent(nodeId, tabId === undefined ? payload : withSessionTab(payload, 'main', tabId));
+    const item = parseMenuItemId(menuItemId);
+    if (!item) return;
+    const workflow = (await loadWorkflows()).find((candidate) => candidate.id === item.workflowId);
+    if (!workflow) return;
+    await newRunner(workflow).handleEvent(item.nodeId, menuClickPayload(info, tabId));
   }
 
   /** Toolbar button: focus the editor tab if open, else open it. */
@@ -208,6 +219,7 @@ export default defineBackground(() => {
   // active tab instead. onCreatedNavigationTarget always names the page that opened it.
   browser.webNavigation.onCreatedNavigationTarget.addListener((details) => {
     void recordPopup(details.tabId, details.sourceTabId).catch(report('popup'));
+    void onRecordedPopup(details.tabId, details.sourceTabId, details.url).catch(report('recording'));
   });
 
   browser.tabs.onUpdated.addListener((tabId, change) => {
@@ -233,15 +245,22 @@ export default defineBackground(() => {
     if (area !== 'local') return;
     const change = changes[STORAGE_KEYS.workflows];
     if (!change) return;
-    const { start, stop } = diffWorkflows(
+    const { start, restart, stop, removed } = diffWorkflows(
       change.oldValue as Workflow[] | undefined,
       change.newValue as Workflow[] | undefined,
     );
     void (async () => {
       for (const id of stop) await stopWorkflow(id);
-      for (const id of start) await startWorkflow(id);
+      // A deleted workflow leaves nothing behind: timers (also a Run-button delay of a workflow
+      // that was off) and the block state its blocks kept.
+      for (const id of removed) {
+        await host.scheduler.clearPrefix(workflowTimerPrefix(id));
+        await clearWorkflowState(id);
+      }
+      for (const id of start) await startWorkflow(id, true);
+      for (const id of restart) await startWorkflow(id, false);
     })().catch(report('workflow change'));
-    if (start.length > 0 || stop.length > 0) syncContextMenus();
+    if (start.length > 0 || restart.length > 0 || stop.length > 0) syncContextMenus();
   });
 
   // Manual Step answers from the notification (Chrome has buttons; Firefox: a click means Continue).
@@ -259,16 +278,33 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onMessage.addListener((message, sender) => {
+    // e2e builds only (BF_E2E=1; compiled out otherwise): an automated browser cannot open the
+    // right-click menu, so tests/e2e "click" a Context Menu item with this message.
+    if (import.meta.env.BF_E2E && (message as { type?: unknown })?.type === 'bf:e2e-menu-click') {
+      const { menuItemId, info, tabId } = message as { menuItemId: string; info: Record<string, string>; tabId?: number };
+      void onMenuClicked(menuItemId, info, tabId).catch(report('e2e menu click'));
+      return;
+    }
     if (!isExtensionMessage(message)) return;
     switch (message.type) {
       case 'bf:start-pick':
-        void startPicking(sender.tab?.id, message.url, message.mode).catch(report('start picking'));
+        void startPicking(sender.tab?.id, message.url, message.mode, message.urlFrom).catch(report('start picking'));
         break;
       case 'bf:picked':
-        void finishPicking(message, sender.tab?.id).catch(report('finish picking'));
+        void finishPicking(message, { tabId: sender.tab?.id, frameId: sender.frameId, tabUrl: sender.tab?.url }).catch(report('finish picking'));
         break;
       case 'bf:pick-cancelled':
-        void cancelPicking().catch(report('cancel picking'));
+        void cancelPicking(sender.tab?.id).catch(report('cancel picking'));
+        break;
+      case 'bf:pick-error':
+        // Only a picker in a page sends this here (the editor shows it too): end the pick.
+        if (sender.tab?.id !== undefined) void cancelPicking(sender.tab.id).catch(report('cancel picking'));
+        break;
+      case 'bf:picker-sync':
+        void relayPickerSync(message, sender.tab?.id).catch(report('picker'));
+        break;
+      case 'bf:recorder-sync':
+        void relayRecorderSync(message, sender.tab?.id).catch(report('recording'));
         break;
       case 'bf:run-workflow':
         void newRunner(message.workflow).runOnce().catch(report('run'));

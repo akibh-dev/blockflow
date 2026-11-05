@@ -4,14 +4,14 @@
 
 42 blocks. Every block also accepts the common `step` settings (see README.md in this folder).
 
-- **Start**: [Start](#start--start) `start` · [Timer](#timer--timer) `timer` · [Schedule](#schedule--schedule) `schedule` · [Page Visited](#page-visited--page-visited) `page-visited` · [Context Menu](#context-menu--context-menu) `context-menu` · [Watch Element](#watch-element--watch-element) `watch-element`
-- **Tabs**: [Open Tab](#open-tab--open-url) `open-url` · [Navigate](#navigate--navigate) `navigate` · [Wait for Popup](#wait-for-popup--wait-for-popup) `wait-for-popup` · [Close Tab](#close-tab--close-tab) `close-tab`
-- **Page actions**: [Click](#click--click) `click` · [Fill](#fill--fill) `fill` · [Fill Form](#fill-form--fill-form) `fill-form` · [Select Option](#select-option--select-option) `select-option` · [Check](#check--check) `check` · [Press Key](#press-key--press-key) `press-key` · [Upload File](#upload-file--upload-file) `upload-file` · [Scroll](#scroll--scroll) `scroll` · [Dialogs](#dialogs--dialogs) `dialogs` · [Wait For](#wait-for--wait-for) `wait-for` · [Run Script](#run-script--run-script) `run-script`
-- **Read & scrape**: [Read Element](#read-element--read-element) `read-element` · [Extract List](#extract-list--extract-list) `extract-list` · [Extract Table](#extract-table--extract-table) `extract-table` · [Paginate](#paginate--paginate) `paginate` · [Page Info](#page-info--page-info) `page-info`
-- **Test**: [Assert](#assert--assert) `assert` · [Manual Step](#manual-step--manual-step) `manual-step` · [Stop](#stop--stop) `stop`
-- **Logic & loops**: [If](#if--if) `if` · [For Each](#for-each--for-each) `for-each` · [Repeat](#repeat--repeat) `repeat` · [Run Workflow](#run-workflow--run-workflow) `run-workflow`
-- **Data**: [Set Variable](#set-variable--set-variable) `set-variable` · [Transform](#transform--transform) `transform` · [Filter](#filter--filter) `filter` · [Data Table](#data-table--data-table) `data-table` · [Save to Dataset](#save-to-dataset--save-dataset) `save-dataset` · [Download](#download--download) `download`
-- **Send & log**: [Notify](#notify--notify) `notify` · [HTTP Request](#http-request--http-request) `http-request` · [Log](#log--log) `log`
+- **Start**: [Start](#%EF%B8%8F-start--start) `start` · [Timer](#-timer--timer) `timer` · [Schedule](#-schedule--schedule) `schedule` · [Page Visited](#-page-visited--page-visited) `page-visited` · [Context Menu](#-context-menu--context-menu) `context-menu` · [Watch Element](#-watch-element--watch-element) `watch-element`
+- **Tabs**: [Open Tab](#-open-tab--open-url) `open-url` · [Navigate](#-navigate--navigate) `navigate` · [Wait for Popup](#-wait-for-popup--wait-for-popup) `wait-for-popup` · [Close Tab](#%EF%B8%8F-close-tab--close-tab) `close-tab`
+- **Page actions**: [Click](#-click--click) `click` · [Fill](#%EF%B8%8F-fill--fill) `fill` · [Fill Form](#-fill-form--fill-form) `fill-form` · [Select Option](#-select-option--select-option) `select-option` · [Check](#%EF%B8%8F-check--check) `check` · [Press Key](#-press-key--press-key) `press-key` · [Upload File](#-upload-file--upload-file) `upload-file` · [Scroll](#%EF%B8%8F-scroll--scroll) `scroll` · [Dialogs](#-dialogs--dialogs) `dialogs` · [Wait For](#-wait-for--wait-for) `wait-for` · [Run Script](#-run-script--run-script) `run-script`
+- **Read & scrape**: [Read Element](#-read-element--read-element) `read-element` · [Extract List](#-extract-list--extract-list) `extract-list` · [Extract Table](#-extract-table--extract-table) `extract-table` · [Paginate](#-paginate--paginate) `paginate` · [Page Info](#%E2%84%B9%EF%B8%8F-page-info--page-info) `page-info`
+- **Test**: [Assert](#-assert--assert) `assert` · [Manual Step](#-manual-step--manual-step) `manual-step` · [Stop](#-stop--stop) `stop`
+- **Logic & loops**: [If](#-if--if) `if` · [For Each](#-for-each--for-each) `for-each` · [Repeat](#-repeat--repeat) `repeat` · [Run Workflow](#-run-workflow--run-workflow) `run-workflow`
+- **Data**: [Set Variable](#%EF%B8%8F-set-variable--set-variable) `set-variable` · [Transform](#-transform--transform) `transform` · [Filter](#-filter--filter) `filter` · [Data Table](#%EF%B8%8F-data-table--data-table) `data-table` · [Save to Dataset](#-save-to-dataset--save-dataset) `save-dataset` · [Download](#%EF%B8%8F-download--download) `download`
+- **Send & log**: [Notify](#-notify--notify) `notify` · [HTTP Request](#-http-request--http-request) `http-request` · [Log](#-log--log) `log`
 
 ## ▶️ Start — `start`
 
@@ -19,7 +19,7 @@ Start here when you press Run, with some starting values (also defaults for Run 
 
 - Outputs (ports): `out` (plus `error` when step.onError is "port")
 - Default timeout: 60s
-- Can start a workflow: yes (runs once with empty data)
+- Can start a workflow: yes (has its own schedule/trigger)
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -32,12 +32,12 @@ Adds to the data: `(your names)` (One key per starting value.)
 Start the flow on a schedule, or delay it when placed after another block.
 
 - Outputs (ports): `out` (plus `error` when step.onError is "port")
-- Default timeout: 60s
+- Default timeout: 660s
 - Can start a workflow: yes (has its own schedule/trigger)
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `seconds` (Seconds) | number | `60` | Under 30 seconds the extension keeps its background worker awake to fire on time (Chromium). 30 seconds or more uses browser alarms. |
+| `seconds` (Seconds) | number | `60` | Under 30 seconds the extension keeps its background worker awake to fire on time (Chromium). 30 seconds or more uses browser alarms. After another block: waits up to 600 s inside the run; longer delays continue as a new run. |
 | `repeat` (Repeat) | boolean | `true` | Only used when this block starts the flow. After another block it always fires once. |
 
 Adds to the data: `tick` (How many times the timer has fired (when it starts the flow).); `firedAt` (ISO time the timer fired.)
@@ -180,6 +180,7 @@ Click (or double-click, right-click, hover) an element. Waits until it can be cl
 - Outputs (ports): `out` (plus `error` when step.onError is "port")
 - Default timeout: 30s
 - Can start a workflow: yes (runs once with empty data)
+- Step setting `realInput` ("Use real mouse and keyboard") applies to this block
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -197,6 +198,7 @@ Type a value into a text field. Works with React, Vue and Angular forms.
 - Outputs (ports): `out` (plus `error` when step.onError is "port")
 - Default timeout: 30s
 - Can start a workflow: yes (runs once with empty data)
+- Step setting `realInput` ("Use real mouse and keyboard") applies to this block
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -214,6 +216,7 @@ Fill several fields at once: text, selects, checkboxes. Optionally click submit.
 - Outputs (ports): `out` (plus `error` when step.onError is "port")
 - Default timeout: 30s
 - Can start a workflow: yes (runs once with empty data)
+- Step setting `realInput` ("Use real mouse and keyboard") applies to this block
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -230,6 +233,7 @@ Choose an option in a dropdown (<select>), by its text or value.
 - Outputs (ports): `out` (plus `error` when step.onError is "port")
 - Default timeout: 30s
 - Can start a workflow: yes (runs once with empty data)
+- Step setting `realInput` ("Use real mouse and keyboard") applies to this block
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -246,6 +250,7 @@ Tick or untick a checkbox, radio button or switch. Does nothing if it already is
 - Outputs (ports): `out` (plus `error` when step.onError is "port")
 - Default timeout: 30s
 - Can start a workflow: yes (runs once with empty data)
+- Step setting `realInput` ("Use real mouse and keyboard") applies to this block
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -262,6 +267,7 @@ Press a key or shortcut: Enter, Tab, Escape, Control+A…
 - Outputs (ports): `out` (plus `error` when step.onError is "port")
 - Default timeout: 30s
 - Can start a workflow: yes (runs once with empty data)
+- Step setting `realInput` ("Use real mouse and keyboard") applies to this block
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -426,6 +432,7 @@ Run "each" on every page of a paged list, clicking Next in between.
 - Outputs (ports): `each`, `done` (plus `error` when step.onError is "port")
 - Default timeout: 1800s
 - Can start a workflow: yes (runs once with empty data)
+- Step setting `realInput` ("Use real mouse and keyboard") applies to this block
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -601,9 +608,9 @@ Keep only the list items that match a condition.
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `list` (List) | text | `"items"` | required. Where the list is in the data, e.g. items or data.results (an expression, no {{ }}). |
-| `left` (Value (per item)) | text | `"{{item.price}}"` | Rendered for each item: {{item.…}} is the item, other {{…}} the data. |
+| `left` (Value (per item)) | text | `"{{item.price}}"` | supports `{{…}}` per item. Rendered for each item: {{item.…}} is the item, other {{…}} the data. |
 | `operator` (Condition) | one of `equals`, `not-equals`, `contains`, `not-contains`, `starts-with`, `ends-with`, `matches`, `greater`, `greater-equal`, `less`, `less-equal`, `empty`, `not-empty`, `true`, `false` | `"less"` |  |
-| `right` (Compare to) | text | `"50"` |  |
+| `right` (Compare to) | text | `"50"` | supports `{{…}}` per item |
 | `into` (Save as (empty = replace the list)) | text | `""` |  |
 
 Adds to the data: `(list)` (The kept items, under the list's name or "Save as".)

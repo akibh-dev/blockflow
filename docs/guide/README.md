@@ -100,7 +100,8 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
 ```
 
 - `id`s: any unique strings within the file (node ids unique within a workflow). Import replaces
-  them; Run Workflow references between workflows in the same file are kept working.
+  them; Run Workflow references between workflows in the same file are kept working. A file whose
+  edges name a missing node id, or that repeats a node id, is refused with a message naming the id.
 - `position`: canvas coordinates; about 260 px apart left to right reads well. Branches: ±140 px in y.
 - `step` (optional, per node): see section 7.
 - A single workflow object (without the `format` wrapper) also imports.
@@ -233,7 +234,7 @@ with its own copy of the data.
 | `page-visited` | while On, when any tab loads a page whose URL matches `url` (`when: "any"` also on SPA route changes). Tabs BlockFlow opened never trigger it. The tab becomes `main`. | uses the tab you are on |
 | `context-menu` | while On, when you choose its item (`title`) in the right-click menu; gives `url`, `selection`, `link`, `src` | uses the tab you are on |
 | `watch-element` | while On, when an element's text changes | reads once now |
-| any other block | once when switched On (with empty data) | runs once |
+| any other block | once when you switch the workflow On (with empty data); not again when you edit it or the browser starts | runs once |
 
 A workflow may have several start blocks; each starts its own runs.
 
@@ -254,17 +255,41 @@ A workflow may have several start blocks; each starts its own runs.
 - **● Record**: opens a page in a new tab and turns what you do into blocks: typing (one Fill per
   field; two or more fields + a click become Fill Form with that click as submit), selects,
   checkboxes, clicks, Enter, page changes (Wait For URL). The on-page toolbar adds **Assert text** /
-  **Assert visible** for the next element you click. Passwords are never recorded: the blocks use
-  `{{secret.password}}`.
+  **Assert visible** for the next element you click. It also records inside iframes (locators start
+  with `frame=…`) and web components (open shadow roots), and follows tabs the page opens: a **Wait
+  for Popup** block, then the steps there with `"tab": "popup"`. Passwords are never recorded: each
+  password field gets its own secret named after its label or name (`{{secret.password}}`,
+  `{{secret.adminPassword}}`…), and the editor lists the secrets to create. In a workflow that
+  already has blocks, the recording continues after the selected block (or the last block of the
+  main path), to its right and connected to it; if the workflow already opens that site, no second
+  Open Tab is added and the recorded blocks use that Open Tab's tab.
 - **🎯 Pick on page**: click the element; Enter confirms. Action fields get the most readable
   unique locator (`role=…`, `label=…`, `testid=…`); Watch/Read Element get a structural CSS selector
   (stable when the text changes). Other ways to find it are offered as one-click alternatives.
+  Elements inside iframes get `frame=<iframe css> >> …`, inside open shadow roots `host >>> …` when no
+  readable locator fits. The page: the block's own URL (Watch/Read Element), else the URL of the
+  nearest Open Tab before the block, else your last-used tab. Each editor keeps one picker tab and
+  reuses it: a block's own URL sends it to that page, an Open Tab's URL only when it shows another
+  site (so you can log in or go deeper there first, and the next pick stays on that page).
 - **🎯 Detect fields** (Fill Form): click any field of a form; all its fields are listed with hints.
 - Typing `{{` in a setting suggests names: outputs of earlier blocks, keys seen in the last run,
   `secret.*`.
 - **+ New ▾** → templates (the files in [`examples/`](examples)).
-- Keys on the canvas: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo, Ctrl+C / Ctrl+V copy and
-  paste blocks (also into another workflow), Ctrl+D duplicate, Delete/Backspace remove.
+- **Try it** card (first run, on the canvas until closed): start the practice page with
+  `npm run playground` (serves `docs/manual-test` at `http://localhost:7357`), then **Create the
+  Try-it workflow** makes the [`playground-tour`](examples/playground-tour.blockflow.json) workflow;
+  press ▶ Run.
+- Keys on the canvas: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo (each workflow keeps its own
+  history while you switch between them), Ctrl+C / Ctrl+V copy and paste blocks (also into another
+  workflow; they land where the mouse is, or 40 px further on when it has not moved), Ctrl+D
+  duplicate, Delete/Backspace remove.
+- Messages appear as small notes in the bottom right corner; deleting asks in a dialog inside the
+  editor (Escape cancels).
+- The step setting **Use real mouse and keyboard** is only offered on blocks that act on the page
+  (Click, Fill, Fill Form, Select Option, Check, Press Key, Paginate; `realInput` in
+  [blocks.md](blocks.md)).
+- A workflow with problems cannot be switched on: its switch (header and All workflows) is greyed out
+  until they are fixed; **Turn all on** leaves such workflows off and names them.
 
 ## 11. Secrets
 
@@ -277,14 +302,15 @@ profile's extension storage.
 
 | Situation | Use |
 | --- | --- |
-| A site ignores synthetic clicks/typing (checks `event.isTrusted`) | step setting `"realInput": true` on Click / Fill / Fill Form / Check / Press Key. Uses the browser's debugger (Chrome, Edge, Brave; optional permission, asked when ticked; a "debugging" bar shows while it acts). Also lets failed steps in background tabs get screenshots |
-| Payment / login widget in an iframe | `frame=<iframe css> >> <locator>` in any locator; cross-origin frames work too |
+| A site ignores synthetic clicks/typing (checks `event.isTrusted`) | step setting `"realInput": true` on Click / Fill / Fill Form / Check / Press Key. Uses the browser's debugger (Chrome, Edge, Brave; optional permission, asked when ticked; a "debugging" bar shows while it acts). Works inside iframes too, same-site and cross-site. Also lets failed steps in background tabs get screenshots |
+| Payment / login widget in an iframe | `frame=<iframe css> >> <locator>` in any locator; cross-origin frames work too. When `frame=` matches several iframes, every same-site one is searched; a cross-site one is used when they find nothing. Pick on page and Record write these locators for you |
+| Web components (open shadow roots) | `text=`, `role=`, `label=`… look inside them; CSS needs `host >>> inner`. Pick on page and Record see inside them |
 | "Sign in with…" popup, `target=_blank` link | Click, then **Wait for Popup** (`name: "popup"`), then blocks with `"tab": "popup"` |
 | `alert` / `confirm` / `prompt` | **Dialogs** (`accept` + prompt `text`, or `dismiss`) **before** the click that opens them; `read` returns `{{dialogs}}` / `{{lastDialog}}` |
 | File chooser | **Upload File** on the `<input type="file">` (hidden ones too, or its label): text you write, or a file from a URL |
 | Wait for an API call instead of the UI | **Wait For** `mode: "response"`, `url` pattern, optional `status` (`201`, `2xx`). A response that finished during the previous block counts |
 | Anything no block does | **Run Script**: async JS body, sees `data`, `return` a JSON value. Needs Chrome 135+, the userScripts permission (Grant button) and "Allow User Scripts" / developer mode for BlockFlow |
-| Run the same test in CI | 🎭 **Playwright** export (sidebar row or All workflows): a `.spec.ts` for `npx playwright test`; secrets become environment variables (`{{secret.loginPassword}}` → `LOGINPASSWORD`); Run Workflow calls become functions; BlockFlow-only blocks become comments |
+| Run the same test in CI | 🎭 **Playwright** export (sidebar row or All workflows): a `.spec.ts` for `npx playwright test`. Templates, expressions and the data blocks (Data Table, Transform, Filter, Set Variable, For Each, Repeat, If) behave as in BlockFlow, because the spec carries BlockFlow's own template/expression/CSV code. Asserts retry (`toHaveText`, `toHaveURL`, `expect.poll` for the other operators; soft → `expect.soft`); Wait For response, Dialogs, Upload File, Wait for Popup, Run Script and Timer delays map to Playwright; step timeouts, retries and error handling (`continue`, error output) are kept. Secrets become environment variables (`{{secret.loginPassword}}` → `LOGINPASSWORD`); Run Workflow calls become functions; what has no equivalent (Notify, Save to Dataset, Download) becomes a `// BlockFlow-only:` comment. Details: [wiki](../wiki/Workflows-as-Scripts.md#export-to-playwright) |
 
 ## 13. Testing patterns
 
@@ -339,11 +365,16 @@ profile's extension storage.
 | [`scrape-to-csv`](examples/scrape-to-csv.blockflow.json) | Paginate + Extract List + dataset + CSV download |
 | [`data-driven-login`](examples/data-driven-login.blockflow.json) | Data Table + For Each + soft Assert, a secret chosen by an expression |
 | [`api-to-dataset`](examples/api-to-dataset.blockflow.json) | HTTP Request + Transform + dataset history + If |
+| [`playground-tour`](examples/playground-tour.blockflow.json) | the "Try it" workflow: Click, Fill, Select Option and Assert on `docs/manual-test/playground.html` (`npm run playground`) |
 
 ## 17. Limits (what a browser extension cannot do, or BlockFlow does not do yet)
 
 - Page events are synthetic (`isTrusted: false`) unless `realInput` is on (Chromium only). Real input
-  inside cross-origin iframes is not supported (coordinates are the frame's own).
+  inside iframes assumes the page is not zoomed or CSS-transformed around the frame.
+- The recorder names every popup `popup`: with two popups open at once, steps in the older one are
+  attributed to the newer. Iframes added after the page finished loading are not recorded (reload
+  or record again); a frame whose parent page does not answer BlockFlow's question about which
+  iframe it is (a page that swallows `message` events) records nothing.
 - Closed shadow roots, drag and drop, and file *drop zones* (not inputs) are not supported.
 - Run Script needs Chrome 135+ with user scripts allowed; Firefox and older Chrome explain that.
 - Pages browsers protect: `chrome://`, the extension stores, other extensions, PDF viewer. `file://`

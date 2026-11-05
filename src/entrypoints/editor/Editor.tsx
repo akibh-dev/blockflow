@@ -22,6 +22,7 @@ import type { EdgeDef, LogEntry, StepSettings, Workflow } from '../../core/types
 import { BlockNode, IssuesContext, RunStatusContext } from './components/BlockNode';
 import type { BlockFlowNode } from './components/BlockNode';
 import { ConfigPanel } from './components/ConfigPanel';
+import { confirmDialog, promptDialog, toast } from './components/Dialogs';
 import { LogPanel } from './components/LogPanel';
 import { DRAG_MIME, Sidebar } from './components/Sidebar';
 import type { WorkflowActions } from './components/WorkflowActions';
@@ -29,15 +30,18 @@ import { WorkflowsPage } from './components/WorkflowsPage';
 import { downloadText, fileNameFor, readFiles } from './files';
 import { fromFlow, sameGraph, toFlow } from './flow/convert';
 import { useLogs, usePrompts, useRuns, useStorageValue } from './hooks';
-import { recordingToBlocks } from '../../core/recording';
+import { recordingIntoWorkflow } from '../../core/recording';
 import { workflowToPlaywright } from '../../core/playwright';
 import { STORAGE_KEYS } from '../../shared/keys';
 import type { RecordingState } from '../../browser/recording';
 import { PromptBanner } from './components/PromptBanner';
 import { ReportsPage } from './components/ReportsPage';
 import { SecretsPage } from './components/SecretsPage';
+import { TryItCard } from './components/TryItCard';
 import { DataPage } from './components/DataPage';
 import { registry } from './registry';
+import { mergeStoredWorkflows, sameData, syncBase } from './sync';
+import type { SyncBase } from './sync';
 
 /** React Flow node renderers by node `type`; every BlockFlow node is `'block'`. Module-level so it is stable. */
 const nodeTypes = { block: BlockNode };
@@ -49,8 +53,28 @@ const HISTORY_LIMIT = 100;
 
 type Graph = Pick<Workflow, 'nodes' | 'edges'>;
 
+/**
+ * Undo/redo of one workflow: snapshots of its graph before each change. Changes less than
+ * HISTORY_MERGE_MS apart (one drag reports many moves) count as one step; `restoring` keeps the change
+ * an undo/redo itself makes out of the history.
+ */
+interface History {
+  past: Graph[];
+  future: Graph[];
+  lastAt: number;
+  restoring: boolean;
+}
+
 /** Blocks copied with Ctrl+C: kept in memory, so they can be pasted into another workflow. */
 let clipboard: Graph | null = null;
+
+/** Why a workflow cannot be switched on (its errors, or being empty), or null when it can. */
+function whyNotOn(workflow: Workflow): string | null {
+  const blocking = validateWorkflow(workflow, registry).filter((issue) => issue.level === 'error');
+  if (blocking.length > 0) return `Cannot turn on “${workflow.name}”:\n- ${blocking.map((issue) => issue.message).join('\n- ')}`;
+  if (workflow.nodes.length === 0) return `“${workflow.name}” is empty. Add a block first.`;
+  return null;
+}
 
 /** The output an edge leaves from, resolving edges saved before blocks had several outputs. */
 function portOfEdge(workflow: Workflow, edge: EdgeDef): string {
@@ -87,20 +111,39 @@ export function Editor() {
 
   // --- loading -----------------------------------------------------------
 
-  /** Put a workflow on the canvas. Resets the inspected run and the undo history. */
-  const open = useCallback((workflow: Workflow) => {
+  // Undo/redo history per workflow id, kept while switching between workflows (in memory only).
+  const histories = useRef(new Map<string, History>());
+  const historyOf = useCallback((id: string): History => {
+    let record = histories.current.get(id);
+    if (!record) {
+      record = { past: [], future: [], lastAt: 0, restoring: false };
+      histories.current.set(id, record);
+    }
+    return record;
+  }, []);
+
+  /**
+   * Put a workflow on the canvas and reset the inspected run. Its undo history stays, unless
+   * `resetHistory` (the workflow was changed in another editor tab, so the snapshots are stale).
+   */
+  const open = useCallback((workflow: Workflow, resetHistory = false) => {
     const flow = toFlow(workflow, (edge) => portOfEdge(workflow, edge));
     setNodes(flow.nodes as BlockFlowNode[]);
     setEdges(flow.edges);
     setActiveId(workflow.id);
     setInspectedRunId(undefined);
-    history.current = { past: [], future: [], lastAt: 0, restoring: false };
+    if (resetHistory) histories.current.delete(workflow.id);
   }, []);
+
+  // What storage held at the last load/save, per workflow: tells this tab's own edits apart from
+  // another editor tab's (see sync.ts).
+  const synced = useRef<SyncBase>(new Map());
 
   useEffect(() => {
     let alive = true;
     void loadWorkflows().then((stored) => {
       if (!alive) return;
+      synced.current = syncBase(stored);
       const list = stored.length > 0 ? stored : [createWorkflow('My first workflow')];
       setWorkflows(list);
       open(list[0] as Workflow);
@@ -117,17 +160,13 @@ export function Editor() {
   const latest = useRef<Workflow[] | null>(null);
   latest.current = workflows;
 
-  // Undo/redo: snapshots of the graph before each change. Changes less than HISTORY_MERGE_MS apart
-  // (one drag reports many moves) count as one step.
-  const history = useRef<{ past: Graph[]; future: Graph[]; lastAt: number; restoring: boolean }>({ past: [], future: [], lastAt: 0, restoring: false });
-
   useEffect(() => {
     if (!activeId) return;
     const base = latest.current?.find((workflow) => workflow.id === activeId);
     if (!base) return;
     const next = fromFlow(base, nodes, edges);
     if (sameGraph(base, next)) return;
-    const record = history.current;
+    const record = historyOf(activeId);
     if (record.restoring) record.restoring = false;
     else {
       const now = Date.now();
@@ -138,24 +177,58 @@ export function Editor() {
       record.lastAt = now;
     }
     setWorkflows((previous) => previous?.map((workflow) => (workflow.id === activeId ? next : workflow)) ?? previous);
-  }, [nodes, edges, activeId]);
+  }, [nodes, edges, activeId, historyOf]);
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
 
+  const persist = useCallback((list: Workflow[]) => {
+    synced.current = syncBase(list);
+    void saveWorkflows(list);
+  }, []);
+
   useEffect(() => {
     if (!workflows) return;
-    const timer = setTimeout(() => void saveWorkflows(workflows), SAVE_DELAY_MS);
+    const timer = setTimeout(() => persist(workflows), SAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [workflows]);
+  }, [workflows, persist]);
+
+  // Another editor tab (or the first-install samples) changed the stored list: merge it in, keeping
+  // this tab's unsaved edits, and reload the canvas if the open workflow changed there.
+  useEffect(() => {
+    const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
+      const change = changes[STORAGE_KEYS.workflows];
+      if (area !== 'local' || !change) return;
+      const theirs = (change.newValue as Workflow[] | undefined) ?? [];
+      const ours = latest.current;
+      if (!ours || sameData(theirs, ours)) {
+        synced.current = syncBase(theirs);
+        return;
+      }
+      const merged = mergeStoredWorkflows(ours, synced.current, theirs);
+      synced.current = syncBase(theirs);
+      setWorkflows(merged);
+      const id = activeIdRef.current;
+      const before = ours.find((workflow) => workflow.id === id);
+      const after = merged.find((workflow) => workflow.id === id);
+      // Reload the canvas only when the open workflow really changed elsewhere (this also resets its undo).
+      if (!after) {
+        if (merged[0]) open(merged[0]);
+      } else if (after !== before && !sameData(after, before)) {
+        open(after, true);
+      }
+    };
+    browser.storage.onChanged.addListener(listener);
+    return () => browser.storage.onChanged.removeListener(listener);
+  }, [open]);
 
   // Do not lose the last edit if the tab is closed right away.
   useEffect(() => {
     const flush = () => {
-      if (latest.current) void saveWorkflows(latest.current);
+      if (latest.current) persist(latest.current);
     };
     window.addEventListener('pagehide', flush);
     return () => window.removeEventListener('pagehide', flush);
-  }, []);
+  }, [persist]);
 
   // --- validation --------------------------------------------------------
 
@@ -263,7 +336,8 @@ export function Editor() {
   // --- workflow list actions (all by id, so the sidebar and the manager page share them) ---
 
   const [view, setView] = useState<'canvas' | 'manage' | 'reports' | 'data' | 'secrets'>('canvas');
-  const notice = useCallback((message: string) => window.alert(message), []);
+  /** A message for the user, as a toast (errors stay longer). */
+  const notice = useCallback((message: string, kind: 'info' | 'error' = 'info') => toast(message, kind), []);
 
   const createNew = useCallback(() => {
     const workflow = createWorkflow(uniqueName(`Workflow ${(latest.current?.length ?? 0) + 1}`, (latest.current ?? []).map((w) => w.name)));
@@ -290,16 +364,10 @@ export function Editor() {
     (id: string, enabled: boolean): boolean => {
       const target = latest.current?.find((workflow) => workflow.id === id);
       if (!target) return false;
-      if (enabled) {
-        const blocking = validateWorkflow(target, registry).filter((issue) => issue.level === 'error');
-        if (blocking.length > 0) {
-          notice(`Cannot turn on “${target.name}”:\n- ${blocking.map((issue) => issue.message).join('\n- ')}`);
-          return false;
-        }
-        if (target.nodes.length === 0) {
-          notice(`“${target.name}” is empty. Add a block first.`);
-          return false;
-        }
+      const refused = enabled ? whyNotOn(target) : null;
+      if (refused) {
+        notice(refused, 'error');
+        return false;
       }
       setWorkflows((current) => current?.map((workflow) => (workflow.id === id ? { ...workflow, enabled } : workflow)) ?? current);
       return true;
@@ -307,13 +375,20 @@ export function Editor() {
     [notice],
   );
 
+  /** "Turn all on/off": one message naming the workflows that could not be turned on. */
   const setAllEnabled = useCallback(
     (enabled: boolean) => {
+      const skipped: string[] = [];
+      const ids = new Set<string>();
       for (const workflow of latest.current ?? []) {
-        if (workflow.enabled !== enabled) setEnabledFor(workflow.id, enabled);
+        if (workflow.enabled === enabled) continue;
+        if (enabled && whyNotOn(workflow)) skipped.push(workflow.name);
+        else ids.add(workflow.id);
       }
+      if (ids.size > 0) setWorkflows((current) => current?.map((workflow) => (ids.has(workflow.id) ? { ...workflow, enabled } : workflow)) ?? current);
+      if (skipped.length > 0) notice(`Left off until their problems are fixed: ${skipped.map((name) => `“${name}”`).join(', ')}`, 'error');
     },
-    [setEnabledFor],
+    [notice],
   );
 
   const duplicate = useCallback(
@@ -328,16 +403,28 @@ export function Editor() {
     [open],
   );
 
-  const removeWorkflow = useCallback(
+  /** Removes a workflow from the list (the background then clears its timers and block state). */
+  const deleteNow = useCallback(
     (id: string) => {
-      const target = latest.current?.find((workflow) => workflow.id === id);
-      if (!target || !window.confirm(`Delete “${target.name}”? This cannot be undone.`)) return;
+      if (!latest.current?.some((workflow) => workflow.id === id)) return;
       const remaining = (latest.current ?? []).filter((workflow) => workflow.id !== id);
       const next = remaining.length > 0 ? remaining : [createWorkflow('My first workflow')];
       setWorkflows(next);
+      histories.current.delete(id);
       if (id === activeIdRef.current) open(next[0] as Workflow);
     },
     [open],
+  );
+
+  const removeWorkflow = useCallback(
+    (id: string) => {
+      const target = latest.current?.find((workflow) => workflow.id === id);
+      if (!target) return;
+      void confirmDialog({ title: 'Delete workflow', message: `Delete “${target.name}”? This cannot be undone.`, confirmLabel: 'Delete', danger: true }).then((ok) => {
+        if (ok) deleteNow(id);
+      });
+    },
+    [deleteNow],
   );
 
   const exportWorkflowsById = useCallback((ids: string[]) => {
@@ -353,7 +440,7 @@ export function Editor() {
       for (const text of texts) {
         const result = parseImport(text, [...(latest.current ?? []), ...added]);
         if (!result.ok) {
-          notice(`Import failed: ${result.error}`);
+          notice(`Import failed: ${result.error}`, 'error');
           continue;
         }
         added = [...added, ...result.workflows];
@@ -379,7 +466,7 @@ export function Editor() {
     (text: string) => {
       const result = parseImport(text, latest.current ?? []);
       if (!result.ok) {
-        notice(`Could not use the template: ${result.error}`);
+        notice(`Could not use the template: ${result.error}`, 'error');
         return;
       }
       setWorkflows((current) => [...(current ?? []), ...result.workflows]);
@@ -448,7 +535,7 @@ export function Editor() {
     if (!active) return;
     setInspectedRunId(undefined); // follow the new run
     void browser.runtime.sendMessage({ type: 'bf:run-workflow', workflow: active }).catch(() => {
-      window.alert('Could not reach the background worker. Try reloading the extension.');
+      toast('Could not reach the background worker. Try reloading the extension.', 'error');
     });
   };
 
@@ -476,32 +563,34 @@ export function Editor() {
       if (!workflow) return;
       const shown = { ...workflow, nodes: graph.nodes, edges: graph.edges };
       const flow = toFlow(shown, (edge) => portOfEdge(shown, edge));
-      history.current.restoring = true;
+      historyOf(workflow.id).restoring = true;
       setNodes(flow.nodes as BlockFlowNode[]);
       setEdges(flow.edges);
     },
-    [],
+    [historyOf],
   );
 
   const undo = useCallback(() => {
-    const record = history.current;
-    const previous = record.past.at(-1);
     const current = latest.current?.find((workflow) => workflow.id === activeIdRef.current);
-    if (!previous || !current) return;
+    if (!current) return;
+    const record = historyOf(current.id);
+    const previous = record.past.at(-1);
+    if (!previous) return;
     record.past = record.past.slice(0, -1);
     record.future = [...record.future, { nodes: current.nodes, edges: current.edges }];
     showGraph(previous);
-  }, [showGraph]);
+  }, [showGraph, historyOf]);
 
   const redo = useCallback(() => {
-    const record = history.current;
-    const next = record.future.at(-1);
     const current = latest.current?.find((workflow) => workflow.id === activeIdRef.current);
-    if (!next || !current) return;
+    if (!current) return;
+    const record = historyOf(current.id);
+    const next = record.future.at(-1);
+    if (!next) return;
     record.future = record.future.slice(0, -1);
     record.past = [...record.past, { nodes: current.nodes, edges: current.edges }];
     showGraph(next);
-  }, [showGraph]);
+  }, [showGraph, historyOf]);
 
   /** Copy the selected blocks and the connections between them to the module `clipboard`. False if none selected. */
   const copySelection = useCallback(() => {
@@ -517,20 +606,38 @@ export function Editor() {
     return true;
   }, []);
 
-  /** Paste the clipboard with fresh ids, offset 40px, selected. The clipboard then holds the pasted copy. */
-  const paste = useCallback(() => {
-    if (!clipboard) return;
+  // Where the mouse is over the canvas (screen coordinates), for pasting there; null when outside.
+  const mouse = useRef<{ x: number; y: number } | null>(null);
+  const lastPasteAt = useRef<{ x: number; y: number } | null>(null);
+
+  /**
+   * Paste the clipboard with fresh ids, selected. `atMouse`: the copy's top-left block goes where the
+   * mouse is on the canvas; otherwise (mouse outside, not moved since the last paste, or Ctrl+D) it is
+   * offset 40px from the copied blocks. The clipboard then holds the pasted copy.
+   */
+  const paste = useCallback((atMouse = true) => {
+    if (!clipboard || clipboard.nodes.length === 0) return;
+    let dx = 40;
+    let dy = 40;
+    const point = mouse.current;
+    const moved = point && (point.x !== lastPasteAt.current?.x || point.y !== lastPasteAt.current?.y);
+    if (atMouse && point && moved) {
+      const target = screenToFlowPosition(point);
+      dx = target.x - Math.min(...clipboard.nodes.map((node) => node.position.x));
+      dy = target.y - Math.min(...clipboard.nodes.map((node) => node.position.y));
+      lastPasteAt.current = point;
+    }
     const idMap = new Map(clipboard.nodes.map((node) => [node.id, uid()]));
     const copy = {
-      nodes: clipboard.nodes.map((node) => ({ ...node, id: idMap.get(node.id) as string, position: { x: node.position.x + 40, y: node.position.y + 40 } })),
+      nodes: clipboard.nodes.map((node) => ({ ...node, id: idMap.get(node.id) as string, position: { x: node.position.x + dx, y: node.position.y + dy } })),
       edges: clipboard.edges.map((edge) => ({ ...edge, id: uid(), source: idMap.get(edge.source) as string, target: idMap.get(edge.target) as string })),
     };
-    // Paste again = another step down and right.
+    // Paste again without moving the mouse = another step down and right.
     clipboard = copy;
     const flow = toFlow({ ...createWorkflow(), ...copy }, (edge) => edge.sourcePort ?? 'out');
     setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...(flow.nodes as BlockFlowNode[]).map((node) => ({ ...node, selected: true }))]);
     setEdges((current) => [...current, ...flow.edges]);
-  }, []);
+  }, [screenToFlowPosition]);
 
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
@@ -539,7 +646,7 @@ export function Editor() {
     const onKey = (event: KeyboardEvent) => {
       if (view !== 'canvas') return;
       const target = event.target as HTMLElement | null;
-      if (target && (target.closest('input, textarea, select, [contenteditable="true"]') || target.isContentEditable)) return;
+      if (target && (target.closest('input, textarea, select, [contenteditable="true"], .bf-modal') || target.isContentEditable)) return;
       const mod = event.ctrlKey || event.metaKey;
       if (!mod) return;
       const key = event.key.toLowerCase();
@@ -549,7 +656,7 @@ export function Editor() {
         if (!copySelection()) return;
       } else if (key === 'v') paste();
       else if (key === 'd') {
-        if (copySelection()) paste();
+        if (copySelection()) paste(false);
       } else return;
       event.preventDefault();
     };
@@ -566,12 +673,26 @@ export function Editor() {
     if (!active) return;
     const firstUrl = active.nodes.find((node) => node.type === 'open-url')?.config.url;
     const suggested = typeof firstUrl === 'string' && !firstUrl.includes('{{') ? firstUrl : 'https://';
-    const url = window.prompt('Record on which page? BlockFlow opens it in a new tab and records your clicks and typing.', suggested);
-    if (!url || !/^https?:\/\/./.test(url.trim())) return;
-    void browser.runtime.sendMessage({ type: 'bf:start-recording', workflowId: active.id, url: url.trim() });
+    const workflowId = active.id;
+    void promptDialog({
+      title: 'Record',
+      message: 'Record on which page? BlockFlow opens it in a new tab and records your clicks and typing.',
+      defaultValue: suggested,
+      confirmLabel: 'Start recording',
+      validate: (value) => (/^https?:\/\/./.test(value) ? null : 'Enter a full http(s) address, like https://example.com'),
+    }).then((url) => {
+      if (url) void browser.runtime.sendMessage({ type: 'bf:start-recording', workflowId, url });
+    });
   };
 
-  // A stopped recording becomes blocks in its workflow, to the right of what is there.
+  // Read by the effect below without re-running it on every canvas change.
+  const selectedIdRef = useRef<string | undefined>(undefined);
+  selectedIdRef.current = nodes.find((node) => node.selected)?.id;
+
+  // A stopped recording becomes blocks in its workflow. In an empty workflow: the recorded chain
+  // (Open Tab first). Otherwise it continues after the selected block (or the last block of the main
+  // path), to its right, connected to it, without a second Open Tab when the site is already opened
+  // (see recordingIntoWorkflow).
   useEffect(() => {
     if (!recording || recording.status !== 'stopped') return;
     const target = latest.current?.find((workflow) => workflow.id === recording.workflowId);
@@ -583,21 +704,39 @@ export function Editor() {
       open(target);
       return; // runs again once that workflow is on the canvas
     }
-    const right = Math.max(0, ...target.nodes.map((node) => node.position.x + 240));
-    const top = target.nodes.length > 0 ? Math.max(...target.nodes.map((node) => node.position.y)) + 160 : 120;
-    const blocks = recordingToBlocks({ startUrl: recording.startUrl, steps: recording.steps }, { x: target.nodes.length > 0 ? 60 : right + 60, y: top });
+    const blocks = recordingIntoWorkflow(target, { startUrl: recording.startUrl, steps: recording.steps }, selectedIdRef.current);
     const flow = toFlow({ ...target, nodes: blocks.nodes, edges: blocks.edges });
     setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...(flow.nodes as BlockFlowNode[])]);
     setEdges((current) => [...current, ...flow.edges]);
     void browser.storage.local.remove(STORAGE_KEYS.recording);
     if (blocks.secrets.length > 0) {
-      window.alert(`Passwords were not recorded. Create a secret named “${blocks.secrets.join('”, “')}” on the Secrets page; the recorded blocks use it.`);
+      toast(`Passwords were not recorded. Create a secret named “${blocks.secrets.join('”, “')}” on the Secrets page; the recorded blocks use it.`);
     }
   }, [recording, open]);
 
   const selectedNode = nodes.find((node) => node.selected);
   const [secrets] = useStorageValue<Record<string, string>>(STORAGE_KEYS.secrets, {});
   const lastStepOfSelected = selectedNode ? [...(inspectedRun?.steps ?? [])].reverse().find((step) => step.nodeId === selectedNode.id) : undefined;
+
+  /** For the picker: the URL of the nearest Open Tab before the selected block (none when it is templated). */
+  const upstreamUrl = useMemo(() => {
+    const selectedId = nodes.find((node) => node.selected)?.id;
+    if (!selectedId) return undefined;
+    const byId = new Map(nodes.map((node) => [node.id, node]));
+    const seen = new Set<string>([selectedId]);
+    let frontier = [selectedId];
+    while (frontier.length > 0) {
+      const sources = edges.filter((edge) => frontier.includes(edge.target)).map((edge) => edge.source).filter((id) => !seen.has(id));
+      for (const id of sources) {
+        seen.add(id);
+        const node = byId.get(id);
+        const url = node?.data.blockType === 'open-url' ? node.data.config.url : undefined;
+        if (typeof url === 'string' && url.trim() && !url.includes('{{')) return url.trim();
+      }
+      frontier = sources;
+    }
+    return undefined;
+  }, [nodes, edges]);
 
   /** What {{ can offer in the selected block: outputs of blocks before it, keys seen in its last run, secrets. */
   const suggestions = useMemo(() => {
@@ -728,7 +867,7 @@ export function Editor() {
           <WorkflowsPage
             workflows={workflows}
             activeId={activeId}
-            logs={logs}
+            runs={runs}
             errorCounts={errorCounts}
             onSetAll={setAllEnabled}
             {...actions}
@@ -736,7 +875,17 @@ export function Editor() {
         )}
 
         {view === 'canvas' && (
-        <main className="bf-canvas" onDrop={onDrop} onDragOver={onDragOver}>
+        <main
+          className="bf-canvas"
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onMouseMove={(event) => {
+            mouse.current = { x: event.clientX, y: event.clientY };
+          }}
+          onMouseLeave={() => {
+            mouse.current = null;
+          }}
+        >
           <ReactFlow
             key={activeId}
             nodes={nodes}
@@ -756,6 +905,7 @@ export function Editor() {
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable />
           </ReactFlow>
+          <TryItCard onCreate={createFromTemplate} />
           {active.nodes.length === 0 && (
             <p className="bf-empty">Add blocks from the left, then drag from one block’s right dot to another block’s left dot to connect them.</p>
           )}
@@ -772,6 +922,7 @@ export function Editor() {
           workflows={workflows.filter((workflow) => workflow.id !== activeId)}
           lastStep={lastStepOfSelected}
           suggestions={suggestions}
+          upstreamUrl={upstreamUrl}
         />
         )}
 

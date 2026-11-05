@@ -14,12 +14,23 @@ export interface TimerConfig {
 const DELAY_PREFIX = 'delay:';
 
 /**
+ * Delays up to this long wait inside the run (the run stays one run, and Stop works mid-wait); the
+ * background worker is kept awake for live runs. Longer delays use a durable timer that survives a
+ * browser restart, and the flow continues as a new run (trigger "timer").
+ */
+export const MAX_INLINE_DELAY_SECONDS = 600;
+
+/** Slice for in-run waits, so Stop and timeouts take effect within a second. */
+const WAIT_SLICE_MS = 1000;
+
+/**
  * Timer — two jobs depending on where you put it:
  *
  * - Nothing connected to its input: it STARTS the flow. Emits every `seconds` (or once if
  *   "repeat" is off).
  * - Something connected to its input: it DELAYS the flow. When a payload arrives it waits
- *   `seconds`, then passes the same payload on.
+ *   `seconds`, then passes the same payload on (plus `firedAt`). Up to MAX_INLINE_DELAY_SECONDS
+ *   the wait happens inside the run; longer waits continue as a new run.
  */
 export const timerBlock: BlockDefinition<TimerConfig> = {
   type: 'timer',
@@ -28,6 +39,8 @@ export const timerBlock: BlockDefinition<TimerConfig> = {
   icon: '⏱',
   accent: '#f59e0b',
   defaultConfig: { seconds: 60, repeat: true },
+  // As a delay it waits inside the step, so the step needs room for the longest in-run delay.
+  timeoutSeconds: MAX_INLINE_DELAY_SECONDS + 60,
   fields: [
     {
       key: 'seconds',
@@ -35,7 +48,7 @@ export const timerBlock: BlockDefinition<TimerConfig> = {
       kind: 'number',
       min: 1,
       step: 1,
-      help: 'Under 30 seconds the extension keeps its background worker awake to fire on time (Chromium). 30 seconds or more uses browser alarms.',
+      help: 'Under 30 seconds the extension keeps its background worker awake to fire on time (Chromium). 30 seconds or more uses browser alarms. After another block: waits up to 600 s inside the run; longer delays continue as a new run.',
     },
     {
       key: 'repeat',
@@ -71,9 +84,18 @@ export const timerBlock: BlockDefinition<TimerConfig> = {
   },
 
   async run(ctx, input) {
+    if (ctx.config.seconds <= MAX_INLINE_DELAY_SECONDS) {
+      ctx.log('debug', `Waiting ${ctx.config.seconds}s`);
+      for (let left = ctx.config.seconds * 1000; left > 0; left -= WAIT_SLICE_MS) {
+        if (ctx.aborted()) return null;
+        await ctx.host.sleep(Math.min(WAIT_SLICE_MS, left));
+      }
+      if (ctx.aborted()) return null;
+      return { ...input, firedAt: ctx.host.now().toISOString() };
+    }
     const name = `${DELAY_PREFIX}${uid()}`;
     await ctx.timers.set(name, { delayMs: ctx.config.seconds * 1000 }, input);
-    ctx.log('debug', `Waiting ${ctx.config.seconds}s before continuing`);
+    ctx.log('info', `Waiting ${ctx.config.seconds}s; the flow continues as a new run`);
     // The flow continues from onTimer, not from here.
     return null;
   },

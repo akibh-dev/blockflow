@@ -9,10 +9,6 @@ To use a file: **Import** in the sidebar (or **+ New ▾** → template), then f
 your site. Replace `example.com` addresses and create the secrets the recipe names (header → **Secrets**).
 How the file format works: [Workflows as Scripts](Workflows-as-Scripts.md).
 
-> **Import caveat (November 2026):** importing currently drops each edge's `sourcePort` and each block's
-> `step` settings (see [Workflows as Scripts](Workflows-as-Scripts.md#import-and-export)). Recipes marked
-> **⚠ check branches** use an `error` or `done` output: after importing, reconnect that edge to the right
-> output on the canvas and set **On error → error output** again.
 
 ## Login test
 
@@ -25,7 +21,7 @@ Open Tab ─▶ Fill Form (email, {{secret.loginPassword}}, submit) ─▶ Wait 
 
 - Blocks: `open-url`, `fill-form`, `wait-for` (`mode: "url"`, `step.onError: "port"`), `assert`, `notify`.
 - Secret: `loginPassword`.
-- File: [login-test.blockflow.json](../guide/examples/login-test.blockflow.json). **⚠ check branches.**
+- File: [login-test.blockflow.json](../guide/examples/login-test.blockflow.json).
 - Use `"where": "window"` on Open Tab for tests: background tabs are throttled and cannot be screenshotted.
 
 ## Data-driven test
@@ -148,8 +144,7 @@ Open Tab ─▶ Save to Dataset (replace with []) ─▶ Paginate ─each─▶ 
   `download` (`from: "dataset"`, `format: "csv"`).
 - Links come back as absolute URLs. Paginate stops when the Next button is missing or disabled, or at `maxPages`.
 - The dataset is also visible on the **Data** page (download as CSV or JSON there too).
-- File: [scrape-to-csv.blockflow.json](../guide/examples/scrape-to-csv.blockflow.json). **⚠ check branches**
-  (the `done` edge).
+- File: [scrape-to-csv.blockflow.json](../guide/examples/scrape-to-csv.blockflow.json).
 - Infinite scroll instead of pages: put **Scroll** (`to: "end"`) before one Extract List.
 
 ## Scrape a table to CSV
@@ -206,8 +201,7 @@ Timer (60 s) ─▶ HTTP Request (failOnError: false) ─▶ Assert ({{status}} 
 
 - Blocks: `timer`, `http-request` (`failOnError: false` so a 500 reaches the Assert), `assert`
   (`subject: "value"`, `step.onError: "port"`), `notify`.
-- File: [api-uptime.blockflow.json](../guide/examples/api-uptime.blockflow.json). **⚠ check branches**
-  (the `error` edge).
+- File: [api-uptime.blockflow.json](../guide/examples/api-uptime.blockflow.json).
 
 ## Reusable sub-workflow
 

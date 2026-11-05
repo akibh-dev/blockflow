@@ -24,11 +24,11 @@ No code uses `storage.sync`, `localStorage` or cookies for extension state (the 
 | `bf:runs` | `RunRecord[]`, newest last, max `MAX_RUNS` = 40 | Background (`saveRun` coalesced, `updateRuns`; `markInterrupted` at worker start) | Editor `useRuns()` (run list, inspector, Reports) | Trimmed on write; editor Clear → `clearRuns()` keeps only `running` runs. Big payloads and secrets are masked by the engine before they get here. |
 | `bf:secrets` | `Record<string, string>` | Editor Secrets page (`useStorageValue`) | `Host.secrets.all()` (`{{secret.x}}`), editor (masking, suggestions) | Permanent, plain text in the profile (not encrypted). |
 | `bf:prompts` | `PendingPrompt[]` `{runId, workflowName, message, askedAt}` | Background `askUser` (add; remove when answered/timed out) | Editor `usePrompts()` → `PromptBanner` | Short-lived; `clearStalePrompts()` drops orphans at worker start. |
-| `bf:recording` | `RecordingState` `{workflowId, tabId, startUrl, lastUrl, steps, status}` | Background (`startRecording`, `recordStep`, `onRecordedTabUpdated`, `stopRecording`) | Editor (`useStorageValue`: live bar, converts on `status: 'stopped'`) | One at a time. Removed by the editor after converting (or if the workflow is gone). |
-| `bf:pending-pick` | `{editorTabId?: number, mode?: 'element' \| 'form'}` | Background `startPicking` | Background `finishPicking` / `cancelPicking` (read and delete) | Seconds to minutes; a pick abandoned without Esc leaves it until the next pick overwrites it. |
-| `bf:watch-tabs` | `Record<url, tabId>` | Background `pageReader.ensureWatchTab` | same | Never pruned: closed tabs stay listed (checked with `tabExists` and replaced when used). Kept in `local`, so it survives a browser restart, after which a stored id may name an unrelated tab. |
+| `bf:recording` | `RecordingState` `{workflowId, tabId, startUrl, lastUrl, steps, status, popups?}` | Background (`startRecording`, `recordStep`, `onRecordedPopup`, `onRecordedTabUpdated`, `stopRecording`) | Editor (`useStorageValue`: live bar, converts on `status: 'stopped'`) | One at a time. Removed by the editor after converting (or if the workflow is gone). |
+| `bf:pending-pick` | `{editorTabId?: number, mode?: 'watch' \| 'action' \| 'form', tabId?: number}` | Background `startPicking` | Background `finishPicking` / `cancelPicking` (read and delete) | Seconds to minutes; a pick abandoned without Esc leaves it until the next pick overwrites it. |
 | `bf:timer:<timerKey>` | `StoredTimer` `{data?, periodic, delayMs, periodMs?, dueAt, short}`; `timerKey` = `bf::<workflowId>::<nodeId>::<name>` | `HybridScheduler.set` | `HybridScheduler` (`take`, `handleAlarm`, `restoreAll`) | Removed by `clear`/`clearPrefix` (workflow start/stop), and by `take` for one-shots. See [Scheduling and Timers](Scheduling-and-Timers.md). |
-| `bf:state:<workflowId>::<nodeId>::<key>` | any JSON (`ctx.state`) | Blocks via `Host.state.set` (`StorageState`) | Blocks via `ctx.state.get` | **Never deleted**, even when the block or workflow is. E.g. Timer `count`, Watch Element's last value. |
+| `bf:state:<workflowId>::<nodeId>::<key>` | any JSON (`ctx.state`) | Blocks via `Host.state.set` (`StorageState`) | Blocks via `ctx.state.get` | Removed when the workflow is deleted (background, `diffWorkflows(...).removed` → `clearWorkflowState`); kept when only a block is removed. E.g. Timer `count`, Watch Element's last value. |
+| `bf:onboarding` | `OnboardingState` `{tryItDismissed?: boolean}` | Editor `TryItCard` (when closed) | Editor `TryItCard` (once on load) | Permanent. Absent = show the first-run "Try it" card. |
 
 The prefixes `timerPrefix` and `statePrefix` are the only keys built dynamically. `HybridScheduler`'s
 `keys()` scans all of `storage.local` (`get(null)`) to find `bf:timer:*`.
@@ -41,6 +41,8 @@ access level). Keys are local constants, not in `STORAGE_KEYS`.
 | Key | Shape | Writer | Reader | Why session |
 | --- | --- | --- | --- | --- |
 | `bf:own-tabs` | `number[]` tab ids, last 200 | `addOwnTab` (Open Tab, watch tabs, recording tab) | `isOwnTab` (Page Visited ignores these) | Tab ids mean nothing after a restart. |
+| `bf:watch-tabs` | `Record<url, tabId>` | Background `pageReader.ensureWatchTab` | same | Session only, so a restart can't leave it pointing at a reused tab id (older versions kept it in `local`; `forgetLegacyWatchTabs` removes that at worker start). Closed tabs are replaced when used. |
+| `bf:picker-tabs` | `Record<editorTabId, tabId>` | `picking.ts` when it opens a picker tab | `picking.ts` `findTargetTab` (reused while the tab exists) | Session: one picker tab per editor tab. |
 | `bf:popups` | `{tabId, openerTabId, at}[]`, last 50, younger than 2 min | `recordPopup` (from `webNavigation.onCreatedNavigationTarget`) | `waitForPopup` (claims and removes) | Must survive the worker sleeping between the popup opening and the block waiting. |
 
 ## IndexedDB `blockflow` (version 2)

@@ -14,7 +14,7 @@ import { readElement } from './pageReader';
 import { requireTabId, sleep } from './tabs';
 import type { Host, HttpRequestOptions, HttpResult, NavigateOptions, NotifyOptions, OpenTabOptions, TabInfo, Scheduler, StateStore } from '../core/types';
 
-/** `Host.state`: block state in `storage.local` under `bf:state:<key>`. Never cleaned up. */
+/** `Host.state`: block state in `storage.local` under `bf:state:<key>`. Removed when its workflow is deleted (background). */
 class StorageState implements StateStore {
   async get(key: string): Promise<unknown> {
     const storageKey = STORAGE_KEYS.statePrefix + key;
@@ -61,13 +61,29 @@ async function openTab({ url, newTab, active, reuseTabId, newWindow, waitUntil =
   return { tabId };
 }
 
+/**
+ * Back/forward. Chromium's `tabs.goBack/goForward` skip history entries added without a user gesture
+ * (its back-button intervention), so after Open Tab → Navigate goto they fail with "Cannot find a
+ * next page in history". `history.back()/forward()` run in the page are not affected: use them then.
+ */
+async function goHistory(tabId: number, action: 'back' | 'forward'): Promise<void> {
+  try {
+    await (action === 'back' ? browser.tabs.goBack(tabId) : browser.tabs.goForward(tabId));
+  } catch {
+    await browser.scripting.executeScript({
+      target: { tabId },
+      func: (back: boolean) => (back ? history.back() : history.forward()),
+      args: [action === 'back'],
+    });
+  }
+}
+
 /** `Host.tabs.navigate`: goto / back / forward / reload, then waits per `waitUntil`; returns the final URL. */
 async function navigate(tabId: number, { action, url, waitUntil, timeoutMs }: NavigateOptions): Promise<{ url: string }> {
   if (action === 'goto') {
     if (!url) throw new Error('Navigate needs a URL');
     await browser.tabs.update(tabId, { url });
-  } else if (action === 'back') await browser.tabs.goBack(tabId);
-  else if (action === 'forward') await browser.tabs.goForward(tabId);
+  } else if (action === 'back' || action === 'forward') await goHistory(tabId, action);
   else await browser.tabs.reload(tabId);
   await sleep(100);
   await waitForLoad(tabId, waitUntil, timeoutMs);

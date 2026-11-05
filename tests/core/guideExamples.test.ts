@@ -15,6 +15,14 @@ describe('docs/guide/examples', () => {
       const result = parseImport(readFileSync(path.join(dir, file), 'utf8'), []);
       expect(result.ok, result.ok ? '' : result.error).toBe(true);
       if (!result.ok) return;
+      // Ports and step settings survive the import (If false, error outputs, retries…).
+      const raw = JSON.parse(readFileSync(path.join(dir, file), 'utf8'));
+      const rawList: { nodes: { step?: unknown }[]; edges: { sourcePort?: string }[] }[] = raw.workflows ?? [raw];
+      rawList.forEach((original, index) => {
+        const copy = result.workflows[index]!;
+        expect(copy.edges.map((edge) => edge.sourcePort)).toEqual(original.edges.map((edge) => edge.sourcePort));
+        expect(copy.nodes.map((node) => node.step)).toEqual(original.nodes.map((node) => node.step));
+      });
       for (const workflow of result.workflows) {
         const errors = validateWorkflow(workflow, registry).filter((issue) => issue.level === 'error');
         expect(errors, `${workflow.name}: ${errors.map((issue) => issue.message).join('; ')}`).toEqual([]);

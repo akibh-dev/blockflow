@@ -101,7 +101,7 @@ describe('resolveLocator', () => {
   it('explains invalid locators', () => {
     expect(() => resolveLocator('css=##')).toThrow('Invalid CSS selector');
     expect(() => resolveLocator('text=/(/')).toThrow('Invalid regular expression');
-    expect(() => resolveLocator('role=button[bogus]')).toThrow('Unknown role option');
+    expect(() => resolveLocator('role=button[bogus]')).toThrow('Unknown role option [bogus]. Use name, exact, checked, level, include-hidden.');
   });
 });
 
@@ -114,6 +114,14 @@ describe('aria', () => {
     expect([getRole(el('b')), accessibleName(el('b'))]).toEqual(['img', 'Logo']);
     expect(getRole(el('c'))).toBe('combobox');
     expect([getRole(el('d')), accessibleName(el('d'))]).toEqual(['switch', 'Dark mode']);
+  });
+
+  it('a <section> is a region only with a name, and an unlabelled one does not recurse forever', () => {
+    page('<section id="s"><button>Save</button></section><section id="r" aria-label="Billing"><p>x</p></section>');
+    expect(getRole(document.getElementById('s') as Element)).toBeNull();
+    expect(getRole(document.getElementById('r') as Element)).toBe('region');
+    expect(resolveLocator('role=button[name="Save"]')).toHaveLength(1);
+    expect(resolveLocator('role=region[name="Billing"]')).toHaveLength(1);
   });
 });
 

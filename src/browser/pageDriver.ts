@@ -43,12 +43,20 @@ async function callAgent(tabId: number, call: AgentCall, frameId?: number): Prom
   return callOnce(tabId, call, frameId);
 }
 
-/** The frame of a tab showing `src` (cross-origin iframes are reached through their frame id). */
-async function frameShowing(tabId: number, src: string): Promise<number | undefined> {
-  const frames = (await browser.webNavigation.getAllFrames({ tabId })) ?? [];
-  const exact = frames.find((frame) => frame.url === src);
-  const loose = frames.find((frame) => frame.frameId !== 0 && (frame.url.startsWith(src) || src.startsWith(frame.url)));
-  return (exact ?? loose)?.frameId;
+/**
+ * The frame of a tab showing `src` (cross-origin iframes are reached through their frame id),
+ * preferring children of `parentFrameId`.
+ */
+async function frameShowing(tabId: number, src: string, parentFrameId: number): Promise<number | undefined> {
+  const all = (await browser.webNavigation.getAllFrames({ tabId })) ?? [];
+  const children = all.filter((frame) => frame.parentFrameId === parentFrameId);
+  for (const frames of [children, all]) {
+    const exact = frames.find((frame) => frame.frameId !== 0 && frame.url === src);
+    const loose = frames.find((frame) => frame.frameId !== 0 && (frame.url.startsWith(src) || src.startsWith(frame.url)));
+    const found = (exact ?? loose)?.frameId;
+    if (found !== undefined) return found;
+  }
+  return undefined;
 }
 
 /** Errors that mean the browser will never let us script this page (no point retrying). */
@@ -119,6 +127,8 @@ export async function actInTab(tabId: number, original: AgentRequest, timeoutMs:
   // Changes when the locator crosses into a cross-origin iframe.
   let request = original;
   let frameId: number | undefined;
+  // For `locate`: where the frame we moved into starts in the tab's viewport (frames add up).
+  const offset = { x: 0, y: 0 };
   for (;;) {
     const budgetMs = Math.max(0, Math.min(SLICE_MS, deadline - Date.now() - 150));
     let outcome: Outcome | undefined;
@@ -131,16 +141,24 @@ export async function actInTab(tabId: number, original: AgentRequest, timeoutMs:
       reason = `the page was busy loading (${message})`;
     }
     if (outcome?.status === 'frame') {
-      const inner = await frameShowing(tabId, outcome.src);
+      const inner = await frameShowing(tabId, outcome.src, frameId ?? 0);
       if (inner === undefined) {
         reason = `waiting for the frame ${outcome.src} to load`;
       } else {
         frameId = inner;
         request = { ...request, locator: outcome.rest } as AgentRequest;
+        offset.x += outcome.offset?.x ?? 0;
+        offset.y += outcome.offset?.y ?? 0;
         continue;
       }
     }
-    if (outcome?.status === 'done') return outcome.result;
+    if (outcome?.status === 'done') {
+      // The agent in a frame answers in that frame's coordinates; real input needs the tab's.
+      if (request.op === 'locate' && typeof outcome.result.x === 'number' && typeof outcome.result.y === 'number') {
+        return { ...outcome.result, x: outcome.result.x + offset.x, y: outcome.result.y + offset.y };
+      }
+      return outcome.result;
+    }
     if (outcome?.status === 'error') throw new Error(outcome.message);
     if (outcome?.status === 'pending') reason = outcome.reason;
     if (outcome?.status === 'vanished') {

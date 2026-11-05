@@ -1,5 +1,5 @@
 import { uid } from './id';
-import type { EdgeDef, NodeDef, Workflow } from './types';
+import type { EdgeDef, NodeDef, StepSettings, Workflow } from './types';
 
 /**
  * Managing a collection of workflows: copy, export, import. Pure functions, no browser APIs.
@@ -24,17 +24,22 @@ export function cloneWorkflow(source: Workflow, name: string): Workflow {
   const nodes: NodeDef[] = source.nodes.map((node) => {
     const id = uid();
     idMap.set(node.id, id);
-    return {
+    const copy: NodeDef = {
       id,
       type: node.type,
       position: { ...node.position },
       config: JSON.parse(JSON.stringify(node.config)) as Record<string, unknown>,
     };
+    if (node.step) copy.step = JSON.parse(JSON.stringify(node.step)) as StepSettings;
+    return copy;
   });
   const edges: EdgeDef[] = source.edges.flatMap((edge) => {
     const from = idMap.get(edge.source);
     const to = idMap.get(edge.target);
-    return from && to ? [{ id: uid(), source: from, target: to }] : [];
+    if (!from || !to) return [];
+    const copy: EdgeDef = { id: uid(), source: from, target: to };
+    if (edge.sourcePort) copy.sourcePort = edge.sourcePort;
+    return [copy];
   });
   return { schemaVersion: 1, id: uid(), name, enabled: false, nodes, edges };
 }
@@ -68,7 +73,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function readNode(raw: unknown): NodeDef | null {
   if (!isObject(raw) || typeof raw.id !== 'string' || typeof raw.type !== 'string') return null;
   const position = isObject(raw.position) ? raw.position : {};
-  return {
+  const node: NodeDef = {
     id: raw.id,
     type: raw.type,
     position: {
@@ -77,6 +82,8 @@ function readNode(raw: unknown): NodeDef | null {
     },
     config: isObject(raw.config) ? raw.config : {},
   };
+  if (isObject(raw.step)) node.step = raw.step as StepSettings;
+  return node;
 }
 
 /**
@@ -103,11 +110,24 @@ export function parseImport(text: string, existing: Workflow[]): ImportResult {
     if (nodes.some((node) => node === null)) {
       return { ok: false, error: 'A block in this file is malformed.' };
     }
-    const edges: EdgeDef[] = raw.edges.flatMap((edge: unknown) =>
-      isObject(edge) && typeof edge.source === 'string' && typeof edge.target === 'string'
-        ? [{ id: uid(), source: edge.source, target: edge.target }]
-        : [],
-    );
+    const label = typeof raw.name === 'string' ? `"${raw.name}"` : 'a workflow';
+    const ids = new Set<string>();
+    for (const node of nodes as NodeDef[]) {
+      if (ids.has(node.id)) return { ok: false, error: `Two blocks in ${label} have the id "${node.id}".` };
+      ids.add(node.id);
+    }
+    const edges: EdgeDef[] = [];
+    for (const edge of raw.edges as unknown[]) {
+      if (!isObject(edge) || typeof edge.source !== 'string' || typeof edge.target !== 'string') {
+        return { ok: false, error: `A connection in ${label} is malformed (it needs "source" and "target").` };
+      }
+      for (const end of [edge.source, edge.target]) {
+        if (!ids.has(end)) return { ok: false, error: `A connection in ${label} points at "${end}", which is not a block id.` };
+      }
+      const copy: EdgeDef = { id: uid(), source: edge.source, target: edge.target };
+      if (typeof edge.sourcePort === 'string' && edge.sourcePort) copy.sourcePort = edge.sourcePort;
+      edges.push(copy);
+    }
     const name = uniqueName(typeof raw.name === 'string' ? raw.name : 'Imported workflow', taken);
     taken.push(name);
     const copy = cloneWorkflowFromParts(name, nodes as NodeDef[], edges);

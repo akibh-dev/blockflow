@@ -30,6 +30,8 @@ export class FrameBoundaryError extends LocatorError {
   constructor(
     readonly src: string,
     readonly rest: string,
+    /** The `<iframe>` element, so the agent can say where the frame is on screen (real input). */
+    readonly frame?: Element,
   ) {
     super(`The element is inside a frame from another site (${src})`);
   }
@@ -159,7 +161,7 @@ function parseRole(body: string): RoleQuery {
     else if (key === 'checked') query.checked = value === undefined || unquote(value).value !== 'false';
     else if (key === 'level') query.level = Number(unquote(value ?? '').value);
     else if (key === 'include-hidden') query.includeHidden = true;
-    else throw new LocatorError(`Unknown role option [${key}]. Use name, exact, checked, level.`);
+    else throw new LocatorError(`Unknown role option [${key}]. Use name, exact, checked, level, include-hidden.`);
   }
   if (rest.trim()) throw new LocatorError(`Invalid role locator: role=${body}`);
   if (nameBody !== undefined) {
@@ -274,11 +276,19 @@ function inDocumentOrder(elements: Element[]): Element[] {
   });
 }
 
-/** Every element the locator matches, in document order. Throws LocatorError for invalid locators. */
+/**
+ * Every element the locator matches, in document order. Throws LocatorError for invalid locators.
+ *
+ * `frame=<css>` searches inside every matching same-origin frame. Matching frames from another origin
+ * are skipped; only when the whole locator finds nothing does it throw {@link FrameBoundaryError} for
+ * the first skipped frame, so the extension can continue inside that frame.
+ */
 export function resolveLocator(source: string, root: ParentNode = document): Element[] {
   const steps = parseLocator(source);
   let current: Element[] | null = null;
   let scopes: ParentNode[] = [root];
+  /** The first cross-origin frame skipped, with the steps that would have searched it. */
+  let skipped: FrameBoundaryError | null = null;
   for (const [index, step] of steps.entries()) {
     if (step.engine === 'nth') {
       const position = Number(step.body);
@@ -301,9 +311,9 @@ export function resolveLocator(source: string, root: ParentNode = document): Ele
           inner = null;
         }
         if (inner) documents.push(inner);
-        else {
+        else if (!skipped) {
           const rest = steps.slice(index + 1).map((next) => `${next.engine}=${next.body}`).join(' >> ');
-          throw new FrameBoundaryError((frame as HTMLIFrameElement).src, rest);
+          skipped = new FrameBoundaryError((frame as HTMLIFrameElement).src, rest, frame);
         }
       }
       current = frames;
@@ -321,7 +331,9 @@ export function resolveLocator(source: string, root: ParentNode = document): Ele
     current = inDocumentOrder(found);
     scopes = current;
   }
-  return current ?? [];
+  const result = current ?? [];
+  if (result.length === 0 && skipped) throw skipped;
+  return result;
 }
 
 /** Short description of an element for messages: button#save.primary "Save changes". */

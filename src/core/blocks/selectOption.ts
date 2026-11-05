@@ -16,6 +16,7 @@ export const selectOptionBlock: BlockDefinition<SelectOptionConfig> = {
   icon: '🔽',
   accent: PAGE_ACCENT,
   defaultConfig: { tab: 'main', locator: '', value: '' },
+  realInput: true,
   timeoutSeconds: PAGE_TIMEOUT_SECONDS,
   fields: [
     locatorField('locator', 'Dropdown'),

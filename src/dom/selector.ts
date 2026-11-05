@@ -1,3 +1,5 @@
+import { resolveLocator } from './locator';
+
 /**
  * CSS selector generation for the element picker (the same idea as uBlock Origin's picker):
  * you click something on the page and we work out a short, readable selector for it.
@@ -104,8 +106,9 @@ function baseSegment(element: Element): { text: string; isId: boolean } {
 function segmentFor(element: Element): string {
   const { text, isId } = baseSegment(element);
   if (isId) return text;
-  const parent = element.parentElement;
-  if (!parent) return text;
+  // The parent element, or the shadow root for the top elements of a shadow tree.
+  const parent = element.parentNode as ParentNode | null;
+  if (!parent || parent.nodeType === 9) return text;
 
   const matching = Array.from(parent.children).filter((sibling) => sibling.matches(text));
   if (matching.length <= 1) return text;
@@ -114,38 +117,58 @@ function segmentFor(element: Element): string {
   return `${text}:nth-of-type(${sameTag.indexOf(element) + 1})`;
 }
 
-/** How many elements a plain CSS selector matches in `doc` (0 when the selector is invalid). */
+/**
+ * How many elements a CSS selector matches in `doc` (0 when the selector is invalid). `a >>> b`
+ * (from {@link generateSelector} for elements in shadow roots) is resolved like the page agent does.
+ */
 export function countMatches(doc: Document, selector: string): number {
   try {
-    return doc.querySelectorAll(selector).length;
+    return selector.includes('>>>') ? resolveLocator(selector, doc).length : doc.querySelectorAll(selector).length;
   } catch {
     return 0;
   }
 }
 
-function matchesOnly(doc: Document, selector: string, element: Element): boolean {
+function matchesOnly(root: ParentNode, selector: string, element: Element): boolean {
   try {
-    const found = doc.querySelectorAll(selector);
+    const found = root.querySelectorAll(selector);
     return found.length === 1 && found[0] === element;
   } catch {
     return false;
   }
 }
 
-/** Short selector that matches exactly `element` (when it is attached to the document). */
+/** The shadow root `node` is in, if any (open roots only are ever seen from outside). */
+export function shadowRootOf(node: Node): ShadowRoot | null {
+  const root = node.getRootNode();
+  return root.nodeType === 11 && 'host' in root ? (root as ShadowRoot) : null;
+}
+
+/** The parent element, or the shadow host for the top elements of a shadow tree. */
+export function composedParent(element: Element): Element | null {
+  return element.parentElement ?? shadowRootOf(element)?.host ?? null;
+}
+
+/**
+ * Short selector that matches exactly `element` (when it is attached to the document). Inside open
+ * shadow roots it is `<host selector> >>> <selector inside the root>`, the page agent's syntax.
+ */
 export function generateSelector(element: Element): string {
   const doc = element.ownerDocument;
   if (element === doc.documentElement) return 'html';
+  const shadow = shadowRootOf(element);
+  const root: ParentNode = shadow ?? doc;
 
   const parts: string[] = [];
   let current: Element | null = element;
   while (current && current !== doc.documentElement) {
     parts.unshift(segmentFor(current));
     const selector = parts.join(' > ');
-    if (matchesOnly(doc, selector, element)) return selector;
+    if (matchesOnly(root, selector, element)) return shadow ? `${generateSelector(shadow.host)} >>> ${selector}` : selector;
     current = current.parentElement;
   }
-  return parts.join(' > ');
+  const selector = parts.join(' > ');
+  return shadow ? `${generateSelector(shadow.host)} >>> ${selector}` : selector;
 }
 
 /** Visible text of the element, shortened, for showing what was picked. */
@@ -170,9 +193,9 @@ export class ElementNavigator {
     return this.chain[this.index] as Element;
   }
 
-  /** False at the child of `<body>`: body and html are never offered. */
+  /** False at the child of `<body>`: body and html are never offered. Steps out of shadow roots to their host. */
   canBroaden(): boolean {
-    const parent = this.current.parentElement;
+    const parent = composedParent(this.current);
     const doc = this.current.ownerDocument;
     return !!parent && parent !== doc.body && parent !== doc.documentElement;
   }
@@ -184,7 +207,7 @@ export class ElementNavigator {
   broaden(): Element {
     if (this.canBroaden()) {
       if (this.index === this.chain.length - 1) {
-        this.chain.push(this.current.parentElement as Element);
+        this.chain.push(composedParent(this.current) as Element);
       }
       this.index += 1;
     }

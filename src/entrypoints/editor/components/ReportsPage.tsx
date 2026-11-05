@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { loadScreenshot } from '../../../browser/blobStore';
 import { durationOf, summarize, toHtmlReport, toJUnitXml } from '../../../core/report';
+import { TRIGGER_LABELS } from '../../../core/runs';
 import type { RunRecord } from '../../../core/runs';
 import { downloadText } from '../files';
 import { registry } from '../registry';
@@ -26,7 +27,7 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
     () =>
       [...runs]
         .reverse()
-        .filter((run) => (!workflow || run.workflowId === workflow) && (!status || run.status === status || (status === 'failed' && run.status === 'interrupted'))),
+        .filter((run) => (!workflow || run.workflowId === workflow) && (!status || run.status === status)),
     [runs, workflow, status],
   );
   const sum = summarize(shown);
@@ -65,6 +66,8 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
           <option value="passed">Passed</option>
           <option value="failed">Failed</option>
           <option value="cancelled">Cancelled</option>
+          <option value="interrupted">Interrupted</option>
+          <option value="running">Running</option>
         </select>
         <span className="bf-spacer" />
         <button type="button" onClick={() => void exportAs('html')}>
@@ -92,7 +95,7 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
                 <span className={`bf-run-status ${run.status}`}>{run.status}</span>
                 <strong>{run.workflowName}</strong>
                 <span className="bf-muted">
-                  {new Date(run.startedAt).toLocaleString()} · {run.trigger} · {formatMs(durationOf(run))}
+                  {new Date(run.startedAt).toLocaleString()} · {TRIGGER_LABELS[run.trigger] ?? run.trigger} · {formatMs(durationOf(run))}
                 </span>
                 {run.error && <span className="bf-error">{run.error}</span>}
               </button>
@@ -106,7 +109,7 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
               {open.workflowName} <span className={`bf-run-status ${open.status}`}>{open.status}</span>
             </h3>
             <p className="bf-muted">
-              {new Date(open.startedAt).toLocaleString()} · {open.trigger}
+              {new Date(open.startedAt).toLocaleString()} · {TRIGGER_LABELS[open.trigger] ?? open.trigger}
               {open.parentRunId && ' · called by another workflow'} ·{' '}
               <button type="button" className="bf-link" onClick={() => onShowOnCanvas(open)}>
                 show on canvas

@@ -1,6 +1,6 @@
 # BlockFlow product plan: Playwright-compatible automation in your browser
 
-> **Status:** agreed, 2026-11-05 (decisions in §8). This plan replaces the
+> **Status:** agreed, 2026-11-05 (decisions in §8). Task-level steps: [IMPLEMENTATION.md](IMPLEMENTATION.md). This plan replaces the
 > phase list in [PLAN-automation.md](PLAN-automation.md) (phases A–F, all built) as the guide for what comes next.
 
 ## 1. Goal
@@ -148,6 +148,12 @@ it is officially supported in Chrome and Firefox and needs no open port.
 
 These come from the documentation pass. **P0** loses data or gives wrong results, **P1** is incorrect behaviour
 people will hit, **P2** is a rough edge.
+
+> **Status: all fixed in M0 (v0.2.0, 2026-11-05).** Testing in M0 found and fixed three more: Navigate
+> back/forward failed in Chromium after a goto (`tabs.goBack` skips entries without a user gesture), any
+> role/name lookup crashed on a page with an unlabelled `<section>` (`aria.ts` recursion), and the editor
+> mistook its own saves for another tab's (storage does not keep key order). Details per task in
+> [IMPLEMENTATION.md](IMPLEMENTATION.md#m0-stabilise-and-test-v02).
 
 | P | Where | Problem |
 | --- | --- | --- |

@@ -16,6 +16,7 @@ export const checkBlock: BlockDefinition<CheckConfig> = {
   icon: '☑️',
   accent: PAGE_ACCENT,
   defaultConfig: { tab: 'main', locator: '', state: 'check' },
+  realInput: true,
   timeoutSeconds: PAGE_TIMEOUT_SECONDS,
   fields: [
     locatorField('locator', 'Checkbox'),

@@ -285,6 +285,52 @@ describe('frames', () => {
       rest: 'label=Card number',
     });
   });
+
+  it('tries every matching frame: a same-origin match wins over a cross-origin frame', async () => {
+    page('<iframe class="f" id="other" src="https://pay.example.com/card"></iframe><iframe class="f" id="same"></iframe>');
+    Object.defineProperty($('#other'), 'contentDocument', { get: () => null });
+    const same = $<HTMLIFrameElement>('#same');
+    same.contentDocument?.open();
+    same.contentDocument?.write('<p id="here">Inside</p>');
+    same.contentDocument?.close();
+    expect(await run({ op: 'read', locator: 'frame=.f >> #here', kind: 'text' })).toMatchObject({ status: 'done', result: { text: 'Inside' } });
+    // Nothing in the same-origin frame: hand over to the other one.
+    expect(await run({ op: 'read', locator: 'frame=.f >> #elsewhere', kind: 'text' })).toEqual({ status: 'frame', src: 'https://pay.example.com/card', rest: 'css=#elsewhere' });
+  });
+
+  it('locate adds the offsets of same-origin frames, and says where a cross-origin frame starts', async () => {
+    const box = (left: number, top: number, width = 0, height = 0) => () => ({ left, top, width, height, x: left, y: top, right: left + width, bottom: top + height, toJSON: () => ({}) }) as DOMRect;
+    page('<iframe id="same" style="padding: 4px 0 0 6px"></iframe><iframe id="other" src="https://pay.example.com/card"></iframe>');
+    const same = $<HTMLIFrameElement>('#same');
+    same.contentDocument?.open();
+    same.contentDocument?.write('<button id="pay">Pay</button>');
+    same.contentDocument?.close();
+    same.getBoundingClientRect = box(100, 50);
+    (same.contentDocument?.getElementById('pay') as Element).getBoundingClientRect = box(10, 20, 20, 10);
+    expect(await run({ op: 'locate', locator: 'frame=#same >> #pay', purpose: 'click' })).toMatchObject({ status: 'done', result: { x: 100 + 6 + 20, y: 50 + 4 + 25 } });
+
+    const other = $<HTMLIFrameElement>('#other');
+    Object.defineProperty(other, 'contentDocument', { get: () => null });
+    other.getBoundingClientRect = box(300, 40);
+    expect(await run({ op: 'locate', locator: 'frame=#other >> #pay', purpose: 'click' })).toEqual({ status: 'frame', src: 'https://pay.example.com/card', rest: 'css=#pay', offset: { x: 300, y: 40 } });
+  });
+});
+
+describe('read kinds', () => {
+  it('reads text, attributes, classes, existence and counts', async () => {
+    page('<button aria-pressed="true" class="on">x</button><a class="p"></a><a class="p"></a>');
+    expect(await run({ op: 'read', locator: 'button', kind: 'attribute', name: 'aria-pressed' })).toMatchObject({ result: { text: 'true' } });
+    expect(await run({ op: 'read', locator: 'button', kind: 'attribute', name: 'nope' })).toMatchObject({ result: { text: '' } });
+    expect(await run({ op: 'read', locator: 'button', kind: 'has-class', name: 'on' })).toMatchObject({ result: { text: 'true' } });
+    expect(await run({ op: 'read', locator: 'button', kind: 'has-class', name: 'off' })).toMatchObject({ result: { text: 'false' } });
+    expect(await run({ op: 'read', locator: '.p', kind: 'count' })).toMatchObject({ result: { text: '2' } });
+    expect(await run({ op: 'read', locator: '.none', kind: 'exists' })).toMatchObject({ result: { text: 'false' } });
+    expect(await run({ op: 'read', locator: '.p', kind: 'exists' })).toMatchObject({ result: { text: 'true' } });
+  });
+
+  it('reports an invalid selector as an error instead of waiting', async () => {
+    expect(await run({ op: 'read', locator: '!!!', kind: 'text' })).toMatchObject({ status: 'error', message: expect.stringContaining('Invalid CSS') });
+  });
 });
 
 describe('upload and locate', () => {
@@ -296,6 +342,9 @@ describe('upload and locate', () => {
       message: 'This page cannot receive files (no DataTransfer)',
     });
     expect(await run({ op: 'upload', locator: '#b', files: [] })).toMatchObject({ status: 'error', message: expect.stringContaining('is not a file input') });
+    // Fill Form on a file input points at the Upload File block.
+    page('<input id="v" type="file">');
+    expect(await run({ op: 'set-field', locator: '#v', value: 'cv.txt' })).toMatchObject({ status: 'error', message: expect.stringContaining('use the Upload File block') });
   });
 
   it('locate says what kind of field it found (geometry needs a real browser)', async () => {

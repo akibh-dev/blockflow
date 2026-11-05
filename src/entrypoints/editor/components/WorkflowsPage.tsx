@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import type { LogEntry, Workflow } from '../../../core/types';
+import type { RunRecord } from '../../../core/runs';
+import type { Workflow } from '../../../core/types';
 import { registry } from '../registry';
 import { ImportButton } from './ImportButton';
 import { NewMenu } from './NewMenu';
@@ -8,7 +9,8 @@ import type { WorkflowActions } from './WorkflowActions';
 interface WorkflowsPageProps extends WorkflowActions {
   workflows: Workflow[];
   activeId: string | null;
-  logs: LogEntry[];
+  /** Run history (`bf:runs`): the source of "Last activity". */
+  runs: RunRecord[];
   /** Problems per workflow id that stop it from being switched on. */
   errorCounts: Map<string, number>;
   onSetAll(enabled: boolean): void;
@@ -20,15 +22,19 @@ function blockSummary(workflow: Workflow): string {
 }
 
 /** Table of every workflow with the actions you would expect from a file manager. */
-export function WorkflowsPage({ workflows, activeId, logs, errorCounts, onSetAll, ...actions }: WorkflowsPageProps) {
+export function WorkflowsPage({ workflows, activeId, runs, errorCounts, onSetAll, ...actions }: WorkflowsPageProps) {
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<Set<string>>(new Set());
 
+  // The latest run per workflow (runs are stored oldest first; the log is capped and noisier).
   const lastRun = useMemo(() => {
-    const map = new Map<string, { ts: string }>();
-    for (const entry of logs) map.set(entry.workflowId, { ts: entry.ts });
+    const map = new Map<string, RunRecord>();
+    for (const run of runs) {
+      const seen = map.get(run.workflowId);
+      if (!seen || run.startedAt >= seen.startedAt) map.set(run.workflowId, run);
+    }
     return map;
-  }, [logs]);
+  }, [runs]);
 
   const shown = workflows.filter((workflow) => workflow.name.toLowerCase().includes(query.trim().toLowerCase()));
   const pickedIds = shown.filter((workflow) => picked.has(workflow.id)).map((workflow) => workflow.id);
@@ -100,10 +106,12 @@ export function WorkflowsPage({ workflows, activeId, logs, errorCounts, onSetAll
                   />
                 </td>
                 <td>
-                  <label className="bf-switch" title={problems > 0 && !workflow.enabled ? 'Fix the problems first' : ''}>
+                  <label className="bf-switch" title={problems > 0 && !workflow.enabled ? 'Fix the problems first' : workflow.enabled ? 'Running in the background' : 'Turn on to run'}>
                     <input
                       type="checkbox"
+                      aria-label={`${workflow.name} on`}
                       checked={workflow.enabled}
+                      disabled={problems > 0 && !workflow.enabled}
                       onChange={(event) => actions.onToggle(workflow.id, event.target.checked)}
                     />
                   </label>
@@ -115,7 +123,15 @@ export function WorkflowsPage({ workflows, activeId, logs, errorCounts, onSetAll
                   {problems > 0 && <span className="bf-error"> · {problems} problem{problems === 1 ? '' : 's'}</span>}
                 </td>
                 <td title={`${workflow.nodes.length} blocks, ${workflow.edges.length} connections`}>{blockSummary(workflow)}</td>
-                <td className="bf-muted">{run ? new Date(run.ts).toLocaleString() : 'never'}</td>
+                <td className="bf-muted">
+                  {run ? (
+                    <>
+                      {new Date(run.endedAt ?? run.startedAt).toLocaleString()} <span className={`bf-run-status ${run.status}`}>{run.status}</span>
+                    </>
+                  ) : (
+                    'never'
+                  )}
+                </td>
                 <td className="bf-table-actions">
                   <button type="button" onClick={() => actions.onOpen(workflow.id)}>
                     Edit

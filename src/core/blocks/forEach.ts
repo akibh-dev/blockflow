@@ -1,5 +1,5 @@
 import { routeTo } from '../ports';
-import { DATA_ACCENT, listAt, listField } from './dataCommon';
+import { DATA_ACCENT, evalEnv, listAt, listField } from './dataCommon';
 import type { BlockDefinition } from '../types';
 
 /** For Each settings: an expression for the list, and the payload key each item is put under. */
@@ -31,7 +31,7 @@ export const forEachBlock: BlockDefinition<ForEachConfig> = {
   ],
 
   async run(ctx, input) {
-    const items = listAt(ctx.config.list, input);
+    const items = listAt(ctx.config.list, input, 'List', evalEnv(ctx));
     const name = ctx.config.as.trim() || 'item';
     for (const [index, item] of items.entries()) {
       await ctx.emit({ ...input, [name]: item, index, total: items.length }, 'each');

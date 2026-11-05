@@ -4,7 +4,7 @@
 visual editor, or write them as JSON scripts, by hand or with an LLM.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
 
-**Status: prototype 1.** 42 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
+**Status: v0.2.0.** 42 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
 [What has been verified](#what-has-been-verified) before you rely on it.
 
 **Using BlockFlow, or asking an AI to build workflows for you?** Read the
@@ -121,8 +121,9 @@ Open Tab (https://shop.test/login)
 
 - **Sidebar** (file-manager style): click a row to open it, the dot turns it on/off, hover for rename (or double-click),
   duplicate, export to a `.blockflow.json` file and delete. `+ New` and `Import` sit on top, plus search.
-- **All workflows** tab: a table with on/off switches, block icons, last activity, Edit / Duplicate / Export / Delete,
-  select several to export together, Turn all on / off.
+- **All workflows** tab: a table with on/off switches (greyed out while a workflow has problems), block icons,
+  last activity (its latest run and result), Edit / Duplicate / Export / Delete, select several to export
+  together, Turn all on / off.
 - Imported and duplicated workflows always arrive **off** with fresh ids. Turning on a workflow with errors is refused with the reason.
 
 ## Getting started
@@ -140,15 +141,20 @@ Click the BlockFlow toolbar icon to open the editor. Two example workflows are c
 
 ### Try it end to end
 
-A page whose text changes on every load is included for testing:
+Two practice pages are included: `playground.html` (things to watch, click and fill) and `clock.html`
+(text that changes on every load). Serve them:
 
 ```bash
-npx serve docs/manual-test        # or: python3 -m http.server 8080 --directory docs/manual-test
+npm run playground                # http://localhost:7357/playground.html  (or: npx serve docs/manual-test)
 ```
 
-In the editor: add a **Watch Element** block, set Page URL to `http://localhost:3000/clock.html` (use the
-port that was printed), press **Pick on page**, click the clock, then add and connect an **Open URL** block
-set to `{{url}}`. Turn the workflow **On** and watch the **Run log** at the bottom.
+The editor's **Try it** card (shown on first run) creates a workflow that fills and clicks the playground;
+press **▶ Run**. Or by hand: add a **Watch Element** block, set Page URL to
+`http://localhost:7357/clock.html`, press **Pick on page**, click the clock, then add and connect an
+**Open URL** block set to `{{url}}`. Turn the workflow **On** and watch the **Run log** at the bottom.
+
+(The pages are served over http, not shipped inside the extension: Chromium does not let an extension
+script its own `chrome-extension://` pages, so blocks could not act on them.)
 
 ### Other browsers
 
@@ -192,6 +198,7 @@ src/
     timerKey.ts          timer and state keys (bf::<workflow>::<node>::<name>)
     recording.ts         turns recorded steps into blocks
     playwright.ts        exports a workflow as a Playwright .spec.ts
+    playwrightRuntime.ts inlines expression/CSV/template code into exported specs
     workflow.ts          diffWorkflows() decides what the background must start/stop
     id.ts, text.ts       small helpers
   dom/                   Code that runs inside web pages
@@ -265,7 +272,9 @@ needed.
 | 2026-10-23, `npm run e2e` Phase D (38 checks in all, Playwright Chromium 131: Brave stopped launching under automation that afternoon, see below): Paginate 3 pages + Extract List + Save to Dataset (9 rows in IndexedDB, absolute links) + Download CSV, HTTP Request + Extract Table/List from HTML through Chrome's offscreen document, Scroll an infinite feed to 40 posts, a CSV-driven For Each login (one good, one bad), Data page preview | Run, passing. |
 | 2026-10-23, `npm run e2e` Phase E (47 checks in all, Chromium 131): recording a real login (typing, select, checkbox, submit, navigation, Assert text from the toolbar) became Open Tab → Fill Form → Wait For → Assert with readable locators and `{{secret.password}}`, and replayed green; pick gives `role=button[name="Forgot password?"]` plus alternatives; undo/redo/copy/paste; a template; `{{` suggestions; Page Visited started a run on a visited tab. Context Menu and Schedule: unit tests only | Run, passing. |
 | 2026-10-23, `npm run e2e` Phase F (57 checks in all, twice in a row, Chromium 131): Upload File on a hidden input, Wait for Popup (window.open and target=_blank from a background tab), Dialogs (confirm dismissed, prompt answered), same-origin and cross-origin iframes, Wait For a POST /api/save 201, synthetic click untrusted vs real input trusted (click and typing), a background-tab screenshot through the debugger, Run Script's message on a browser without userScripts.execute, and a workflow exported from the editor as a .spec.ts passing under `npx playwright test` | Run, passing. |
-| Firefox host permission grant, Safari conversion, Chrome Web Store upload | **Not run.** |
+| 2026-11-05, `npm run e2e:firefox` (Firefox 159, headless, temporary add-on over WebDriver BiDi, 14 checks): login with Fill Form + Wait For URL + Assert, HTTP Request + Extract Table from HTML (no offscreen document), Read Element with a URL twice (watch tab in `storage.session`), Upload File, Wait for Popup, Dialogs, Data Table → For Each → Save to Dataset (IndexedDB), in-run Timer delay, a failing step with a screenshot, Notify; Run Script and real input fail with a clear "Chromium only" message | Run, passing. |
+| 2026-11-05, M0 (v0.2.0): `npm run check` (395 unit/DOM tests), `npm run e2e` in Brave Origin (10 specs, 122 checks: every block, frames and shadow DOM for real input, picker and recorder, recording popups and into existing workflows, editor UX, Playwright export run under `npx playwright test`), `npm run e2e:firefox` (14 checks, Firefox 159) | Run, passing. |
+| Firefox host permission grant by a user (non-temporary install), Safari conversion, Chrome Web Store upload | **Not run.** |
 
 ## Known limitations
 
@@ -291,7 +300,7 @@ needed.
 ## Roadmap ideas
 
 The product plan (Playwright-compatible automation in your browser, for people and LLMs; milestones M0–M6) is
-[docs/PLAN.md](docs/PLAN.md). Phases A–F, already built, are in [docs/PLAN-automation.md](docs/PLAN-automation.md).
+[docs/PLAN.md](docs/PLAN.md), built task by task per [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md). Phases A–F, already built, are in [docs/PLAN-automation.md](docs/PLAN-automation.md).
 
 Folders for workflows, per-workflow permissions, If with several conditions, resuming an interrupted run,
 Web Store packaging. (Done since the first version of this list: If with true/false outputs, reading

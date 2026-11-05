@@ -44,3 +44,4 @@
 - [Architecture](../ARCHITECTURE.md)
 - [Contributing](../../CONTRIBUTING.md)
 - [Product plan](../PLAN.md)
+- [Implementation plan](../IMPLEMENTATION.md)

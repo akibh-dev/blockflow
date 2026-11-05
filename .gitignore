@@ -9,3 +9,4 @@ coverage
 .DS_Store
 .output-e2e
 test-results
+.claude/worktrees

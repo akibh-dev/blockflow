@@ -9,7 +9,7 @@ use or change. All of them are browser-free and unit-tested in Node (`tests/core
 [expression.ts](../../src/core/expression.ts), [condition.ts](../../src/core/condition.ts),
 [text.ts](../../src/core/text.ts), [csv.ts](../../src/core/csv.ts), [report.ts](../../src/core/report.ts),
 [library.ts](../../src/core/library.ts), [samples.ts](../../src/core/samples.ts),
-[playwright.ts](../../src/core/playwright.ts), [recording.ts](../../src/core/recording.ts),
+[playwright.ts](../../src/core/playwright.ts), [playwrightRuntime.ts](../../src/core/playwrightRuntime.ts), [recording.ts](../../src/core/recording.ts),
 [schedule.ts](../../src/core/schedule.ts), [url.ts](../../src/core/url.ts),
 [urlPattern.ts](../../src/core/urlPattern.ts), [locatorSyntax.ts](../../src/core/locatorSyntax.ts)
 
@@ -70,7 +70,9 @@ Semantics worth knowing:
 - `&&`, `||` short-circuit and return an operand; an empty array is falsy. `??` only for null/undefined.
 - String escapes: only `\n`, `\t`, `\\`, `\'`, `\"`; any other backslash is kept, so `'/#(\d+)/'` works.
 - Regex arguments (`matches`, `extract`, `replace`) accept `/re/flags` or a bare pattern.
-- `now()` and `today()` use the real clock, not `Host.now`.
+- `now()` and `today()` read the clock from the evaluation context (`EvalEnv.now`, third argument of
+  `evaluate` / `render` / `resolveConfig`); the engine and the data blocks pass `Host.now`, so tests with
+  FakeHost's fixed clock get fixed dates. Without one, the system clock.
 
 Called by: `template.ts`, `blocks/dataCommon.ts` (Transform, Filter).
 
@@ -151,17 +153,31 @@ Exports a workflow as a Playwright test. See
 | --- | --- |
 | `ExportOptions { registry, lookup?(id) }` | `lookup` resolves Run Workflow targets. |
 | `toPlaywrightLocator(locator, base)` | Per [locator step](#locatorsyntax): `css` → `.locator()` (`>>>` dropped, Playwright CSS pierces shadow roots), `xpath` → `.locator('xpath=…')`, `text/label/placeholder/alt/title` → `getByX` (quoted = `exact: true`, `/re/` = regex), `testid` → `getByTestId`, `frame` → `frameLocator`, `nth` → `first()/last()/nth()`, `role` → `getByRole` with `name`, `exact`, `checked`, `level`. |
-| `workflowToPlaywright(workflow, options)` | Full `.spec.ts`: one `test()`, a `tabs` map and a mutable `data` object; called workflows as functions; helper functions (`get`, `setField`, `selectByText`, `read`, `extractList`, `extractTable`, `parseRows`, `urlPattern`, `compare`) appended. |
+| `workflowToPlaywright(workflow, options)` | Full `.spec.ts`: one `test()` with the `page`, `context` and `request` fixtures, a `tabs` map and a mutable `data` object; called workflows as functions; helper functions (`render`, `evaluate`, `listAt`, `compare`, `parseRows`, `urlPattern`, `retry`, `waitForResponse`, `waitForPopup`, `answerDialogs`, `fileFromUrl`, `setField`, `selectByText`, `read`, `peek`, `extractList`, `extractTable`…) and the inlined runtime appended. |
 
 How it walks: from every root, depth-first along edges (`Writer.walk`); a node already on the current path
-writes a "loop back … not exported" comment. If → `if/else`; For Each, Repeat, Paginate → `for` loops with
-`each` inside and `done` after; `onError: 'port'` with an error edge → `try/catch`. Triggers (Timer,
-Schedule, Page Visited, Context Menu, Watch Element) become comments; unknown blocks become "no Playwright
-equivalent" comments. Templates: `{{a.b}}` → `get(data, 'a.b')`; `{{secret.x}}` →
-`process.env.X`; other expressions → `/* TODO expression */ ''`.
+writes a "loop back … not exported" comment. Each step writes only its own statements; `walk` wraps them
+for the step settings: `retries` → `retry(n, async () => …)`, `onError: 'continue'` → `try/catch` that
+logs, `onError: 'port'` with an error edge → `try/catch` running the error branch and an `if (okN)` around
+the normal continuation; `timeoutSeconds` → `{ timeout }` on the action or matcher; `disabled` → a comment.
+If → `if/else`; For Each, Repeat, Paginate → `for` loops with `each` inside and `done` after (For Each and
+Repeat restore the input afterwards). Triggers (a root Timer, Schedule, Page Visited, Context Menu, Watch
+Element) become comments; a fed Timer is `page.waitForTimeout`; unknown blocks become
+`// BlockFlow-only:` comments. Templates: any `{{…}}` → `render("…", data)` (BlockFlow's own
+`template.ts`, with `{ ...data, secret: SECRETS }` and `SECRETS` read from `process.env`). Assert uses
+web-first matchers for equals / not-equals / matches (and contains for text), `expect.poll` around
+`compare` for the rest. Open Tab `where: current/workflow` reuses `page`.
 
-Limitations seen in the code: Open Tab always opens a new page (ignores `where`); the template path regex
-does not accept dashes or strip `$json.` the way `template.ts` does.
+### playwrightRuntime
+
+The BlockFlow runtime inlined at the end of every exported spec. `runtimeSource()` reads the source of
+`expression.ts`, `condition.ts`, `csv.ts`, `urlPattern.ts` and `template.ts` with Vite's `?raw` import
+(build time; declared in `src/core/raw.d.ts`) and wraps each in a closure
+(`const expressionModule = (() => { … return { evaluate, … }; })();`) with `wrapModule(name, source,
+known)`: `export` dropped, value imports between these modules turned into destructuring, type imports
+removed (`Payload` is declared once). An import of any other module throws, so a new dependency in
+those files fails the unit tests instead of producing a broken spec. Because the text is the real
+source, the export cannot drift from the extension.
 
 Called by: `Editor.tsx` (export), `tests/core/playwright.test.ts`, and the e2e run.
 

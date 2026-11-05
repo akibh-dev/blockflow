@@ -6,7 +6,7 @@ when a test fails and you need to know what it exercises. The reasoning behind t
 [ARCHITECTURE.md, Testing strategy](../ARCHITECTURE.md#testing-strategy); this page is the reference.
 
 **Source:** [vitest.config.ts](../../vitest.config.ts) · [tests/helpers/fakeHost.ts](../../tests/helpers/fakeHost.ts) ·
-[tests/e2e/run.mjs](../../tests/e2e/run.mjs) · [tests/e2e/server.mjs](../../tests/e2e/server.mjs) ·
+[tests/e2e/run.mjs](../../tests/e2e/run.mjs) · [tests/e2e/harness.mjs](../../tests/e2e/harness.mjs) · [tests/e2e/specs/](../../tests/e2e/specs) · [tests/e2e/server.mjs](../../tests/e2e/server.mjs) ·
 [tests/fixtures/site/](../../tests/fixtures/site) · [docs/manual-test/clock.html](../manual-test/clock.html) ·
 [.github/workflows/ci.yml](../../.github/workflows/ci.yml)
 
@@ -14,11 +14,13 @@ when a test fails and you need to know what it exercises. The reasoning behind t
 
 | Command | What runs |
 | --- | --- |
-| `npm test` | `vitest run`: every `tests/**/*.test.ts` once (27 files, about 300 tests, a few seconds) |
+| `npm test` | `vitest run`: every `tests/**/*.test.ts` once (29 files, about 330 tests, a few seconds) |
+| `npm run test:coverage` | The same with `--coverage` (`@vitest/coverage-v8`): text summary plus `coverage/index.html` and `coverage/coverage-summary.json`, for `src/**`. No threshold |
 | `npm run test:watch` | `vitest` in watch mode |
 | `npx vitest run tests/core/engine.test.ts` | One file; add `-t "name"` to filter by test name |
 | `npm run check` | typecheck + tests + `learn:check` + `guide:check` (+ `wiki:check`), see [Tooling and Scripts](Tooling-and-Scripts.md) |
 | `npm run e2e` | `BF_E2E=1 wxt build` then `node tests/e2e/run.mjs` (real browser, see [below](#end-to-end-tests-testse2e)) |
+| `npm run e2e -- blocks-coverage` | Only the named spec(s) of `tests/e2e/specs/` (file names without `.mjs`); `npm run e2e:run -- <name>` skips the build |
 
 ## Layout
 
@@ -29,7 +31,7 @@ when a test fails and you need to know what it exercises. The reasoning behind t
 | `tests/dom/` | jsdom (per-file docblock) | `src/dom/*`: page agent, locators, selectors, picker, recorder |
 | `tests/editor/` | node | Pure editor model (`flow/convert.ts`), no React rendering |
 | `tests/helpers/` | n/a | `fakeHost.ts`: `FakeHost`, `harness()`, `flow()` |
-| `tests/e2e/` | Node script, not Vitest | Real browser run via `playwright-core` |
+| `tests/e2e/` | Node script, not Vitest | Real browser run via `playwright-core`: `run.mjs` (entry), `harness.mjs` (shared helpers), `specs/*.mjs` (one file per area) |
 | `tests/fixtures/site/` | n/a | HTML pages served to the e2e run |
 
 ### Environments
@@ -61,6 +63,7 @@ against real Chromium.
 | [core/dataBlocks.test.ts](../../tests/core/dataBlocks.test.ts) | Extract List / Table, For Each, Repeat, Filter, Transform, Data Table, Paginate, datasets and downloads |
 | [core/testing.test.ts](../../tests/core/testing.test.ts) | Assert, screenshots, Run Workflow (sub-workflows), secrets, Manual Step, Stop, Log |
 | [core/triggers.test.ts](../../tests/core/triggers.test.ts) | Schedule, Start block, Page Visited / Context Menu triggers |
+| [core/moreBlocks.test.ts](../../tests/core/moreBlocks.test.ts) | Scroll (top/bottom/element; "until nothing more loads" with its height check and `maxScrolls`), Page Info (page, local, session, cookies), Context Menu (config → menu item, item id parsing, click → payload, a click starting the flow), Page Visited start log, Navigate back/forward/reload, Press Key, Stop, Notify, Repeat |
 | [core/config.test.ts](../../tests/core/config.test.ts) | `withDefaults`, `resolveConfig`, `validateConfig` |
 | [core/validate.test.ts](../../tests/core/validate.test.ts) | `validateWorkflow` |
 | [core/workflow.test.ts](../../tests/core/workflow.test.ts) | `diffWorkflows`, `behaviourSignature`, `createWorkflow`, sample workflows, timer keys, `uid` |
@@ -76,7 +79,7 @@ against real Chromium.
 | [browser/hybridScheduler.test.ts](../../tests/browser/hybridScheduler.test.ts) | Timers ≥ 30 s (alarms), < 30 s (in-memory + keep-alive), clearing, worker restart, end to end with the engine. Uses local `FakeClock`, `FakeAlarms`, `MemoryTimerStore`. See [Scheduling and Timers](Scheduling-and-Timers.md) |
 | [dom/agent.test.ts](../../tests/dom/agent.test.ts) | Page agent ops: click, fill/type, select/check/press, read/wait/detect-form, scraping, frames, upload and locate. See [Page Agent](Page-Agent.md) |
 | [dom/locator.test.ts](../../tests/dom/locator.test.ts) | `parseLocator`, `resolveLocator`, ARIA name/role, `locatorCandidates`. See [Locators](Locators.md) |
-| [dom/selector.test.ts](../../tests/dom/selector.test.ts) | `cssEscape`, stable id/class heuristics, `generateSelector` (incl. a property test: every element gets a selector matching only itself), `ElementNavigator`, `sampleText`, `readSelectorInPage` |
+| [dom/selector.test.ts](../../tests/dom/selector.test.ts) | `cssEscape`, stable id/class heuristics, `generateSelector` (incl. a property test: every element gets a selector matching only itself), `ElementNavigator`, `sampleText` |
 | [dom/picker.test.ts](../../tests/dom/picker.test.ts) | Element picker overlay. See [Picker and Recorder](Picker-and-Recorder.md) |
 | [dom/recorder.test.ts](../../tests/dom/recorder.test.ts) | Recorder captures user actions in a page |
 | [editor/convert.test.ts](../../tests/editor/convert.test.ts) | Workflow ⇄ React Flow canvas conversion, ports and step settings. See [Editor](Editor.md) |
@@ -193,12 +196,18 @@ passes `maxSteps` to the runner (loop guard tests).
    memory.
 4. **Never real timers.** Use `fire()` and `advance()`; `host.sleep` is already virtual.
 5. **Guide examples** are covered automatically: drop a valid `*.blockflow.json` into `docs/guide/examples/`.
-6. Something that needs a real browser API: add a scenario to `tests/e2e/run.mjs` (and a fixture page).
+6. Something that needs a real browser API: add a check to the matching `tests/e2e/specs/*.mjs` (or a new
+   spec file; `run.mjs` picks it up) and a fixture page in `tests/fixtures/site/`.
 
 ## End-to-end tests (tests/e2e)
 
-`npm run e2e` runs `BF_E2E=1 wxt build` and then `node tests/e2e/run.mjs`. It is not part of `npm test`,
-`npm run check` or CI: it needs a desktop browser and takes minutes.
+`npm run e2e` runs `BF_E2E=1 wxt build` and then `node tests/e2e/run.mjs`. It is not part of `npm test` or
+`npm run check` (it needs a browser and takes minutes); CI runs it in its own job (see [CI](#ci)).
+
+Run one area with `npm run e2e -- blocks-coverage` (several: `npm run e2e -- forms scraping`). Add
+`BF_HEADLESS=1` to run without a window (`--headless=new`, which loads extensions) and
+`BF_BROWSER=/path/to/chrome` to pick the browser. If launching times out (Brave in headless mode does on some
+machines), use another browser, e.g. Playwright's Chromium from `npx playwright install chromium`.
 
 ### The e2e build
 
@@ -206,7 +215,22 @@ With `BF_E2E=1`, [wxt.config.ts](../../wxt.config.ts) writes to `.output-e2e/` (
 you load by hand) and moves `debugger` and `userScripts` from `optional_permissions` into `permissions`,
 because an automated browser cannot click the permission prompt. See [Build and Release](Build-and-Release.md).
 
-### run.mjs
+It also defines `import.meta.env.BF_E2E` (`true` only in this build) for test-only hooks, which compile out of
+every other build. There is one: the background worker accepts
+`{ type: 'bf:e2e-menu-click', menuItemId, info: { pageUrl, selectionText, linkUrl, srcUrl }, tabId }` and
+handles it like `contextMenus.onClicked`, because an automated browser cannot open the right-click menu.
+
+### Spec layout
+
+| File | Role |
+| --- | --- |
+| `run.mjs` | Entry: picks the specs named on the command line (all by default), launches once, runs each spec's default export with the harness, prints the summary, exits 1 on any failed check |
+| `harness.mjs` | `launch()`: browser, extension, fixture server and the helpers below |
+| `specs/<area>.mjs` | `export default async function (h) { … }`: one area's scenarios. Order: `forms`, `editor-detect`, `testing`, `scraping`, `authoring`, `harder-pages`, then any others alphabetically |
+
+A spec that throws is reported as `<name>: spec crashed` and the run goes on with the next spec.
+
+### Harness
 
 | Step | Detail |
 | --- | --- |
@@ -216,21 +240,42 @@ because an automated browser cannot click the permission prompt. See [Build and 
 | Find the extension | Waits for the service worker; its URL gives the extension id; opens `chrome-extension://<id>/editor.html` |
 | Run a workflow | `run(wf)` sends `{ type: 'bf:run-workflow', workflow }` from the editor page, then polls `bf:runs` in `chrome.storage.local` every 200 ms until a finished run appears (90 s limit). See [Message Protocol](Message-Protocol.md) and [Storage Keys](Storage-Keys.md) |
 | Seed state | `seedWorkflows(list)` closes the editor (it saves on close), writes `bf:workflows`, reopens it. Secrets go to `bf:secrets` |
-| Report | `check(name, ok, detail)` prints ✓/✗; exit code 1 if any check failed. Last check: no uncaught errors in the editor page |
+| First-run card | Sets `bf:onboarding` to dismissed before the editor opens, so the "Try it" card does not cover the canvas (the `editor-ux` spec brings it back) |
+| Report | `check(name, ok, detail)` prints ✓/✗; exit code 1 if any check failed. Last check: no uncaught errors in the editor page. |
+| Other helpers | `workflow(name, nodes, edges?)` (ids `e2e-1`, `e2e-2`, …; a straight line by default), `step(record, nodeId)`, `summary(record)`, `openEditor()`, `context`, `worker` (evaluate `chrome.*` in the service worker), `editor` (the current editor page) |
 
-Scenarios, in order:
+Scenarios by spec:
 
 | Scenario | Fixtures | Exercises |
 | --- | --- | --- |
+| **forms** | | |
 | Classic login | `login.html` → `welcome.html` | Fill Form by label (text, password, select by option text, checkbox), submit, Wait For URL, Read Element, If |
 | Wrong password | `login.html` | `onError: 'port'` routing, timeout message, Wait For text |
 | Single-page app | `spa.html` | Covered-element detection (cookie overlay), controlled inputs, type mode, select, custom checkbox, disabled button, `pushState` route, shadow DOM (`>>>`) |
 | Clear failures | `login.html` | Strict mode (2 matches, `nth=0` hint), missing element timeout message |
+| **editor-detect** | | |
 | Detect fields | `login.html` + editor UI | Fill Form "Detect fields" through the picker |
+| **testing** | | |
 | Phase C | `login.html`, `welcome.html` | Run Workflow in the same tab, Assert (hard/soft), failure screenshot, secrets kept out of run records, Manual Step prompt in the editor, Reports tab, JUnit and HTML export |
+| **scraping** | | |
 | Phase D | `/products` (dynamic), `table.html`, `feed.html`, `login.html` | Paginate + Extract List + Save Dataset + Download CSV, IndexedDB dataset, HTTP Request + Extract Table/List from HTML (offscreen parser), Scroll on an infinite feed, data-driven For Each login, Data tab preview |
+| **authoring** | | |
 | Phase E | `login.html`, `welcome.html`, `table.html` | Recorder → blocks and replay, Pick on page with alternatives, undo/redo/copy/paste, templates, `{{` autocomplete, Page Visited trigger |
+| **harder-pages** | | |
 | Phase F | `upload.html`, `popup.html`, `dialogs.html`, `/frames.html` + `frame-inner.html`, `api.html`, `trusted.html`, `login.html` | Upload File, Wait for Popup (`window.open`, `target=_blank`), Dialogs, same- and cross-origin iframes, Wait For response, real (trusted) input via debugger, background-tab screenshot, Run Script (passes or explains Chrome 135+), Playwright export run with `npx playwright test` |
+| **blocks-coverage** | | |
+| Start | none | Starting values on Run; as a called workflow, the caller's value wins and the other default stays |
+| Timer | none | 3 s in-run delay; Stop (`bf:stop-run`) during a 30 s delay ends the run as `cancelled`; a repeating 2 s Timer in an enabled workflow starts runs counting `tick` |
+| Schedule | none | Switching a workflow on (`bf:workflows`, `enabled: true`) creates alarm `bf::<id>::<node>::next` at the planned minute (`chrome.alarms.getAll()`); switching off clears it |
+| Context Menu | `meta.html` | The menu item exists (probed by creating a duplicate id), `bf:e2e-menu-click` runs the flow on that tab with the selection, switching off removes the item |
+| Watch Element | `ticker.html` | An enabled watcher (every 2 s, no reload) notices the self-updating price and starts a run with `previous` and `value` |
+| Navigate | `spa.html` | goto, reload, back and forward (back/forward fall back to `history.back()` in the page when Chromium's `tabs.goBack` skips entries added without a user gesture) |
+| Press Key | `keys.html` | Control+A selects the field (its `select` event fires), Enter submits the form |
+| Page Info | `meta.html` | Title, description, canonical, lang, meta tags, JSON-LD (the invalid block skipped), link count; localStorage one key / all; sessionStorage; cookies |
+| Stop | none | Pass ends the path with the run passed; fail fails the run with the templated message |
+| Repeat, Filter | none | Data Table → Filter → Repeat: `each` three times, then `done` |
+| Notify | none | The run passes and `chrome.notifications.getAll()` in the worker lists the notification |
+| Editor UX (`editor-ux`) | editor UI; `docs/manual-test/playground.html` via `scripts/playground.mjs` on port 7357 | In-editor toasts and confirm/input dialogs (no native ones), the All workflows switch and Turn all on with a problem workflow, `bf:state` cleanup on delete, recorder start-URL check, real-input setting only on page actions, undo per workflow, paste at the mouse, the Try it card and the playground template passing |
 
 The Playwright export step writes `.output-e2e/playwright/exported.spec.ts` plus a config and runs it with
 `LOGINPASSWORD` set, so `@playwright/test` is a dev dependency only for this.
@@ -265,20 +310,49 @@ Exports `PASSWORD` (`Op3n-Sesame!`, the only password the fixture login accepts)
 | `api.html` | Save button that POSTs to `/api/save` |
 | `trusted.html` | Only reacts to trusted events (`event.isTrusted`), like some anti-bot checks |
 | `upload.html` | Custom upload button over a hidden file input; echoes name, type and content |
+| `meta.html` | Title, description and Open Graph meta, canonical link, `lang="en-GB"`, two JSON-LD blocks (one invalid), two links; sets localStorage `theme`/`cart`, sessionStorage `visit`, cookies `currency`/`consent` |
+| `keys.html` | Search form (`label=Search`) whose submit writes `submitted: <value>` to `#status`; selecting the field writes `selected N of M` |
+| `ticker.html` | `#price` counts up from 100 every 1.5 s, by itself |
 
-## Manual test page
+## Firefox e2e (tests/e2e/firefox.mjs)
 
-[docs/manual-test/clock.html](../manual-test/clock.html) shows the load time (changes on every reload) and a
-line that never changes. Serve it (`npx serve docs/manual-test`) and follow README
+`npm run e2e:firefox` builds `.output-e2e/firefox-mv3` and runs a smoke test in Firefox. Playwright can't
+load extensions into Firefox, so the runner starts Firefox itself (`--headless`, `BF_HEADED=1` to watch,
+`BF_FIREFOX=/path` to choose the binary) and talks WebDriver BiDi: `webExtension.install` loads the build
+as a temporary add-on, with a fixed `moz-extension://` UUID set through the profile's prefs.
+
+Firefox's BiDi can't open `moz-extension://` pages, so the runner can't use the editor. Instead, e2e builds
+register a bridge content script on `http://127.0.0.1/*`
+([e2e-bridge.content.ts](../../src/entrypoints/e2e-bridge.content.ts)). A fixture page posts
+`{ bfE2e, op, arg }` (`send` a runtime message, `get` from `storage.local`, `ping`) and the bridge answers.
+Workflows run through `bf:run-workflow`, exactly like the Chromium specs.
+
+The 14 checks cover forms, HTML parsing without an offscreen document, `storage.session` watch tabs,
+upload, popups, dialogs, IndexedDB datasets, in-run delays, screenshots on failure, Notify, and the
+"Chromium only" errors for Run Script and real input. CI runs it in the `e2e-firefox` job.
+
+## Manual test pages
+
+[docs/manual-test/playground.html](../manual-test/playground.html) has things to watch, click and fill; the
+editor's "Try it" card and the `playground-tour` template use it, and the `editor-ux` e2e spec runs that
+template against it. [docs/manual-test/clock.html](../manual-test/clock.html) shows the load time (changes on
+every reload) and a line that never changes. Serve both with `npm run playground`
+(`http://localhost:7357`, [scripts/playground.mjs](../../scripts/playground.mjs)) and follow README
 [Try it end to end](../../README.md#try-it-end-to-end) to check Watch Element firing on change and not firing
 on the stable line. Results of manual runs are logged in README
 [What has been verified](../../README.md#what-has-been-verified).
 
 ## CI
 
-[.github/workflows/ci.yml](../../.github/workflows/ci.yml) runs on pushes to `main` and on pull requests:
-Node 22, `npm install`, `typecheck`, `npm test`, `learn:check`, `build`, `build:firefox`. It does **not** run
-`guide:check`, `wiki:check` or `e2e`; run `npm run check` locally. Details in
+[.github/workflows/ci.yml](../../.github/workflows/ci.yml) runs on pushes to `main` and on pull requests, with
+two jobs on Ubuntu and Node 22:
+
+- `check`: `npm ci`, `typecheck`, `npm run test:coverage` (uploads `coverage/` as the `coverage` artifact),
+  `learn:check`, `guide:check`, `wiki:check`, `build`, `build:firefox`.
+- `e2e`: `npm ci`, `npx playwright install --with-deps chromium`, then `BF_HEADLESS=1 xvfb-run -a npm run e2e`
+  with `BF_BROWSER` set to Playwright's Chromium (`chromium.executablePath()` from `playwright-core`).
+
+The GitHub mirror only receives `main`, so there both jobs run after a merge. Details in
 [Tooling and Scripts](Tooling-and-Scripts.md#ci-workflow).
 
 ## See also

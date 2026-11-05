@@ -98,6 +98,24 @@ describe('For Each, Repeat, Filter, Transform, Data Table', () => {
     expect(run.steps.find((s) => s.nodeId === 't')?.output).toMatchObject({ total: 30, label: 'Kettle + Mug = $30' });
   });
 
+  it('now() and today() use the host clock in settings, Transform and Filter (per item)', async () => {
+    const host = new FakeHost();
+    host.advance(36 * 3600 * 1000); // 2026-01-02T12:00:00Z
+    const h = harness(
+      line(
+        { id: 'd', type: 'data-table', config: { text: 'day\n2026-01-01\n2026-01-02\n2026-01-03', into: 'days' } },
+        { id: 'f', type: 'filter', config: { list: 'days', left: '{{item.day}}', operator: 'equals', right: '{{ today() }}', into: 'todays' } },
+        { id: 't', type: 'transform', config: { values: [{ name: 'stamp', expression: 'now()' }] } },
+        { id: 'l', type: 'log', config: { message: 'on {{ today() }}' } },
+      ),
+      host,
+    );
+    const run = await h.runner.runOnce();
+    expect(run.steps.find((s) => s.nodeId === 'f')?.output).toMatchObject({ todays: [{ day: '2026-01-02' }], count: 1 });
+    expect(run.steps.find((s) => s.nodeId === 't')?.output).toMatchObject({ stamp: '2026-01-02T12:00:00.000Z' });
+    expect(h.messages('info')).toContain('on 2026-01-02');
+  });
+
   it('Data Table reads JSON too', async () => {
     const h = harness(flow([{ id: 'd', type: 'data-table', config: { text: '[{"a":1},{"a":2}]', into: 'list' } }], []));
     expect((await h.runner.runOnce()).steps[0]?.output).toEqual({ list: [{ a: 1 }, { a: 2 }], count: 2 });

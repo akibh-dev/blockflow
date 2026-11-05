@@ -87,7 +87,9 @@ inside JSON need escaping: `"role=button[name=\"Sign in\"]"`.
 Some sites only react to real input (`event.isTrusted`). Turn on the step setting **Use real mouse and
 keyboard** (`"step": { "realInput": true }`) on Click, Fill, Fill Form, Check or Press Key. It works in
 Chrome, Edge and Brave, shows a "debugging this browser" bar while it acts, and asks for the `debugger`
-permission the first time. It does not work inside cross-origin iframes.
+permission the first time. It works inside iframes too (same-site and cross-site); if clicks inside a frame
+land beside the element, the page is probably zoomed or the frame is CSS-transformed, which real input does
+not account for.
 
 ## Timeouts
 
@@ -147,9 +149,10 @@ Check in this order:
 5. **Context Menu** items appear only while the workflow is On.
 6. Look at the service worker console (above) for `[BlockFlow] … failed`.
 
-Known issues (from the [product plan](../PLAN.md#6-bugs-and-gaps-found-fix-before-new-features)): a **Start**
-block also runs once whenever its workflow is switched on or the browser starts; a Timer used as a delay in
-the middle of a flow splits the run record, and on a workflow that is Off the delay never resumes.
+Good to know: a workflow whose first block has no trigger of its own (Open Tab, HTTP Request…) runs once
+when you switch it **On**, not again when you edit it or the browser starts. **Start** runs only from ▶ Run
+or a Run Workflow call. A Timer used as a delay waits inside the run for up to 600 s; longer delays continue
+as a new run.
 
 ## Permissions
 
@@ -166,12 +169,17 @@ Blocks that need an optional permission show a **Grant** button in their setting
 - Use `frame=<css of the iframe> >> <locator>`, e.g. `frame=#payment >> label=Card number`. Same-site and
   cross-site frames both work.
 - While the frame is still loading you will see `waiting for the frame <src> to load`.
-- Real input (`realInput`) inside cross-origin frames is not supported (clicks land at the wrong place).
-- The picker and recorder do not reach inside iframes yet: write the `frame=` locator by hand.
+- When `frame=` matches several iframes, each same-site one is searched; a cross-site one is used only when
+  they find nothing. Point `frame=` at one iframe (`#id`, `[name=…]`, `[src*=…]`) if that is ambiguous.
+- **Pick on page** and **● Record** work inside frames and write the `frame=` part for you. If picking in a
+  frame says `Could not work out which frame this element is in`, the page around it did not answer
+  BlockFlow's question (it blocks `message` events): write the `frame=` locator by hand. Frames the page
+  adds after it has loaded are not recorded.
 
 ## Shadow DOM
 
-Open shadow roots work (`text=`/`role=`/`label=` search inside them; CSS needs `host >>> inner`). **Closed**
+Open shadow roots work (`text=`/`role=`/`label=` search inside them; CSS needs `host >>> inner`), and the
+picker and recorder see inside them. **Closed**
 shadow roots cannot be reached by an extension's page script and are not supported. Run Script cannot reach
 them either.
 
@@ -185,6 +193,19 @@ them either.
 - Secrets are **not encrypted**: they live in the browser profile's extension storage. They are never
   included in exported workflows.
 - In a Playwright export, `{{secret.loginPassword}}` becomes the environment variable `LOGINPASSWORD`.
+- A recording names one secret per password field after its label or name (`{{secret.password}}`,
+  `{{secret.adminPassword}}`…) and lists the names to create when it stops. Create them with exactly those
+  names, or rename the `{{secret.…}}` in the blocks.
+
+## Recording
+
+- **The recording added a second chain.** Recording into a workflow that already has blocks continues
+  after the selected block (or the last block of the main path) and connects to it. A recorded Open Tab is
+  only left out when the workflow already has an Open Tab on the same site (same origin); otherwise the
+  recorded one stays, connected after the anchor.
+- **Steps in a popup.** The recorder follows tabs the page opens: a Wait for Popup block, then the steps
+  there with `tab: "popup"`. With two popups open at once, steps in the older one are attributed to the
+  newer one; fix their `tab` by hand.
 
 ## Importing a file fails
 
@@ -195,10 +216,8 @@ import and validation message. The common ones:
 - `Unknown block type "x"`: the type is not in the [block reference](../guide/blocks.md) (`openUrl` should be
   `open-url`, `navigate-to` does not exist…).
 - `<Setting> is required`: a required config key is missing or empty.
-- A block that should run after another runs at the start instead: its edge pointed at an id that does not
-  exist and was dropped on import.
-- Branches attach to the wrong output after import: a known bug, see
-  [Import and export](Workflows-as-Scripts.md#import-and-export).
+- `A connection in "…" points at "x", which is not a block id.` / `Two blocks in "…" have the id "x".`: fix the
+  edge's `source`/`target`, or give each node its own `id`.
 
 ## Other messages
 

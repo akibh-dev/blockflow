@@ -144,11 +144,8 @@ references.
 
 **+ New ▾** offers the files in [examples/](../guide/examples) as templates.
 
-> **Known issue (November 2026):** import, templates and Duplicate currently drop each block's `step`
-> settings and each edge's `sourcePort`. After import, connections from If `false`, loop `done` and
-> `error` outputs are attached to the block's first output instead, and `onError: "port"` is lost. Until
-> this is fixed, re-check branching blocks on the canvas after importing (drag the connection to the right
-> output, set On error again). Tracked as P0 in [the product plan](../PLAN.md#6-bugs-and-gaps-found-fix-before-new-features).
+Import keeps each block's `step` settings and each connection's `sourcePort`. It refuses a file whose
+connections point at block ids that don't exist, or that uses the same block id twice, and the error names the id.
 
 ## How errors show up
 
@@ -162,9 +159,9 @@ There are two stages.
 | `Import failed: This file does not look like a BlockFlow workflow.` | A workflow without `nodes` and `edges` arrays. |
 | `Import failed: A block in this file is malformed.` | A node without a string `id` or `type`. |
 | `Import failed: No workflows found in this file.` | `"workflows": []`. |
-
-Edges whose `source` or `target` is not a node id in the file are **dropped silently** at this stage. The
-block they pointed to then has no input and becomes an extra start block. Double-check edge ids.
+| `Import failed: Two blocks in "<name>" have the id "<id>".` | Node ids must be unique within a workflow. |
+| `Import failed: A connection in "<name>" points at "<id>", which is not a block id.` | An edge's `source` or `target` names no node. |
+| `Import failed: A connection in "<name>" is malformed (it needs "source" and "target").` | An edge without string `source`/`target`. |
 
 **2. Checking the workflow.** After import the editor validates the workflow (the same check runs all the
 time while you edit):
@@ -275,7 +272,7 @@ Chrome 135+) covers some of them.
 | `page.waitForResponse(url)` | **Wait For** `mode: "response"`, `url`, `status` (`201`, `2xx`). Status only, no body |
 | `page.waitForRequest` | no equivalent yet |
 | `page.waitForEvent('download')` | no equivalent yet |
-| `page.waitForTimeout(ms)` | **Timer** after a block delays the flow, but this splits the run record and is not meant for tests; avoid it |
+| `page.waitForTimeout(ms)` | **Timer** after a block delays the flow (exported back as `page.waitForTimeout`) |
 
 ### Reading and assertions
 
@@ -316,34 +313,63 @@ end-to-end test (see [README](../../README.md#what-has-been-verified)).
 
 What it does:
 
-- One `test()` per exported workflow. Every start block is walked in turn and written as statements.
-- Locators are translated to `getByRole`, `getByLabel`, `frameLocator`, `.nth()` and so on.
-- `{{key}}` and `{{a.b[0]}}` become reads from a `data` object; `{{secret.name}}` becomes
-  `process.env.NAME` (upper-cased). The header comment lists the environment variables needed.
-- If becomes `if/else`; For Each, Repeat and Paginate become loops; `onError: "port"` with a connected
-  `error` output becomes `try/catch`.
+- One `test()` per exported workflow, using Playwright's `page`, `context` and `request` fixtures. Every
+  start block is walked in turn and written as statements.
+- Locators are translated to `getByRole`, `getByLabel`, `frameLocator`, `.nth()` and so on. Element
+  assertions use `.first()` like BlockFlow's reads.
+- Templates run through BlockFlow's **own** template and expression code: a setting with `{{…}}` becomes
+  `render("…", data)`, so `{{key}}`, `{{$json.x}}`, keys with dashes (`{{order-id}}`) and expressions
+  (`{{ price * 1.1 }}`, `{{ upper(name) }}`) render exactly as in the extension. `{{secret.name}}` reads
+  `process.env.NAME` (upper-cased); the header comment lists the environment variables needed.
+- At the end of the spec is the **BlockFlow runtime**: the real source of `src/core/expression.ts`,
+  `condition.ts`, `csv.ts`, `urlPattern.ts` and `template.ts`, inlined at build time
+  ([src/core/playwrightRuntime.ts](../../src/core/playwrightRuntime.ts)), so it cannot drift from the
+  extension. Data blocks use it: Transform → `evaluate(…)`, Filter → `listAt` + `compare`, Data Table →
+  `parseRows` (JSON, or CSV with quotes and comma/semicolon/tab separators), Set Variable → `render`,
+  For Each → `listAt` with `item`/`index`/`total` and `count` after, If → `compare` (every operator).
+- Assert retries like BlockFlow's: `toHaveText`/`toContainText`, `toHaveValue`, `toHaveAttribute`,
+  `toHaveCount`, `expect(page).toHaveURL`/`toHaveTitle` (and `not.` / regex forms) where Playwright has a
+  matcher; every other operator (greater, starts-with, empty…) becomes
+  `expect.poll(() => compare(…)).toBe(true)`. Soft asserts use `expect.soft` /
+  `expect.configure({ soft: true }).poll`. An Assert on a data value is checked once, as in BlockFlow.
+- Wait For `mode: "response"` → `waitForResponse(tab, pattern, status)`: a matching response of that tab
+  from the last 10 s (usually triggered by the click before) or the next one, through
+  `page.waitForResponse`; the pattern works like BlockFlow's (contains, `*`/`**` globs, `/regex/`) and
+  `status` accepts `201`, `2xx`, `200,201`. `data.response` gets `{ url, status, method }`.
+- Open Tab: `where: "current"` / `"workflow"` reuse the test's `page`; `"new"` / `"window"` open
+  `context.newPage()`.
+- Dialogs → one `page.on('dialog')` handler per page that answers with the latest Dialogs choice and
+  records what was shown (`read` returns `dialogs` / `lastDialog`). Upload File → `setInputFiles` with a
+  `Buffer` (text) or a file downloaded with `request.get` (URL). Wait for Popup → a page the site opened in
+  the last 15 s, or `context.waitForEvent('page')`. Run Script → `page.evaluate(async (data) => { …your
+  code… }, data)`. A Timer after another block → `page.waitForTimeout(ms)`.
+- Step settings: `timeoutSeconds` → `{ timeout }` on the action or expect; `retries` → `retry(n, …)` around
+  the step (1 s, 2 s, 4 s… like the engine); `onError: "continue"` → `try/catch` that logs; `onError:
+  "port"` with an `error` edge → `try/catch` that runs the error branch with `error` / `errorBlock` in the
+  data (the normal path continues only on success); `disabled` → a comment.
+- If becomes `if/else`; For Each, Repeat and Paginate become loops.
 - Run Workflow becomes a call to a generated function for the called workflow.
 - Helper functions (`read`, `compare`, `extractList`, `extractTable`, `setField`…) are appended so the test
   keeps BlockFlow's behaviour.
+
+The e2e spec [tests/e2e/specs/playwright-export.mjs](../../tests/e2e/specs/playwright-export.mjs) runs three
+such workflows (data table + For Each logins, API response + dialogs + uploads, scraping + popups + error
+branch) in the extension, exports them from the editor and runs them green with `npx playwright test`.
 
 Known limits (from [src/core/playwright.ts](../../src/core/playwright.ts)):
 
 | Not exported, or exported differently | What you get |
 | --- | --- |
-| Notify, Save to Dataset, Download, Transform, Filter, Dialogs, Upload File, Wait for Popup, Run Script | a comment `// <Block>: no Playwright equivalent, skipped.` Later steps that need their data will not get it. |
-| Triggers (Timer, Schedule, Page Visited, Context Menu, Watch Element) | a comment; the test starts there. A Timer used as a delay mid-flow is also just a comment. |
-| Expressions in templates (`{{ price * 1.1 }}`) | `/* TODO expression */ ''` |
-| Wait For `mode: "response"` | written as `waitForLoadState('load')`, which does **not** wait for the request. Fix by hand. |
-| Extract List from HTML (`source: "html"`) | a TODO comment |
-| Open Tab `where` (window, current tab, workflow tab) | always `context.newPage()` |
+| Notify, Save to Dataset, Download | a comment `// BlockFlow-only: <Block> has no Playwright equivalent, skipped.` Later steps that need their data will not get it. |
+| Triggers (Timer or Schedule at the start, Page Visited, Context Menu, Watch Element) | a comment; the test starts there. |
+| Extract List from HTML (`source: "html"`) | a `// BlockFlow-only:` comment |
 | Read Element `previous` / `changed` | not available (no state between test runs) |
-| Assert on `url`, `title`, `value` or with operators other than equals/contains | a one-off `compare(...)` check, without Playwright's retrying |
-| Step settings `retries`, `timeoutSeconds`, `onError: "continue"`, `realInput` | ignored |
+| `realInput` | ignored (Playwright's input is always trusted) |
+| `screenshot` step setting | ignored (use Playwright's `screenshot: 'only-on-failure'` option) |
 | Loops back to an earlier block | a comment `(loop back … not exported)` |
-| Data Table CSV | a simple comma split; quoted fields, semicolons and tabs are not handled |
-| `{{$json.x}}` and keys with dashes | not translated correctly |
+| Data flow | one mutable `data` object, so a branch that changes it also changes it for the blocks written after that branch (BlockFlow gives each branch its own copy) |
 
-Treat the export as a strong first draft: read it, run it once, fix the TODOs.
+Treat the export as a strong first draft: read it, run it once, fix what is marked `BlockFlow-only`.
 
 ## See also
 

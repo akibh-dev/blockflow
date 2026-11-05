@@ -129,16 +129,21 @@ one element. `nth` as the first step yields nothing.
 `contentDocument`s.
 
 - Same-origin: entered directly, the result is element(s) from the inner document.
-- Cross-origin (`contentDocument` is null or throws): `FrameBoundaryError(src, rest)` where `rest` is the
-  remaining steps re-serialised as `engine=body >> …`. The agent answers `{status: 'frame', src, rest}` and
-  the driver re-runs `rest` in that frame (see [Page Agent](Page-Agent.md#injection-and-addressing)).
-- If **any** matched frame is cross-origin the whole locator hands over, even when another matched frame is
-  same-origin. Point `frame=` at one iframe.
+- Cross-origin (`contentDocument` is null or throws): skipped, but remembered as
+  `FrameBoundaryError(src, rest, frame)` where `rest` is the remaining steps re-serialised as
+  `engine=body >> …`.
+- Every matched same-origin frame is searched. Only when the whole locator finds **nothing** and a
+  cross-origin frame was skipped is that error thrown (for the first such frame): the agent answers
+  `{status: 'frame', src, rest}` and the driver re-runs `rest` in that frame (see
+  [Page Agent](Page-Agent.md#injection-and-addressing)). So `frame=iframe >> text=Pay` finds the button
+  in whichever same-origin frame has it, and falls back to a cross-origin frame. An element that has not
+  appeared yet in a same-origin frame can therefore be looked for in a cross-origin one meanwhile; point
+  `frame=` at one iframe when that matters.
 - Frames can nest: the agent inside the frame may hand over again.
 
 ```ts
 export class LocatorError extends Error {}
-export class FrameBoundaryError extends LocatorError { readonly src: string; readonly rest: string }
+export class FrameBoundaryError extends LocatorError { readonly src: string; readonly rest: string; readonly frame?: Element }
 export function parseLocator(source: string): LocatorStep[];
 export function resolveLocator(source: string, root: ParentNode = document): Element[];
 export function textMatcher(body: string, exact?: boolean): (text: string) => boolean;
@@ -216,6 +221,11 @@ selector matches exactly the element. Per element:
    chars → `tag[attr="value"]`.
 3. Else `tag` + up to two stable classes.
 4. `:nth-of-type(n)` only when another sibling matches the same segment.
+
+Inside an open shadow root the walk stops at the root (uniqueness is checked with the root's
+`querySelectorAll`) and the host's own selector is put in front: `sign-up >>> #join`. `countMatches`
+resolves such selectors through `resolveLocator`. Elements in iframes get their `frame=<iframe css> >> `
+prefix from the picker/recorder content scripts ([Picker and Recorder: Frames](Picker-and-Recorder.md#frames)).
 
 Stable id: starts with a letter, ≤ 41 chars of `[\w-]`, no run of 3+ digits, not an 8+ char hex string, no
 CSS-in-JS prefix (`css-`, `sc-`, `jsx-`, `emotion-`, `mui-`…). Stable class: same idea, plus not a state

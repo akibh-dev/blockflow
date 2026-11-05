@@ -13,13 +13,14 @@ and Brave, using the optional `debugger` permission.
 | Open pages, navigate, back/forward/reload | ✅ | Open Tab, Navigate |
 | Several tabs, popups, `target=_blank` | ✅ | named tabs, Wait for Popup |
 | Locators: CSS, text, role, label, placeholder, testid, alt, title, XPath, chaining, `nth` | ✅ | [usage guide §4](../guide/README.md#4-elements-locators) |
-| Iframes, including cross-origin | ✅ | `frame=<css> >> …` |
-| Open shadow roots (web components) | ✅ | `host >>> inner` |
+| Iframes, including cross-origin | ✅ | `frame=<css> >> …`; Pick on page and Record write it |
+| Open shadow roots (web components) | ✅ | `host >>> inner`; Pick on page and Record see inside |
 | Closed shadow roots | ⛔ | the page hides them from everyone |
 | Locator filters (`has`, `has-text`, `visible`, or) | ❌ | planned |
 | Click, double, right, hover, fill, type key by key, select, check, press keys | ✅ | page blocks |
 | Click with modifiers or at a position | ❌ | planned |
-| Trusted (`isTrusted`) input | 🟡 | `realInput` step setting, Chromium only; not yet reliable inside iframes |
+| Trusted (`isTrusted`) input | 🟡 | `realInput` step setting, Chromium only (also inside iframes) |
+| Record a task as blocks (also in iframes, web components and popups it opens) | ✅ | ● Record; continues an existing workflow after the selected block |
 | File upload through `<input type=file>` | ✅ | Upload File |
 | File drop zones, drag and drop | ❌ | planned |
 | `alert` / `confirm` / `prompt` | ✅ | Dialogs |
@@ -82,7 +83,7 @@ and Brave, using the optional `debugger` permission.
 | Browser | Status |
 | --- | --- |
 | Chrome, Brave, Edge | ✅ main target. End-to-end tests run in Chromium 131 and Brave; Chrome and Edge use the same build |
-| Firefox | 🟡 builds; host permission grant and real use not verified yet. No `realInput`, no Run Script |
+| Firefox | ✅ verified with `npm run e2e:firefox` (Firefox 159): page actions, forms, scraping, datasets, uploads, popups, dialogs, screenshots. No `realInput`, no Run Script (Chromium only) |
 | Safari | 🟡 builds; never converted or run |
 
 ## Things no extension can do

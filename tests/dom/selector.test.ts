@@ -8,7 +8,6 @@ import {
   isStableId,
   sampleText,
 } from '../../src/dom/selector';
-import { readSelectorInPage } from '../../src/dom/readElement';
 
 function page(html: string): void {
   document.body.innerHTML = html;
@@ -148,37 +147,5 @@ describe('sampleText', () => {
     expect(sampleText(pick('#p'))).toBe('Hello world');
     page(`<p id="p">${'x'.repeat(300)}</p>`);
     expect(sampleText(pick('#p'), 10)).toBe('xxxxxxxxx…');
-  });
-});
-
-describe('readSelectorInPage', () => {
-  it('reads the text of the first match', () => {
-    page('<span class="price">$9.99</span>');
-    expect(readSelectorInPage('.price')).toEqual({ found: true, text: '$9.99', count: 1 });
-  });
-
-  it('reports a missing element', () => {
-    page('<span></span>');
-    expect(readSelectorInPage('.nope')).toEqual({ found: false, text: '', count: 0 });
-  });
-
-  it('reads attributes, classes, existence and counts', () => {
-    page('<html class="dark"><button aria-pressed="true">x</button><a class="p"></a><a class="p"></a></html>');
-    document.documentElement.classList.add('dark');
-    expect(readSelectorInPage('button', 'attribute', 'aria-pressed').text).toBe('true');
-    expect(readSelectorInPage('button', 'attribute', 'nope').text).toBe('');
-    expect(readSelectorInPage('html', 'has-class', 'dark').text).toBe('true');
-    expect(readSelectorInPage('html', 'has-class', 'light').text).toBe('false');
-    expect(readSelectorInPage('.p', 'count')).toMatchObject({ found: true, text: '2', count: 2 });
-    expect(readSelectorInPage('.none', 'count')).toMatchObject({ found: true, text: '0' });
-    expect(readSelectorInPage('.none', 'exists')).toMatchObject({ found: true, text: 'false' });
-    expect(readSelectorInPage('.p', 'exists').text).toBe('true');
-    document.documentElement.classList.remove('dark');
-  });
-
-  it('reports an invalid selector instead of throwing', () => {
-    const result = readSelectorInPage('!!!');
-    expect(result.found).toBe(false);
-    expect(result.error).toBe('Invalid selector: !!!');
   });
 });

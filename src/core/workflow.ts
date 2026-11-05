@@ -1,4 +1,4 @@
-import type { EdgeDef, NodeDef, Workflow } from './types';
+import type { Workflow } from './types';
 
 export { uid } from './id';
 import { uid } from './id';
@@ -9,25 +9,28 @@ export function createWorkflow(name = 'Untitled workflow'): Workflow {
 }
 
 /**
- * Identity of a workflow's behaviour: block types, settings, step settings and connections.
- * Positions and names are excluded, so dragging a block or renaming the workflow does not
- * restart it.
+ * Identity of a workflow's start blocks (the ones nothing feeds): ids, types, settings. Only these
+ * hold schedules and listeners. Every other block is read from storage when a run reaches it, so
+ * editing it needs no restart.
  */
-export function behaviourSignature(workflow: Workflow): string {
-  const nodes = [...workflow.nodes]
+export function rootSignature(workflow: Workflow): string {
+  const fed = new Set(workflow.edges.map((edge) => edge.target));
+  const roots = workflow.nodes
+    .filter((node) => !fed.has(node.id))
     .sort((a, b) => a.id.localeCompare(b.id))
-    .map((node: NodeDef) => [node.id, node.type, node.config, node.step ?? null]);
-  const edges = workflow.edges
-    .map((edge: EdgeDef) => `${edge.source}:${edge.sourcePort ?? ''}->${edge.target}`)
-    .sort();
-  return JSON.stringify({ nodes, edges });
+    .map((node) => [node.id, node.type, node.config, node.step ?? null]);
+  return JSON.stringify(roots);
 }
 
 export interface WorkflowDiff {
-  /** Workflows to (re)start: newly enabled, or enabled and edited. */
+  /** Workflows just switched on (or added switched on): start them, plain start blocks included. */
   start: string[];
+  /** Enabled workflows whose start blocks changed: re-arm their triggers, without running plain start blocks. */
+  restart: string[];
   /** Workflows to stop: disabled or deleted. */
   stop: string[];
+  /** Workflows deleted (on or off): their block state and timers are removed too. */
+  removed: string[];
 }
 
 /** Compares two saved lists and says what the background worker must do about it. */
@@ -37,20 +40,21 @@ export function diffWorkflows(
 ): WorkflowDiff {
   const before = new Map((previous ?? []).map((workflow) => [workflow.id, workflow]));
   const after = new Map((next ?? []).map((workflow) => [workflow.id, workflow]));
-  const diff: WorkflowDiff = { start: [], stop: [] };
+  const diff: WorkflowDiff = { start: [], restart: [], stop: [], removed: [] };
 
   for (const [id, workflow] of after) {
     const old = before.get(id);
     if (workflow.enabled) {
-      if (!old || !old.enabled || behaviourSignature(old) !== behaviourSignature(workflow)) {
-        diff.start.push(id);
-      }
+      if (!old || !old.enabled) diff.start.push(id);
+      else if (rootSignature(old) !== rootSignature(workflow)) diff.restart.push(id);
     } else if (old?.enabled) {
       diff.stop.push(id);
     }
   }
   for (const [id, workflow] of before) {
-    if (!after.has(id) && workflow.enabled) diff.stop.push(id);
+    if (after.has(id)) continue;
+    if (workflow.enabled) diff.stop.push(id);
+    diff.removed.push(id);
   }
   return diff;
 }

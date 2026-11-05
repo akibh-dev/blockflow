@@ -16,6 +16,8 @@ export const STORAGE_KEYS = {
   pendingPick: 'bf:pending-pick',
   /** `Record<url, tabId>`: background tabs BlockFlow opened per watched URL (pageReader.ts). */
   watchTabs: 'bf:watch-tabs',
+  /** `OnboardingState`: first-run hints the user closed (the editor's "Try it" card). Editor only. */
+  onboarding: 'bf:onboarding',
   /** Prefix of `StoredTimer` records, one per scheduled timer: `bf:timer:<timer key>` (scheduler.ts). */
   timerPrefix: 'bf:timer:',
   /** Prefix of block state (`ctx.state`): `bf:state:<workflowId>::<nodeId>::<key>` (host.ts `StorageState`). */

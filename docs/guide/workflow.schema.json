@@ -141,7 +141,7 @@
                     "description": "Start the flow on a schedule, or delay it when placed after another block.",
                     "properties": {
                       "seconds": {
-                        "description": "Under 30 seconds the extension keeps its background worker awake to fire on time (Chromium). 30 seconds or more uses browser alarms.",
+                        "description": "Under 30 seconds the extension keeps its background worker awake to fire on time (Chromium). 30 seconds or more uses browser alarms. After another block: waits up to 600 s inside the run; longer delays continue as a new run.",
                         "type": "number",
                         "minimum": 1
                       },

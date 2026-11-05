@@ -88,7 +88,10 @@ Under 300 lines. Check against lesson 4: top-level synchronous listeners ✔, no
 
 `selector.ts` decides *which* selector to propose (prefers stable ids, `data-testid`, avoids generated
 class names like `css-1x2y3`). `picker.ts` is the overlay UI in Shadow DOM. The picker is a content script
-(lesson 3) that talks to the worker by messages (`src/shared/messages.ts`).
+(lesson 3) that talks to the worker by messages (`src/shared/messages.ts`). It is injected into every frame
+of the tab (`allFrames: true`); a frame works out which `<iframe>` it is with `src/dom/framePath.ts`
+(`window.frameElement` when the parent is same-origin, a `postMessage` question when it is not), and the
+frames' pickers talk to each other through the worker.
 
 ## 8. The page agent: clicking and filling like Playwright
 

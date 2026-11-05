@@ -1,5 +1,6 @@
 import { hasTemplate, render, templateErrors } from './template';
 import { normalizeHttpUrl } from './url';
+import type { EvalEnv } from './expression';
 import type { AnyBlockDefinition, FieldSpec, Payload } from './types';
 
 /**
@@ -100,27 +101,32 @@ export interface ResolvedConfig<C> {
   errors: string[];
 }
 
-/** Defaults + template rendering against `input` + validation. Used right before a block runs. */
+/**
+ * Defaults + template rendering against `input` + validation. Used right before a block runs.
+ * `perItem` fields are left as typed: their block renders them itself, once per list item.
+ */
 export function resolveConfig<C extends object>(
   def: AnyBlockDefinition,
   raw: Record<string, unknown>,
   input: Payload,
+  env: EvalEnv = {},
 ): ResolvedConfig<C> {
   const merged = withDefaults(def, raw);
   for (const field of def.fields) {
     if (
       (field.kind === 'text' || field.kind === 'url' || field.kind === 'selector' || field.kind === 'locator') &&
       field.templated &&
+      !field.perItem &&
       typeof merged[field.key] === 'string'
     ) {
-      merged[field.key] = render(merged[field.key] as string, input);
+      merged[field.key] = render(merged[field.key] as string, input, env);
     }
     if (field.kind === 'rows' && Array.isArray(merged[field.key])) {
       merged[field.key] = (merged[field.key] as Record<string, unknown>[]).map((row) => {
         const out: Record<string, string> = {};
         for (const column of field.columns) {
           const text = String(row[column.key] ?? '');
-          out[column.key] = column.templated ? render(text, input) : text;
+          out[column.key] = column.templated ? render(text, input, env) : text;
         }
         return out;
       });
