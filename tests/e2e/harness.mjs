@@ -64,6 +64,8 @@ export async function launch() {
     await page.goto(`chrome-extension://${extensionId}/editor.html`);
     return page;
   }
+  // The first-run "Try it" card floats over the canvas; specs other than editor-ux do not want it.
+  await worker.evaluate(() => chrome.storage.local.set({ 'bf:onboarding': { tryItDismissed: true } }));
   let editor = await openEditor();
 
   let failures = 0;

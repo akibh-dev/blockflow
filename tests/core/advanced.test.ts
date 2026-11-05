@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createDefaultRegistry } from '../../src/core/blocks';
 import { textToBase64 } from '../../src/core/blocks/uploadFile';
 import { FakeHost, flow, harness } from '../helpers/fakeHost';
 
@@ -74,5 +75,14 @@ describe('Wait for Popup, Dialogs, Run Script, Wait For response', () => {
     const h = harness(chain({ id: 'c', type: 'click', config: { locator: '#a' }, step: { realInput: true } }, { id: 'd', type: 'click', config: { locator: '#b' } }));
     await h.runner.runOnce();
     expect(h.host.realInputs).toEqual([true, false]);
+  });
+
+  it('only blocks that send actions to the page offer the real-input setting', () => {
+    const offered = createDefaultRegistry()
+      .list()
+      .filter((def) => def.realInput)
+      .map((def) => def.type)
+      .sort();
+    expect(offered).toEqual(['check', 'click', 'fill', 'fill-form', 'paginate', 'press-key', 'select-option']);
   });
 });

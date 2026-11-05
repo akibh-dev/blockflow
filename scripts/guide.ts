@@ -22,6 +22,7 @@ function fieldJson(field: FieldSpec) {
     kind: field.kind,
     ...(field.required ? { required: true } : {}),
     ...('templated' in field && field.templated ? { templated: true } : {}),
+    ...('perItem' in field && field.perItem ? { perItem: true } : {}),
     ...(field.kind === 'select' ? { options: field.options.map((option) => option.value) } : {}),
     ...(field.kind === 'number' ? { min: field.min, max: field.max } : {}),
     ...(field.kind === 'rows' ? { columns: field.columns.map((column) => ({ key: column.key, label: column.label, ...(column.templated ? { templated: true } : {}) })) } : {}),
@@ -40,6 +41,7 @@ function blockJson(def: AnyBlockDefinition) {
     canTakeInput: Boolean(def.run),
     ports: nodePorts(def, {}),
     timeoutSeconds: def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS,
+    ...(def.realInput ? { realInput: true } : {}),
     defaultConfig: def.defaultConfig,
     fields: def.fields.map(fieldJson),
     outputs: def.outputs,
@@ -67,22 +69,39 @@ function cell(text: string): string {
   return text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
 }
 
+/** A block's heading in blocks.md. */
+function blockHeading(def: AnyBlockDefinition): string {
+  return `${def.icon} ${def.label} — \`${def.type}\``;
+}
+
+/**
+ * GitHub's anchor for a heading (github-slugger): lowercase, drop everything but letters, marks,
+ * numbers, `_`, `-` and spaces, then spaces to dashes. Emoji go but the space after them stays, hence
+ * the leading dash (`-timer--timer`); variation selectors (U+FE0F, a mark) stay, hence the encoding.
+ */
+function githubAnchor(heading: string): string {
+  const slug = heading.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '').replace(/ /g, '-');
+  return encodeURIComponent(slug);
+}
+
 /** One block's section in blocks.md: heading, description, ports, timeout, settings table, outputs. */
 function blockMarkdown(def: AnyBlockDefinition): string {
   const ports = nodePorts(def, {});
   const lines = [
-    `## ${def.icon} ${def.label} — \`${def.type}\``,
+    `## ${blockHeading(def)}`,
     '',
     def.description,
     '',
     `- Outputs (ports): ${ports.map((port) => `\`${port}\``).join(', ')}${ports.includes('error') ? '' : ' (plus `error` when step.onError is "port")'}`,
     `- Default timeout: ${def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS}s`,
     `- Can start a workflow: ${def.start || def.trigger ? 'yes (has its own schedule/trigger)' : def.run ? 'yes (runs once with empty data)' : 'no'}`,
+    ...(def.realInput ? ['- Step setting `realInput` ("Use real mouse and keyboard") applies to this block'] : []),
     '',
     '| Setting (`config` key) | Type | Default | Notes |',
     '| --- | --- | --- | --- |',
     ...def.fields.map((field) => {
-      const flags = [field.required ? 'required' : '', 'templated' in field && field.templated ? 'supports `{{…}}`' : ''].filter(Boolean).join(', ');
+      const templated = 'templated' in field && field.templated ? ('perItem' in field && field.perItem ? 'supports `{{…}}` per item' : 'supports `{{…}}`') : '';
+      const flags = [field.required ? 'required' : '', templated].filter(Boolean).join(', ');
       const value = (def.defaultConfig as Record<string, unknown>)[field.key];
       return `| \`${field.key}\` (${cell(field.label)}) | ${cell(kindText(field))} | \`${cell(JSON.stringify(value ?? null))}\` | ${cell([flags, field.help ?? ''].filter(Boolean).join('. '))} |`;
     }),
@@ -195,7 +214,7 @@ const files: Record<string, string> = {
       (category) =>
         `- **${CATEGORY_LABELS[category]}**: ${blocks
           .filter((def) => def.category === category)
-          .map((def) => `[${def.label}](#${def.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}--${def.type.replace(/[^a-z0-9]+/g, '-')}) \`${def.type}\``)
+          .map((def) => `[${def.label}](#${githubAnchor(blockHeading(def))}) \`${def.type}\``)
           .join(' · ')}`,
     ),
     '',

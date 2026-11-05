@@ -25,7 +25,6 @@ export default defineConfig({
       'unlimitedStorage',
       'tabs',
       'scripting',
-      'activeTab',
       'notifications',
       'webRequest',
       'downloads',

@@ -25,30 +25,32 @@ describe('diffWorkflows', () => {
     before.enabled = false;
     const after = clone(before);
     after.enabled = true;
-    expect(diffWorkflows([before], [after])).toEqual({ start: [after.id], restart: [], stop: [] });
+    expect(diffWorkflows([before], [after])).toEqual({ start: [after.id], restart: [], stop: [], removed: [] });
   });
 
   it('starts an enabled workflow that did not exist before', () => {
     const wf = base();
-    expect(diffWorkflows(undefined, [wf])).toEqual({ start: [wf.id], restart: [], stop: [] });
+    expect(diffWorkflows(undefined, [wf])).toEqual({ start: [wf.id], restart: [], stop: [], removed: [] });
   });
 
   it('stops a workflow that was disabled or deleted', () => {
     const before = base();
     const disabled = clone(before);
     disabled.enabled = false;
-    expect(diffWorkflows([before], [disabled])).toEqual({ start: [], restart: [], stop: [before.id] });
-    expect(diffWorkflows([before], [])).toEqual({ start: [], restart: [], stop: [before.id] });
+    expect(diffWorkflows([before], [disabled])).toEqual({ start: [], restart: [], stop: [before.id], removed: [] });
+    expect(diffWorkflows([before], [])).toEqual({ start: [], restart: [], stop: [before.id], removed: [before.id] });
+    // Deleting a workflow that is off: nothing to stop, but its state and timers go.
+    expect(diffWorkflows([disabled], [])).toEqual({ start: [], restart: [], stop: [], removed: [before.id] });
   });
 
   it('restarts (without running plain start blocks) when a start block changes', () => {
     const before = base();
     const edited = clone(before);
     edited.nodes[0]!.config = { seconds: 45 };
-    expect(diffWorkflows([before], [edited])).toEqual({ start: [], restart: [before.id], stop: [] });
+    expect(diffWorkflows([before], [edited])).toEqual({ start: [], restart: [before.id], stop: [], removed: [] });
     const newRoot = clone(before);
     newRoot.edges = [];
-    expect(diffWorkflows([before], [newRoot])).toEqual({ start: [], restart: [before.id], stop: [] });
+    expect(diffWorkflows([before], [newRoot])).toEqual({ start: [], restart: [before.id], stop: [], removed: [] });
   });
 
   it('does not restart when only later blocks change: runs read them from storage', () => {
@@ -56,7 +58,7 @@ describe('diffWorkflows', () => {
     const edited = clone(before);
     edited.nodes[1]!.config = { url: 'https://example.org' };
     edited.nodes[1]!.step = { retries: 2 };
-    expect(diffWorkflows([before], [edited])).toEqual({ start: [], restart: [], stop: [] });
+    expect(diffWorkflows([before], [edited])).toEqual({ start: [], restart: [], stop: [], removed: [] });
   });
 
   it('does not restart when only positions or the name change', () => {
@@ -64,7 +66,7 @@ describe('diffWorkflows', () => {
     const moved = clone(before);
     moved.nodes[0]!.position = { x: 999, y: 999 };
     moved.name = 'Renamed';
-    expect(diffWorkflows([before], [moved])).toEqual({ start: [], restart: [], stop: [] });
+    expect(diffWorkflows([before], [moved])).toEqual({ start: [], restart: [], stop: [], removed: [] });
   });
 
   it('ignores disabled workflows', () => {
@@ -72,8 +74,8 @@ describe('diffWorkflows', () => {
     before.enabled = false;
     const edited = clone(before);
     edited.nodes[0]!.config = { seconds: 45 };
-    expect(diffWorkflows([before], [edited])).toEqual({ start: [], restart: [], stop: [] });
-    expect(diffWorkflows(undefined, undefined)).toEqual({ start: [], restart: [], stop: [] });
+    expect(diffWorkflows([before], [edited])).toEqual({ start: [], restart: [], stop: [], removed: [] });
+    expect(diffWorkflows(undefined, undefined)).toEqual({ start: [], restart: [], stop: [], removed: [] });
   });
 });
 

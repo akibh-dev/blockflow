@@ -30,7 +30,13 @@ The page has five areas (full tour: [Using the Editor](Using-the-Editor.md)):
 
 ## 2. Run a template
 
-Templates are ready-made workflows. Start with one that works against a real public site:
+**Quickest start:** the **Try BlockFlow in a minute** card at the top right of the canvas (first run). In a
+terminal in the BlockFlow folder run `npm run playground` (it serves a practice page at
+`http://localhost:7357/playground.html`), click **Create the Try-it workflow**, then **▶ Run**: a window opens,
+the workflow clicks a button, fills a name, picks a colour, submits and checks the greeting. Close the card
+with × when you are done; it does not come back.
+
+Templates are ready-made workflows. Next, one that works against a real public site:
 
 1. In the sidebar, next to **Workflows**, click **+ New ▾** and choose **Dark mode on akibh.dev**.
    It opens on the canvas: **Timer → Read Element → If → Notify**.

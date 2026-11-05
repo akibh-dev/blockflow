@@ -35,7 +35,7 @@ workflow timing goes through the scheduler.
 | `popups.ts` | Tabs opened by pages | `recordPopup`, `waitForPopup` | background, host |
 | `prompts.ts` | Manual Step | `askUser`, `answerPrompt`, `promptRunId`, `clearStalePrompts`, `PendingPrompt` | host, background, editor |
 | `picking.ts` | Background side of the element picker | `startPicking`, `finishPicking`, `cancelPicking` | background |
-| `recording.ts` | Background side of the recorder | `startRecording`, `recordStep`, `onRecordedTabUpdated`, `stopRecording`, `loadRecording`, `clearRecording`, `RecordingState` | background, editor (type) |
+| `recording.ts` | Background side of the recorder | `startRecording`, `recordStep`, `onRecordedTabUpdated`, `stopRecording`, `loadRecording`, `RecordingState` | background, editor (type) |
 | `blobStore.ts` | IndexedDB: screenshots, datasets | `saveScreenshot`, `loadScreenshot`, `readDataset`, `writeDataset`, `listDatasets`, `deleteDataset`, … | host, editor |
 | `stores.ts` | `storage.local` for workflows, logs, runs | `loadWorkflows`, `saveWorkflows`, `appendLog`, `saveRun`, `updateRuns`, … | background, editor |
 
@@ -60,10 +60,10 @@ workflow timing goes through the scheduler.
 | `page.dialogs(tabId, opts)` | `executeScript` in `world: 'MAIN'`: installs `window.alert/confirm/prompt` overrides once per page (state in `window.__blockflowDialogs`), updates mode/text, returns the dialog log. `{read: true}` only reads. | `scripting` (Chrome 102+, Firefox 128+ for `world`) |
 | `page.runScript(tabId, code, data)` | `browser.userScripts.execute({ js: [{code}], world: 'USER_SCRIPT' })` with the code wrapped in an async IIFE and `const data = <JSON>`. Throws a long "needs Chrome 135…" message when the API is missing or blocked. | optional `userScripts`, Chrome 135+, "Allow User Scripts" toggle |
 | `scheduler` | the one passed in | `alarms`, `storage` |
-| `state` | `StorageState`: `storage.local` under `bf:state:<key>` | `storage` |
+| `state` | `StorageState`: `storage.local` under `bf:state:<key>` (a deleted workflow's keys are removed by `clearWorkflowState` in `stores.ts`) | `storage` |
 | `workflows.get(id)` | `loadWorkflows()` and find | `storage` |
 | `secrets.all()` | `bf:secrets` | `storage` |
-| `screenshots.capture(tabId, runId)` | Active tab: `tabs.captureVisibleTab` (JPEG 60). Background tab: `captureWithDebugger` (null without the permission). Saved with `saveScreenshot`; returns the id. | `<all_urls>`/`activeTab`; `debugger` for background tabs |
+| `screenshots.capture(tabId, runId)` | Active tab: `tabs.captureVisibleTab` (JPEG 60). Background tab: `captureWithDebugger` (null without the permission). Saved with `saveScreenshot`; returns the id. | `<all_urls>`; `debugger` for background tabs |
 | `prompt.ask` | `prompts.askUser` | `notifications`, `storage` |
 | `datasets.read/write` | `blobStore` | IndexedDB, `unlimitedStorage` |
 | `downloads.save(filename, content, mime)` | `downloads.download` with a `blob:` URL where `URL.createObjectURL` exists (Firefox), else a `data:` URL (Chrome's worker). `conflictAction: 'uniquify'`; `\ / : * ? " < > |` in names become `-`. | `downloads` |
@@ -215,7 +215,7 @@ Messages to the editor go through `runtime.sendMessage`; errors (editor closed) 
 | `recordStep(step, fromTabId)` | Append the step if recording and the sender is the recording tab. |
 | `onRecordedTabUpdated(tabId, change)` | A new URL adds `{kind: 'navigated', url}`; `status: 'complete'` re-injects the recorder. |
 | `stopRecording()` | `status: 'stopped'`; calls `__blockflowRecorder.stop()` in the page. The editor then converts the steps and deletes the key. |
-| `loadRecording()`, `clearRecording()` | Read / delete the key. |
+| `loadRecording()` | Read the key (the editor deletes it after converting). |
 
 Writes go through a promise queue (`update`) because steps arrive in bursts.
 
@@ -229,7 +229,7 @@ Database `blockflow`, version 2, shared by the worker and extension pages (same 
 | `datasets` | `name` | `Dataset {name, rows, updatedAt}` | `unlimitedStorage` |
 
 Helpers: `openDb()` (cached promise, reset on failure), `done(request)`, `store(name, mode)`. Data functions:
-`saveScreenshot`, `loadScreenshot`, `clearScreenshots` (unused), `readDataset`, `writeDataset(name, rows,
+`saveScreenshot`, `loadScreenshot`, `readDataset`, `writeDataset(name, rows,
 'append' | 'replace') → row count`, `listDatasets`, `deleteDataset`.
 
 ## stores.ts (storage.local)
@@ -261,7 +261,7 @@ Shapes and lifecycles: [Storage Keys](Storage-Keys.md).
 - Chrome sorts object keys of `executeScript` results; the agent returns tables as `{columns, values}`.
 - `watchNetwork` logs and the `answers` map are in memory: a worker restart loses them (a run in progress
   keeps the worker alive, so this only matters after a crash).
-- `bf:state:*` entries are never deleted, even when a workflow or block is.
+- `bf:state:*` entries of a block are kept when only that block is removed (they go with the workflow).
 
 ## See also
 

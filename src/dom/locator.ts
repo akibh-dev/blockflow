@@ -159,7 +159,7 @@ function parseRole(body: string): RoleQuery {
     else if (key === 'checked') query.checked = value === undefined || unquote(value).value !== 'false';
     else if (key === 'level') query.level = Number(unquote(value ?? '').value);
     else if (key === 'include-hidden') query.includeHidden = true;
-    else throw new LocatorError(`Unknown role option [${key}]. Use name, exact, checked, level.`);
+    else throw new LocatorError(`Unknown role option [${key}]. Use name, exact, checked, level, include-hidden.`);
   }
   if (rest.trim()) throw new LocatorError(`Invalid role locator: role=${body}`);
   if (nameBody !== undefined) {

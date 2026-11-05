@@ -18,7 +18,7 @@ export interface WorkflowActions {
   onExport(ids: string[]): void;
   /** Download the workflow as a Playwright test (.spec.ts). */
   onExportPlaywright(id: string): void;
-  /** Delete after a `confirm()`. Deleting the last workflow leaves a fresh empty one. */
+  /** Delete after a confirm dialog. Deleting the last workflow leaves a fresh empty one. */
   onDelete(id: string): void;
   /** Import `.blockflow.json` files; imported workflows are added switched off. */
   onImport(files: FileList | null): void;

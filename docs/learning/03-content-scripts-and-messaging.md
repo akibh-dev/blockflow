@@ -149,6 +149,12 @@ const [{ result }] = await chrome.scripting.executeScript({
 The function is *copied* into the page, so it cannot use variables from your popup (closures do not
 survive); pass data through the `args: [...]` option instead. The return value must be JSON-able.
 
+Some pages can never be scripted, whatever your permissions: `chrome://` pages, the Web Store, and every
+`chrome-extension://` page, **your own extension's pages included** (`executeScript` fails with "Cannot
+access contents of url chrome-extension://…"). That is why BlockFlow's practice page,
+`docs/manual-test/playground.html`, is served over http by `npm run playground` instead of being
+shipped inside the extension: blocks have to inject the page agent to click and fill there.
+
 ## Exercises
 
 1. Make *Highlight* toggle. Show the count of **external** links only (`link.hostname !== location.hostname`).

@@ -87,7 +87,7 @@ All registered synchronously at the top level of `defineBackground`.
 | `webNavigation.onCreatedNavigationTarget` | `recordPopup(tabId, sourceTabId)` | For Wait for Popup. Not `tabs.onCreated`: its `openerTabId` is empty for popup windows and names the active tab for links opened from a background tab. |
 | `tabs.onUpdated` | `onRecordedTabUpdated(tabId, change)` when `change.url` or `status === 'complete'` | Recorder: adds `navigated` steps and re-injects the recorder after a load. |
 | `contextMenus.onClicked` | `onMenuClicked(...)` | Context Menu trigger. |
-| `storage.onChanged` (area `local`, key `bf:workflows`) | `diffWorkflows(old, new)` → `stopWorkflow` for `stop`, then `startWorkflow` for `start`; `syncContextMenus()` if either list is non-empty | The editor never messages the worker to start or stop: saving is enough. Position/name edits produce an empty diff. |
+| `storage.onChanged` (area `local`, key `bf:workflows`) | `diffWorkflows(old, new)` → `stopWorkflow` for `stop`; for `removed` (deleted, on or off) also `scheduler.clearPrefix` of its timers and `clearWorkflowState` (its `bf:state:<id>::*` keys); then `startWorkflow` for `start`; `syncContextMenus()` if either list is non-empty | The editor never messages the worker to start or stop: saving is enough. Position/name edits produce an empty diff. |
 | `notifications.onButtonClicked` | Manual Step: button 0 = Continue (`answerPrompt(runId, true)`), button 1 = Fail | Only for notification ids `bf-prompt:<runId>`. |
 | `notifications.onClicked` | Manual Step: Continue | Firefox has no notification buttons, so a click means Continue. |
 | `action.onClicked` | `openEditor()` | Toolbar button. No popup is defined. |
@@ -115,7 +115,7 @@ Full payloads in [Message Protocol](Message-Protocol.md).
 | Install (first time) | Samples saved → `storage.onChanged` starts the enabled ones, **and** `onInstalled` calls `startAllEnabled()`. Both call `start()`, which clears timers first, so the second call replaces the first's timers. |
 | Browser start | `onStartup` → `startAllEnabled()`. Timers also come back through `restoreAll()`. |
 | Worker wakes up (alarm, message, navigation) | Nothing is restarted. Only the event's handler runs, on a fresh runner. |
-| Editor saves a workflow | `diffWorkflows`: newly enabled or behaviour-changed → `start()`; disabled or deleted → `stopWorkflow()`. |
+| Editor saves a workflow | `diffWorkflows`: newly enabled or behaviour-changed → `start()`; disabled or deleted → `stopWorkflow()`; deleted → its timers and block state are removed too. |
 | Run button | `bf:run-workflow` → `runOnce()` with trigger `manual`; schedules nothing. |
 | Stop button | `bf:stop-run` → run id in `cancelRequests`; the engine checks `isCancelled` between steps. |
 | Timer due | `onAlarm` → `handleTimer(key)`; disabled/deleted workflow → timer cleared. |

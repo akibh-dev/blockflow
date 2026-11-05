@@ -240,7 +240,8 @@ A spec that throws is reported as `<name>: spec crashed` and the run goes on wit
 | Find the extension | Waits for the service worker; its URL gives the extension id; opens `chrome-extension://<id>/editor.html` |
 | Run a workflow | `run(wf)` sends `{ type: 'bf:run-workflow', workflow }` from the editor page, then polls `bf:runs` in `chrome.storage.local` every 200 ms until a finished run appears (90 s limit). See [Message Protocol](Message-Protocol.md) and [Storage Keys](Storage-Keys.md) |
 | Seed state | `seedWorkflows(list)` closes the editor (it saves on close), writes `bf:workflows`, reopens it. Secrets go to `bf:secrets` |
-| Report | `check(name, ok, detail)` prints ✓/✗; exit code 1 if any check failed. Last check: no uncaught errors in the editor page. A line starting with `!` is a known bug that is printed but not counted |
+| First-run card | Sets `bf:onboarding` to dismissed before the editor opens, so the "Try it" card does not cover the canvas (the `editor-ux` spec brings it back) |
+| Report | `check(name, ok, detail)` prints ✓/✗; exit code 1 if any check failed. Last check: no uncaught errors in the editor page. |
 | Other helpers | `workflow(name, nodes, edges?)` (ids `e2e-1`, `e2e-2`, …; a straight line by default), `step(record, nodeId)`, `summary(record)`, `openEditor()`, `context`, `worker` (evaluate `chrome.*` in the service worker), `editor` (the current editor page) |
 
 Scenarios by spec:
@@ -268,12 +269,13 @@ Scenarios by spec:
 | Schedule | none | Switching a workflow on (`bf:workflows`, `enabled: true`) creates alarm `bf::<id>::<node>::next` at the planned minute (`chrome.alarms.getAll()`); switching off clears it |
 | Context Menu | `meta.html` | The menu item exists (probed by creating a duplicate id), `bf:e2e-menu-click` runs the flow on that tab with the selection, switching off removes the item |
 | Watch Element | `ticker.html` | An enabled watcher (every 2 s, no reload) notices the self-updating price and starts a run with `previous` and `value` |
-| Navigate | `spa.html` | goto and reload; back/forward (known bug: Chromium's `tabs.goBack` finds no entry after a goto, printed as `!`) |
+| Navigate | `spa.html` | goto, reload, back and forward (back/forward fall back to `history.back()` in the page when Chromium's `tabs.goBack` skips entries added without a user gesture) |
 | Press Key | `keys.html` | Control+A selects the field (its `select` event fires), Enter submits the form |
 | Page Info | `meta.html` | Title, description, canonical, lang, meta tags, JSON-LD (the invalid block skipped), link count; localStorage one key / all; sessionStorage; cookies |
 | Stop | none | Pass ends the path with the run passed; fail fails the run with the templated message |
 | Repeat, Filter | none | Data Table → Filter → Repeat: `each` three times, then `done` |
 | Notify | none | The run passes and `chrome.notifications.getAll()` in the worker lists the notification |
+| Editor UX (`editor-ux`) | editor UI; `docs/manual-test/playground.html` via `scripts/playground.mjs` on port 7357 | In-editor toasts and confirm/input dialogs (no native ones), the All workflows switch and Turn all on with a problem workflow, `bf:state` cleanup on delete, recorder start-URL check, real-input setting only on page actions, undo per workflow, paste at the mouse, the Try it card and the playground template passing |
 
 The Playwright export step writes `.output-e2e/playwright/exported.spec.ts` plus a config and runs it with
 `LOGINPASSWORD` set, so `@playwright/test` is a dev dependency only for this.
@@ -312,10 +314,13 @@ Exports `PASSWORD` (`Op3n-Sesame!`, the only password the fixture login accepts)
 | `keys.html` | Search form (`label=Search`) whose submit writes `submitted: <value>` to `#status`; selecting the field writes `selected N of M` |
 | `ticker.html` | `#price` counts up from 100 every 1.5 s, by itself |
 
-## Manual test page
+## Manual test pages
 
-[docs/manual-test/clock.html](../manual-test/clock.html) shows the load time (changes on every reload) and a
-line that never changes. Serve it (`npx serve docs/manual-test`) and follow README
+[docs/manual-test/playground.html](../manual-test/playground.html) has things to watch, click and fill; the
+editor's "Try it" card and the `playground-tour` template use it, and the `editor-ux` e2e spec runs that
+template against it. [docs/manual-test/clock.html](../manual-test/clock.html) shows the load time (changes on
+every reload) and a line that never changes. Serve both with `npm run playground`
+(`http://localhost:7357`, [scripts/playground.mjs](../../scripts/playground.mjs)) and follow README
 [Try it end to end](../../README.md#try-it-end-to-end) to check Watch Element firing on change and not firing
 on the stable line. Results of manual runs are logged in README
 [What has been verified](../../README.md#what-has-been-verified).

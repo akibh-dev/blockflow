@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
+import { toast } from './Dialogs';
 
 type Permission = 'debugger' | 'userScripts';
 
@@ -13,7 +14,7 @@ export async function requestPermission(permission: Permission): Promise<boolean
   try {
     return await browser.permissions.request({ permissions: [permission] });
   } catch {
-    window.alert(`This browser does not offer the "${permission}" permission. It works in Chrome, Edge and Brave.`);
+    toast(`This browser does not offer the "${permission}" permission. It works in Chrome, Edge and Brave.`, 'error');
     return false;
   }
 }

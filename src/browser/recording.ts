@@ -96,8 +96,3 @@ export async function stopRecording(): Promise<void> {
     })
     .catch(() => {});
 }
-
-/** Deletes `bf:recording`. (The editor currently removes the key itself.) */
-export async function clearRecording(): Promise<void> {
-  await browser.storage.local.remove(STORAGE_KEYS.recording);
-}

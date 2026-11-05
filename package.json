@@ -24,6 +24,7 @@
     "e2e": "BF_E2E=1 wxt build && node tests/e2e/run.mjs",
     "e2e:run": "node tests/e2e/run.mjs",
     "e2e:firefox": "BF_E2E=1 wxt build -b firefox && node tests/e2e/firefox.mjs",
+    "playground": "node scripts/playground.mjs",
     "guide:sync": "vite-node scripts/guide.ts",
     "guide:check": "vite-node scripts/guide.ts -- --check",
     "wiki:check": "node scripts/wiki.mjs --check",

@@ -35,3 +35,8 @@ export function parseTimerKey(key: string): ParsedTimerKey | null {
 export function stateKey(workflowId: string, nodeId: string, key: string): string {
   return [workflowId, nodeId, key].join(SEP);
 }
+
+/** Start of every `stateKey` of one workflow, to remove its block state when it is deleted. */
+export function workflowStatePrefix(workflowId: string): string {
+  return `${workflowId}${SEP}`;
+}

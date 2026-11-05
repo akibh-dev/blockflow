@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { MAX_LOG_ENTRIES, MAX_RUNS, STORAGE_KEYS } from '../shared/keys';
 import type { RunRecord } from '../core/runs';
+import { workflowStatePrefix } from '../core/timerKey';
 import type { LogEntry, Workflow } from '../core/types';
 
 // --- workflows -------------------------------------------------------------
@@ -15,6 +16,16 @@ export async function loadWorkflows(): Promise<Workflow[]> {
 /** Replaces `bf:workflows`. The worker reacts through `storage.onChanged`. */
 export async function saveWorkflows(workflows: Workflow[]): Promise<void> {
   await browser.storage.local.set({ [STORAGE_KEYS.workflows]: workflows });
+}
+
+/**
+ * Removes a deleted workflow's block state (`bf:state:<workflowId>::…`, see `stateKey`). Its timers
+ * are cleared through the scheduler.
+ */
+export async function clearWorkflowState(workflowId: string): Promise<void> {
+  const prefix = STORAGE_KEYS.statePrefix + workflowStatePrefix(workflowId);
+  const keys = Object.keys(await browser.storage.local.get(null)).filter((key) => key.startsWith(prefix));
+  if (keys.length > 0) await browser.storage.local.remove(keys);
 }
 
 // --- logs ------------------------------------------------------------------

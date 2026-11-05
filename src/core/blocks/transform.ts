@@ -1,4 +1,4 @@
-import { DATA_ACCENT, valueAt } from './dataCommon';
+import { DATA_ACCENT, evalEnv, valueAt } from './dataCommon';
 import type { BlockDefinition, Row } from '../types';
 
 /** Transform settings: `values` rows are `{name, expression}`, evaluated top to bottom. */
@@ -39,7 +39,7 @@ export const transformBlock: BlockDefinition<TransformConfig> = {
     for (const row of ctx.config.values ?? []) {
       const name = (row.name ?? '').trim();
       if (!name) continue;
-      data = { ...data, [name]: valueAt(row.expression ?? '', data, name) };
+      data = { ...data, [name]: valueAt(row.expression ?? '', data, name, evalEnv(ctx)) };
     }
     return data;
   },

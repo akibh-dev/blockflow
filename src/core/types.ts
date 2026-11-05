@@ -116,6 +116,11 @@ export interface TextField extends FieldBase {
   multiline?: boolean;
   /** When true, `{{value}}` placeholders are filled from the incoming payload at run time. */
   templated?: boolean;
+  /**
+   * With `templated`: the block renders the value itself, once per list item (with `{{item}}` in
+   * scope), so the engine leaves it as typed. The editor still offers and checks `{{…}}`.
+   */
+  perItem?: boolean;
   /** For kind "selector": config key the picker also fills with the page URL. */
   pickerUrlKey?: string;
   /**
@@ -277,6 +282,12 @@ export interface BlockDefinition<C extends object = BlockConfig> {
 
   /** Default timeout for this kind of block, in seconds (engine default: 60). Page actions use 30. */
   timeoutSeconds?: number;
+
+  /**
+   * Its page actions honour the step setting "Use real mouse and keyboard" (`StepSettings.realInput`,
+   * handed to `Host.page.act`). The editor offers that setting only on these blocks.
+   */
+  realInput?: boolean;
 
   /** Optional browser permissions this block needs (the editor offers a Grant button). */
   permissions?: ('debugger' | 'userScripts')[];

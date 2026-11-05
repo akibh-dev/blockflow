@@ -1,5 +1,5 @@
 import { toCsv } from '../csv';
-import { DATA_ACCENT, valueAt } from './dataCommon';
+import { DATA_ACCENT, evalEnv, valueAt } from './dataCommon';
 import type { BlockDefinition } from '../types';
 
 /** Download settings. `value` is an expression; `dataset` / `filename` are templated. */
@@ -47,7 +47,7 @@ export const downloadBlock: BlockDefinition<DownloadConfig> = {
   outputs: [{ key: 'file', description: 'The file name used.' }],
 
   async run(ctx, input) {
-    const data = ctx.config.from === 'dataset' ? await ctx.host.datasets.read(ctx.config.dataset.trim()) : valueAt(ctx.config.value, input, 'Value');
+    const data = ctx.config.from === 'dataset' ? await ctx.host.datasets.read(ctx.config.dataset.trim()) : valueAt(ctx.config.value, input, 'Value', evalEnv(ctx));
     const { format } = ctx.config;
     const content =
       format === 'json'

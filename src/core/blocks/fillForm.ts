@@ -20,6 +20,7 @@ export const fillFormBlock: BlockDefinition<FillFormConfig> = {
   icon: '📋',
   accent: PAGE_ACCENT,
   defaultConfig: { tab: 'main', fields: [], submit: '' },
+  realInput: true,
   timeoutSeconds: PAGE_TIMEOUT_SECONDS,
   fields: [
     {

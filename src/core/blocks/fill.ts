@@ -18,6 +18,7 @@ export const fillBlock: BlockDefinition<FillConfig> = {
   icon: '⌨️',
   accent: PAGE_ACCENT,
   defaultConfig: { tab: 'main', locator: '', value: '', mode: 'fill' },
+  realInput: true,
   timeoutSeconds: PAGE_TIMEOUT_SECONDS,
   fields: [
     locatorField('locator', 'Field'),

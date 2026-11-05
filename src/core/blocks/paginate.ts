@@ -22,6 +22,7 @@ export const paginateBlock: BlockDefinition<PaginateConfig> = {
   accent: PAGE_ACCENT,
   ports: ['each', 'done'],
   defaultConfig: { tab: DEFAULT_TAB, next: 'role=link[name="Next"]', maxPages: 10 },
+  realInput: true,
   timeoutSeconds: 1800,
   fields: [
     { ...locatorField('next', 'Next button'), placeholder: 'role=link[name="Next"]  ·  .pagination .next' },

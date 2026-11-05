@@ -71,11 +71,6 @@ export async function loadScreenshot(id: string): Promise<Screenshot | undefined
   return (await done((await store(SCREENSHOTS)).get(id))) as Screenshot | undefined;
 }
 
-/** Deletes every screenshot. Not called anywhere yet. */
-export async function clearScreenshots(): Promise<void> {
-  await done((await store(SCREENSHOTS, 'readwrite')).clear());
-}
-
 /** A named table saved by Save to Dataset; rows are whatever the block wrote. */
 export interface Dataset {
   name: string;

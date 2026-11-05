@@ -20,6 +20,7 @@ export const clickBlock: BlockDefinition<ClickConfig> = {
   icon: '👆',
   accent: PAGE_ACCENT,
   defaultConfig: { tab: 'main', locator: '', action: 'click', force: false },
+  realInput: true,
   timeoutSeconds: PAGE_TIMEOUT_SECONDS,
   fields: [
     locatorField(),

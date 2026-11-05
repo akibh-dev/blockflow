@@ -3,7 +3,7 @@ import { createExtensionHost } from '../browser/host';
 import { createBrowserScheduler } from '../browser/scheduler';
 import { cancelPicking, finishPicking, startPicking } from '../browser/picking';
 import { answerPrompt, clearStalePrompts, promptRunId } from '../browser/prompts';
-import { appendLog, loadWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
+import { appendLog, clearWorkflowState, loadWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
 import { createDefaultRegistry } from '../core/blocks';
 import { menuClickPayload, menuItemFor, parseMenuItemId } from '../core/blocks/contextMenu';
 import { WorkflowRunner } from '../core/engine';
@@ -244,12 +244,18 @@ export default defineBackground(() => {
     if (area !== 'local') return;
     const change = changes[STORAGE_KEYS.workflows];
     if (!change) return;
-    const { start, restart, stop } = diffWorkflows(
+    const { start, restart, stop, removed } = diffWorkflows(
       change.oldValue as Workflow[] | undefined,
       change.newValue as Workflow[] | undefined,
     );
     void (async () => {
       for (const id of stop) await stopWorkflow(id);
+      // A deleted workflow leaves nothing behind: timers (also a Run-button delay of a workflow
+      // that was off) and the block state its blocks kept.
+      for (const id of removed) {
+        await host.scheduler.clearPrefix(workflowTimerPrefix(id));
+        await clearWorkflowState(id);
+      }
       for (const id of start) await startWorkflow(id, true);
       for (const id of restart) await startWorkflow(id, false);
     })().catch(report('workflow change'));

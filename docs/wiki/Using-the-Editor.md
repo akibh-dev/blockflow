@@ -30,17 +30,22 @@ At the top of the sidebar, under **Workflows**:
 - A **Search…** box appears once you have more than four workflows.
 - Each row: the **dot** switches the workflow On (green) or Off (grey); click the name to open it; double-click to
   rename. On hover: ✎ rename, ⧉ duplicate, ⬇ export to a file, 🎭 download as a Playwright test, 🗑 delete
-  (asks first; cannot be undone).
+  (asks first in a small dialog, **Delete** or **Cancel**/Esc; cannot be undone). Deleting a workflow also
+  removes what its blocks remembered (Watch Element's last value and the like) and its pending timers.
 
 Switching a workflow On is refused, with the reasons, while it has problems or no blocks. Duplicated and
 imported workflows always arrive **Off** with fresh ids.
 
+Messages (why something was refused, import results, …) appear as small notes in the bottom right corner and
+go away by themselves; × closes one sooner.
+
 ## All workflows page
 
-Header → **All workflows (N)**: a table of every workflow with an On switch, name (and problem count), its
-blocks as icons, last activity, and **Edit**, **Duplicate**, **Export**, **Playwright**, **Delete**. The bar
-on top has search, **+ New ▾**, **Import**, **Export all** (or **Export selected (N)** when you tick rows),
-**Turn all on** and **Turn all off**.
+Header → **All workflows (N)**: a table of every workflow with an On switch (greyed out, "Fix the problems
+first", while the workflow has problems), name (and problem count), its blocks as icons, last activity (when
+its latest run ended, and its result), and **Edit**, **Duplicate**, **Export**, **Playwright**, **Delete**.
+The bar on top has search, **+ New ▾**, **Import**, **Export all** (or **Export selected (N)** when you tick
+rows), **Turn all on** (workflows with problems stay off; one note names them) and **Turn all off**.
 
 ## Block palette
 
@@ -86,7 +91,8 @@ Select one block to see, from top to bottom:
 5. **Last run**: status, duration, attempts, which output it took, the error, a screenshot if one was taken,
    and the full **Input** and **Output** data. Shows the run you picked in the Runs tab, or the latest.
 6. **Step settings**: On error, Retries, Timeout, Screenshot of the tab, Use real mouse and keyboard
-   (debugger), Disabled, Note. Opens by itself and says "(changed)" when any is set. Meaning:
+   (debugger; only on blocks that act on the page: Click, Fill, Fill Form, Select Option, Check, Press Key,
+   Paginate), Disabled, Note. Opens by itself and says "(changed)" when any is set. Meaning:
    [Concepts](Concepts.md#step-settings).
 7. **Data this block passes on**: the keys it adds, as `{{key}}`.
 8. **Delete block**.
@@ -135,8 +141,17 @@ recorded: the block uses `{{secret.password}}`, and the editor reminds you to cr
 **+ New ▾ → From a template** (sidebar or All workflows) creates a workflow from one of the
 [guide's examples](../guide/README.md#16-examples): API uptime check, Checkout test (adds two workflows: a
 reusable login and a test that calls it), Daily API snapshot, Dark mode on akibh.dev, Data-driven login test,
-Login test, Price drop alert, Scrape all pages to CSV. Most use example URLs; change URLs and locators to your
-site. Template workflows start **Off**.
+Login test, Price drop alert, Scrape all pages to CSV, Try it: playground tour. Most use example URLs; change
+URLs and locators to your site. Template workflows start **Off**.
+
+### The Try it card
+
+On first use a **Try BlockFlow in a minute** card sits at the top right of the canvas. It points at a
+practice page in the repository (`docs/manual-test/playground.html`): run `npm run playground` in the
+BlockFlow folder and the card turns to **● running**. **Create the Try-it workflow** adds *Try it: playground
+tour* (Open Tab → Click → Fill → Select Option → Click → Assert → Log); press **▶ Run** and watch it work
+the page. × closes the card for good. (The practice page is served from your machine rather than built into
+the extension because browsers do not let an extension act on its own pages.)
 
 ## Undo, redo and shortcuts
 
@@ -146,13 +161,14 @@ Shortcuts work on the Canvas page, when you are not typing in a field. Cmd works
 | --- | --- |
 | Ctrl+Z | Undo (also the ↶ button) |
 | Ctrl+Shift+Z or Ctrl+Y | Redo (also ↷) |
-| Ctrl+C / Ctrl+V | Copy / paste the selected blocks and the connections between them. Paste works in another workflow too |
-| Ctrl+D | Duplicate the selection |
+| Ctrl+C / Ctrl+V | Copy / paste the selected blocks and the connections between them. Pasted blocks land where the mouse is (a little below and right of the copy when the mouse is off the canvas or has not moved). Paste works in another workflow too |
+| Ctrl+D | Duplicate the selection (next to it) |
 | Delete / Backspace | Delete the selection |
 | Enter / Esc / ↑ ↓ | In the element picker: use / cancel / broader, narrower |
 
 Undo covers blocks, connections, positions and settings (quick changes in a row count as one step), up to 100
-steps. The history is per visit: opening another workflow clears it.
+steps. Each workflow has its own history, kept while you switch between workflows (until the editor tab is
+reloaded or closed).
 
 ## Run, Stop and the On switch
 
@@ -171,7 +187,8 @@ When a **Manual Step** is waiting, a banner across the top says "*Workflow* is w
 
 - **Run log**: timestamped lines from the open workflow: what started, what each block did, Log block messages,
   errors. Scrolls to the newest line.
-- **Runs (N)**: one row per run, newest first: result, time, how it started (*Run button*, *schedule*, …),
+- **Runs (N)**: one row per run, newest first: result, time, how it started (*Run button*, *turned on*,
+  *schedule*, *page event*, *called by another workflow*),
   step count, duration, error. Click a row to show that run's badges on the canvas and its data in the
   settings panel.
 - **all workflows**: show lines and runs of every workflow, labelled with the workflow name.

@@ -32,7 +32,7 @@ short:
 | --- | --- |
 | `index.html` | WXT turns the `editor/` folder into an unlisted page, `editor.html`. Just `<div id="root">` and the module script. The toolbar button opens it (`openEditor()` in `background.ts` focuses an existing editor tab instead of opening a second one). |
 | `main.tsx` | Imports `@xyflow/react/dist/style.css` **before** `style.css` (ours overrides React Flow's), then `createRoot(...).render(<StrictMode><App/></StrictMode>)`. StrictMode runs effects twice in dev, so every effect cleans up (the `alive` flags in the hooks). |
-| `App.tsx` | Wraps `Editor` in `ReactFlowProvider` so `Editor` can call `useReactFlow()` (it needs `screenToFlowPosition` for drops). |
+| `App.tsx` | Wraps `Editor` in `ReactFlowProvider` so `Editor` can call `useReactFlow()` (it needs `screenToFlowPosition` for drops and paste), and renders [`DialogHost`](Editor-Components.md#dialogs) for toasts and dialogs. |
 | `Editor.tsx` | Everything else: state, actions, layout. One component, ~780 lines, sectioned by `// --- name ---` comments. |
 
 ## Views (pages / navigation)
@@ -67,8 +67,8 @@ Opening a workflow (sidebar, table, a run in Reports) switches back to `canvas`.
 | `secrets` | `Record<string,string>` | `useStorageValue(bf:secrets)`, only for `{{` suggestions. |
 
 Refs (read inside stable callbacks without re-creating them): `latest` (= `workflows`), `activeIdRef`,
-`nodesRef`, `history` (undo stack). A module-level `clipboard` holds copied blocks, so they survive switching
-workflows (not page reloads).
+`nodesRef`, `histories` (undo stacks by workflow id), `mouse` / `lastPasteAt` (for paste at the mouse). A
+module-level `clipboard` holds copied blocks, so they survive switching workflows (not page reloads).
 
 ### The edit loop
 
@@ -88,30 +88,32 @@ workflows (not page reloads).
   also reports selection and size measurements). So selecting a block never causes a save.
 - **Save.** An effect on `workflows` saves after `SAVE_DELAY_MS = 400`; a `pagehide` listener flushes
   `latest.current` so closing the tab right after an edit does not lose it.
-- **Switching workflow** calls `open(w)`: re-runs `toFlow`, resets `inspectedRunId` and the undo history.
+- **Switching workflow** calls `open(w)`: re-runs `toFlow` and resets `inspectedRunId`. The undo history of
+  each workflow is kept (`open(w, true)`, used when another editor tab changed the open workflow, drops it).
   `<ReactFlow key={activeId}>` remounts so `fitView` applies to each workflow.
 - Name changes and on/off go straight into `workflows` (they are not part of the graph).
 
 ### Undo / redo
 
-`history.current = { past, future, lastAt, restoring }`. The canvas → workflow effect pushes the
-**previous** graph (`{nodes, edges}` of the saved model) onto `past`, unless the last push was less than
-`HISTORY_MERGE_MS = 600` ago (one drag = one step). At most `HISTORY_LIMIT = 100` steps. `undo`/`redo`
-move snapshots between the stacks and call `showGraph`, which sets `restoring = true` so that change is not
-recorded again. History is per open: `open()` clears it.
+`histories.current` is a `Map<workflowId, { past, future, lastAt, restoring }>` (`historyOf(id)` creates an
+entry on first use). The canvas → workflow effect pushes the **previous** graph (`{nodes, edges}` of the
+saved model) onto the active workflow's `past`, unless its last push was less than `HISTORY_MERGE_MS = 600`
+ago (one drag = one step). At most `HISTORY_LIMIT = 100` steps. `undo`/`redo` move snapshots between the
+stacks and call `showGraph`, which sets `restoring = true` so that change is not recorded again. Switching
+workflows keeps every history (in memory only, not across reloads); deleting a workflow drops its entry.
 
 ### Keyboard shortcuts
 
 A `window` keydown listener, only in the `canvas` view and ignored while typing in an input, textarea,
-select or contenteditable:
+select or contenteditable, and while a dialog (`.bf-modal`) is open:
 
 | Keys | Action |
 | --- | --- |
 | Ctrl/Cmd+Z | Undo |
 | Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y | Redo |
 | Ctrl/Cmd+C | Copy selected blocks and the edges between them |
-| Ctrl/Cmd+V | Paste: new ids, offset 40 px, selected; pasting again steps further |
-| Ctrl/Cmd+D | Duplicate selection (copy + paste) |
+| Ctrl/Cmd+V | Paste: new ids, selected. The top-left pasted block goes where the mouse is (`onMouseMove` on the canvas → `screenToFlowPosition`); with the mouse outside the canvas or not moved since the last paste, offset 40 px from the copied blocks instead (pasting again steps further) |
+| Ctrl/Cmd+D | Duplicate selection (copy + paste with the 40 px offset) |
 | Backspace / Delete | React Flow's own delete (`deleteKeyCode`) |
 
 ### Canvas details
@@ -147,12 +149,12 @@ object to both the Sidebar and WorkflowsPage. All work by id and read `latest.cu
 | --- | --- |
 | `onCreate` | `createWorkflow(uniqueName('Workflow N'))`, open it. |
 | `onCreateFromTemplate(text)` | `parseImport(text, existing)`; adds all workflows of the template, opens the **last** one. |
-| `onToggle` | `setEnabledFor`: turning on is refused with `window.alert` if `validateWorkflow` has errors or the workflow is empty. Turning off always works. "Turn all on/off" loops over it. |
+| `onToggle` | `setEnabledFor`: turning on is refused with an error toast (`whyNotOn`: `validateWorkflow` errors, or empty). Turning off always works. "Turn all on/off" (`setAllEnabled`) switches everything it can in one update and names the workflows left off in one toast. |
 | `onDuplicate` | `duplicateWorkflow` (core/library: new ids, "… copy", off), open it. |
 | `onExport(ids)` | `exportWorkflows` → `downloadText(fileNameFor(...))`. One file per click; exported workflows are always `enabled: false`. |
 | `onExportPlaywright(id)` | `workflowToPlaywright(workflow, { registry, lookup })` → `<name>.spec.ts`. `lookup` resolves Run Workflow targets. |
-| `onDelete` | `window.confirm`, then remove. Deleting the last one leaves a new empty workflow; deleting the open one opens the first remaining. |
-| `onImport(files)` | `readFiles` → `parseImport` per file (ids/names made unique against everything, including earlier files of the same import), alert on failure, then add, open the first, switch to `manage`. |
+| `onDelete` | `confirmDialog` (in-editor), then `deleteNow`. Deleting the last one leaves a new empty workflow; deleting the open one opens the first remaining. The background then clears its timers and `bf:state:<id>::*` ([Background Worker](Background-Worker.md)). |
+| `onImport(files)` | `readFiles` → `parseImport` per file (ids/names made unique against everything, including earlier files of the same import), error toast on failure, then add, open the first, switch to `manage`. |
 
 The core side of these (`parseImport`, `uniqueName`, the export format) is in
 [Core Modules](Core-Modules.md).
@@ -167,9 +169,9 @@ The editor never imports the engine. Everything goes through storage or messages
 
 | Message | Sent by | When |
 | --- | --- | --- |
-| `bf:run-workflow { workflow }` | `Editor.runNow` | ▶ Run. Sends the **in-memory** `active` workflow, so unsaved edits run. Alerts if the worker cannot be reached. Clears `inspectedRunId` to follow the new run. |
+| `bf:run-workflow { workflow }` | `Editor.runNow` | ▶ Run. Sends the **in-memory** `active` workflow, so unsaved edits run. Error toast if the worker cannot be reached. Clears `inspectedRunId` to follow the new run. |
 | `bf:stop-run { runId }` | `Editor.stopRun` | ■ Stop, for the newest `running` run of the active workflow. |
-| `bf:start-recording { workflowId, url }` | `Editor.startRecording` | ● Record, after a `window.prompt` for an `http(s)` URL (suggests the first Open URL block's URL if it has no template). |
+| `bf:start-recording { workflowId, url }` | `Editor.startRecording` | ● Record, after a `promptDialog` for an `http(s)` URL (checked in the dialog; suggests the first Open URL block's URL if it has no template). |
 | `bf:stop-recording` | header button | While `recording.status === 'recording'`. |
 | `bf:start-pick { url?, mode }` | [ConfigPanel](Editor-Components.md#configpanel) | 🎯 Pick on page / Detect fields. |
 | `bf:answer-prompt { runId, ok }` | [PromptBanner](Editor-Components.md#promptbanner) | Continue / Fail the run on a Manual Step. |
@@ -191,6 +193,7 @@ Keys are in `src/shared/keys.ts`; see [Storage Keys](Storage-Keys.md).
 | `bf:prompts` | live (`usePrompts`) | never (answers go by message) |
 | `bf:recording` | live (`useStorageValue`) | removed after a stopped recording is turned into blocks |
 | `bf:secrets` | live (Editor for suggestions, SecretsPage) | SecretsPage |
+| `bf:onboarding` | once ([TryItCard](Editor-Components.md#tryitcard)) | TryItCard, when closed |
 | IndexedDB screenshots | `loadScreenshot` (Screenshot, ReportsPage HTML export) | never |
 | IndexedDB datasets | `listDatasets` (DataPage, polled every 3 s) | `deleteDataset` |
 
@@ -202,7 +205,7 @@ When `bf:recording` changes to `status: 'stopped'`, an effect in `Editor`:
 2. if that workflow is not open, opens it and returns (the effect runs again once it is on the canvas);
 3. converts the steps with `recordingToBlocks` (core), adds them as new nodes/edges at x = 60, below the
    lowest existing block (or at y = 120 on an empty canvas), then removes `bf:recording`;
-4. alerts if passwords were replaced by secrets that need creating on the Secrets page.
+4. shows a toast if passwords were replaced by secrets that need creating on the Secrets page.
 
 Because the new blocks go through the normal canvas → workflow → save loop, they are undoable and saved
 like any edit. The recorder itself is described in [Picker and Recorder](Picker-and-Recorder.md).

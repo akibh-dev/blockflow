@@ -264,8 +264,21 @@ A workflow may have several start blocks; each starts its own runs.
 - Typing `{{` in a setting suggests names: outputs of earlier blocks, keys seen in the last run,
   `secret.*`.
 - **+ New ▾** → templates (the files in [`examples/`](examples)).
-- Keys on the canvas: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo, Ctrl+C / Ctrl+V copy and
-  paste blocks (also into another workflow), Ctrl+D duplicate, Delete/Backspace remove.
+- **Try it** card (first run, on the canvas until closed): start the practice page with
+  `npm run playground` (serves `docs/manual-test` at `http://localhost:7357`), then **Create the
+  Try-it workflow** makes the [`playground-tour`](examples/playground-tour.blockflow.json) workflow;
+  press ▶ Run.
+- Keys on the canvas: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo (each workflow keeps its own
+  history while you switch between them), Ctrl+C / Ctrl+V copy and paste blocks (also into another
+  workflow; they land where the mouse is, or 40 px further on when it has not moved), Ctrl+D
+  duplicate, Delete/Backspace remove.
+- Messages appear as small notes in the bottom right corner; deleting asks in a dialog inside the
+  editor (Escape cancels).
+- The step setting **Use real mouse and keyboard** is only offered on blocks that act on the page
+  (Click, Fill, Fill Form, Select Option, Check, Press Key, Paginate; `realInput` in
+  [blocks.md](blocks.md)).
+- A workflow with problems cannot be switched on: its switch (header and All workflows) is greyed out
+  until they are fixed; **Turn all on** leaves such workflows off and names them.
 
 ## 11. Secrets
 
@@ -340,6 +353,7 @@ profile's extension storage.
 | [`scrape-to-csv`](examples/scrape-to-csv.blockflow.json) | Paginate + Extract List + dataset + CSV download |
 | [`data-driven-login`](examples/data-driven-login.blockflow.json) | Data Table + For Each + soft Assert, a secret chosen by an expression |
 | [`api-to-dataset`](examples/api-to-dataset.blockflow.json) | HTTP Request + Transform + dataset history + If |
+| [`playground-tour`](examples/playground-tour.blockflow.json) | the "Try it" workflow: Click, Fill, Select Option and Assert on `docs/manual-test/playground.html` (`npm run playground`) |
 
 ## 17. Limits (what a browser extension cannot do, or BlockFlow does not do yet)
 

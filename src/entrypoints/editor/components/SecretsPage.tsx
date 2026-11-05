@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { STORAGE_KEYS } from '../../../shared/keys';
 import { useStorageValue } from '../hooks';
+import { confirmDialog } from './Dialogs';
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -72,12 +73,14 @@ export function SecretsPage() {
                 <button
                   type="button"
                   className="bf-danger"
-                  onClick={() => {
-                    if (!window.confirm(`Delete the secret “${key}”? Workflows that use it will fail.`)) return;
-                    const next = { ...secrets };
-                    delete next[key];
-                    void save(next);
-                  }}
+                  onClick={() =>
+                    void confirmDialog({ title: 'Delete secret', message: `Delete the secret “${key}”? Workflows that use it will fail.`, confirmLabel: 'Delete', danger: true }).then((ok) => {
+                      if (!ok) return;
+                      const next = { ...secrets };
+                      delete next[key];
+                      void save(next);
+                    })
+                  }
                 >
                   Delete
                 </button>
