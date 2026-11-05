@@ -5,6 +5,7 @@ import { cancelPicking, finishPicking, startPicking } from '../browser/picking';
 import { answerPrompt, clearStalePrompts, promptRunId } from '../browser/prompts';
 import { appendLog, loadWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
 import { createDefaultRegistry } from '../core/blocks';
+import { menuClickPayload, menuItemFor, parseMenuItemId } from '../core/blocks/contextMenu';
 import { WorkflowRunner } from '../core/engine';
 import { markInterrupted } from '../core/runs';
 import { withSessionTab } from '../core/session';
@@ -142,7 +143,6 @@ export default defineBackground(() => {
     }
   }
 
-  const MENU_PREFIX = 'bf-menu::';
   let menuSync: Promise<void> = Promise.resolve();
 
   /** One right-click menu item per Context Menu start block of an enabled workflow. */
@@ -151,12 +151,7 @@ export default defineBackground(() => {
       .then(async () => {
         await browser.contextMenus.removeAll();
         for (const { workflow, nodeId, config } of await eventRoots('context-menu')) {
-          const where = String(config.contexts ?? 'all');
-          browser.contextMenus.create({
-            id: `${MENU_PREFIX}${workflow.id}::${nodeId}`,
-            title: String(config.title || workflow.name),
-            contexts: [where === 'all' ? 'all' : (where as 'page' | 'selection' | 'link' | 'image')],
-          });
+          browser.contextMenus.create(menuItemFor(workflow, nodeId, config));
         }
       })
       .catch(report('context menus'));
@@ -164,12 +159,11 @@ export default defineBackground(() => {
 
   /** Context Menu trigger: item id `bf-menu::<workflowId>::<nodeId>`. */
   async function onMenuClicked(menuItemId: string, info: { pageUrl?: string; selectionText?: string; linkUrl?: string; srcUrl?: string }, tabId: number | undefined): Promise<void> {
-    if (!menuItemId.startsWith(MENU_PREFIX)) return;
-    const [workflowId, nodeId] = menuItemId.slice(MENU_PREFIX.length).split('::');
-    const workflow = (await loadWorkflows()).find((candidate) => candidate.id === workflowId);
-    if (!workflow || !nodeId) return;
-    const payload = { url: info.pageUrl ?? '', selection: info.selectionText ?? '', link: info.linkUrl ?? '', src: info.srcUrl ?? '', tabId: tabId ?? null };
-    await newRunner(workflow).handleEvent(nodeId, tabId === undefined ? payload : withSessionTab(payload, 'main', tabId));
+    const item = parseMenuItemId(menuItemId);
+    if (!item) return;
+    const workflow = (await loadWorkflows()).find((candidate) => candidate.id === item.workflowId);
+    if (!workflow) return;
+    await newRunner(workflow).handleEvent(item.nodeId, menuClickPayload(info, tabId));
   }
 
   /** Toolbar button: focus the editor tab if open, else open it. */
@@ -271,6 +265,13 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onMessage.addListener((message, sender) => {
+    // e2e builds only (BF_E2E=1; compiled out otherwise): an automated browser cannot open the
+    // right-click menu, so tests/e2e "click" a Context Menu item with this message.
+    if (import.meta.env.BF_E2E && (message as { type?: unknown })?.type === 'bf:e2e-menu-click') {
+      const { menuItemId, info, tabId } = message as { menuItemId: string; info: Record<string, string>; tabId?: number };
+      void onMenuClicked(menuItemId, info, tabId).catch(report('e2e menu click'));
+      return;
+    }
     if (!isExtensionMessage(message)) return;
     switch (message.type) {
       case 'bf:start-pick':

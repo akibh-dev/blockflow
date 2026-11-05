@@ -13,6 +13,8 @@ export default defineConfig({
   // Kept apart, so loading .output/chrome-mv3 in your browser never picks up the test build.
   ...(e2e ? { outDir: '.output-e2e' } : {}),
   modules: ['@wxt-dev/module-react'],
+  // `import.meta.env.BF_E2E` is true only in that build: test-only hooks (background.ts) compile out otherwise.
+  vite: () => ({ define: { 'import.meta.env.BF_E2E': JSON.stringify(e2e) } }),
   manifestVersion: 3,
   manifest: ({ browser }) => ({
     name: 'BlockFlow',

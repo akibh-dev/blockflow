@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture: ticker</title>
+  </head>
+  <body>
+    <!-- For Watch Element (tests/e2e/specs/blocks-coverage.mjs): the price changes by itself every 1.5 s. -->
+    <h1>Live price</h1>
+    <p>Price: <span id="price">100</span></p>
+    <script>
+      let price = 100;
+      setInterval(() => {
+        price += 1;
+        document.getElementById('price').textContent = String(price);
+      }, 1500);
+    </script>
+  </body>
+</html>
