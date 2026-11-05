@@ -181,7 +181,9 @@ export function accessibleName(element: Element): string {
     const caption = element.querySelector(':scope > caption');
     if (caption) return normalize(textOf(caption, new Set()));
   }
-  const role = getRole(element);
+  // A <section> without a role attribute is a region only when it has a name, so asking getRole here would
+  // come straight back (endless recursion). Regions never take their name from content anyway.
+  const role = element.localName === 'section' && !element.hasAttribute('role') ? null : getRole(element);
   if (role && NAME_FROM_CONTENT.has(role)) {
     const text = normalize(textOf(element, new Set()));
     if (text) return text;
