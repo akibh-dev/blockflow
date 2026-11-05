@@ -78,7 +78,12 @@ export const httpRequestBlock: BlockDefinition<HttpRequestConfig> = {
       ...(sendsBody ? { body: ctx.config.body } : {}),
     });
     ctx.log(result.ok ? 'info' : 'warn', `${method} ${url} → ${result.status}`);
-    if (!result.ok && ctx.config.failOnError) return null;
+    // A failed step, not a quiet end of the path: the run shows failed, and retries and the
+    // error output (step setting onError) apply.
+    if (!result.ok && ctx.config.failOnError) {
+      const preview = result.body.trim().slice(0, 200);
+      throw new Error(`${method} ${url} answered ${result.status}${preview ? `: ${preview}` : ''}`);
+    }
 
     let data: unknown;
     try {

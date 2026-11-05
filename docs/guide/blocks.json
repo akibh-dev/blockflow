@@ -50,7 +50,7 @@
       "ports": [
         "out"
       ],
-      "timeoutSeconds": 60,
+      "timeoutSeconds": 660,
       "defaultConfig": {
         "seconds": 60,
         "repeat": true
@@ -61,7 +61,7 @@
           "label": "Seconds",
           "kind": "number",
           "min": 1,
-          "help": "Under 30 seconds the extension keeps its background worker awake to fire on time (Chromium). 30 seconds or more uses browser alarms."
+          "help": "Under 30 seconds the extension keeps its background worker awake to fire on time (Chromium). 30 seconds or more uses browser alarms. After another block: waits up to 600 s inside the run; longer delays continue as a new run."
         },
         {
           "key": "repeat",

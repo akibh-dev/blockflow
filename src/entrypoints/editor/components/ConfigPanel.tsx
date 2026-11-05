@@ -93,6 +93,10 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
       } else if (message.type === 'bf:pick-error') {
         pending.current = null;
         setPick({ status: 'error', fieldKey: target.field.key, text: message.message });
+      } else if (message.type === 'bf:pick-cancelled') {
+        // Esc in the page: the picker tells every extension page, this one included.
+        pending.current = null;
+        setPick({ status: 'idle' });
       }
     };
     browser.runtime.onMessage.addListener(listener);

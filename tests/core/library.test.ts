@@ -64,11 +64,51 @@ describe('export / import', () => {
     expect(parseImport('{"workflows":[]}', []).ok).toBe(false);
   });
 
-  it('drops connections that point at missing blocks', () => {
+  it('rejects connections that point at missing blocks, and duplicate block ids', () => {
     const wf = sample();
     wf.edges.push({ id: 'x', source: 'a', target: 'ghost' });
-    const result = parseImport(JSON.stringify(wf), []);
-    expect(result.ok && result.workflows[0]?.edges).toHaveLength(1);
+    expect(parseImport(JSON.stringify(wf), [])).toEqual({
+      ok: false,
+      error: `A connection in "${wf.name}" points at "ghost", which is not a block id.`,
+    });
+    const twice = sample();
+    twice.nodes.push({ ...twice.nodes[0]!, config: {} });
+    expect(parseImport(JSON.stringify(twice), [])).toEqual({ ok: false, error: `Two blocks in "${twice.name}" have the id "a".` });
+    expect(parseImport(JSON.stringify({ ...sample(), edges: [{ source: 'a' }] }), []).ok).toBe(false);
+  });
+
+  it('keeps step settings and output ports (If false, error outputs) through import and duplicate', () => {
+    const wf = flow(
+      [
+        { id: 'if', type: 'if', config: { left: '1', operator: 'equals', right: '2' } },
+        { id: 'yes', type: 'log', config: { message: 'yes' } },
+        { id: 'no', type: 'log', config: { message: 'no' }, step: { retries: 2, onError: 'port', note: 'n' } },
+        { id: 'oops', type: 'log', config: { message: 'oops' } },
+      ],
+      [],
+    );
+    wf.edges = [
+      { id: 'e1', source: 'if', target: 'yes', sourcePort: 'true' },
+      { id: 'e2', source: 'if', target: 'no', sourcePort: 'false' },
+      { id: 'e3', source: 'no', target: 'oops', sourcePort: 'error' },
+    ];
+    const check = (copy: typeof wf) => {
+      const byOldId = (old: string) => copy.nodes[wf.nodes.findIndex((n) => n.id === old)]!.id;
+      expect(copy.edges.map((e) => [e.source, e.target, e.sourcePort])).toEqual([
+        [byOldId('if'), byOldId('yes'), 'true'],
+        [byOldId('if'), byOldId('no'), 'false'],
+        [byOldId('no'), byOldId('oops'), 'error'],
+      ]);
+      expect(copy.nodes.find((n) => n.id === byOldId('no'))?.step).toEqual({ retries: 2, onError: 'port', note: 'n' });
+    };
+    check(duplicateWorkflow(wf, [wf]));
+    const imported = parseImport(exportWorkflows([wf]), []);
+    expect(imported.ok).toBe(true);
+    if (imported.ok) check(imported.workflows[0]!);
+    // The copy does not share step objects with the original.
+    const copy = duplicateWorkflow(wf, [wf]);
+    copy.nodes[2]!.step!.retries = 5;
+    expect(wf.nodes[2]!.step!.retries).toBe(2);
   });
 
   it('keeps Run Workflow blocks pointing at workflows imported with them', () => {

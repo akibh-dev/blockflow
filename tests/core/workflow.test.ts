@@ -4,7 +4,7 @@ import { sampleWorkflows } from '../../src/core/samples';
 import { parseTimerKey, makeTimerKey, workflowTimerPrefix } from '../../src/core/timerKey';
 import { validateWorkflow } from '../../src/core/validate';
 import { uid } from '../../src/core/id';
-import { behaviourSignature, createWorkflow, diffWorkflows } from '../../src/core/workflow';
+import { createWorkflow, diffWorkflows, rootSignature } from '../../src/core/workflow';
 import type { Workflow } from '../../src/core/types';
 import { flow } from '../helpers/fakeHost';
 
@@ -25,27 +25,38 @@ describe('diffWorkflows', () => {
     before.enabled = false;
     const after = clone(before);
     after.enabled = true;
-    expect(diffWorkflows([before], [after])).toEqual({ start: [after.id], stop: [] });
+    expect(diffWorkflows([before], [after])).toEqual({ start: [after.id], restart: [], stop: [] });
   });
 
   it('starts an enabled workflow that did not exist before', () => {
     const wf = base();
-    expect(diffWorkflows(undefined, [wf])).toEqual({ start: [wf.id], stop: [] });
+    expect(diffWorkflows(undefined, [wf])).toEqual({ start: [wf.id], restart: [], stop: [] });
   });
 
   it('stops a workflow that was disabled or deleted', () => {
     const before = base();
     const disabled = clone(before);
     disabled.enabled = false;
-    expect(diffWorkflows([before], [disabled])).toEqual({ start: [], stop: [before.id] });
-    expect(diffWorkflows([before], [])).toEqual({ start: [], stop: [before.id] });
+    expect(diffWorkflows([before], [disabled])).toEqual({ start: [], restart: [], stop: [before.id] });
+    expect(diffWorkflows([before], [])).toEqual({ start: [], restart: [], stop: [before.id] });
   });
 
-  it('restarts when settings or connections change', () => {
+  it('restarts (without running plain start blocks) when a start block changes', () => {
     const before = base();
     const edited = clone(before);
     edited.nodes[0]!.config = { seconds: 45 };
-    expect(diffWorkflows([before], [edited])).toEqual({ start: [before.id], stop: [] });
+    expect(diffWorkflows([before], [edited])).toEqual({ start: [], restart: [before.id], stop: [] });
+    const newRoot = clone(before);
+    newRoot.edges = [];
+    expect(diffWorkflows([before], [newRoot])).toEqual({ start: [], restart: [before.id], stop: [] });
+  });
+
+  it('does not restart when only later blocks change: runs read them from storage', () => {
+    const before = base();
+    const edited = clone(before);
+    edited.nodes[1]!.config = { url: 'https://example.org' };
+    edited.nodes[1]!.step = { retries: 2 };
+    expect(diffWorkflows([before], [edited])).toEqual({ start: [], restart: [], stop: [] });
   });
 
   it('does not restart when only positions or the name change', () => {
@@ -53,7 +64,7 @@ describe('diffWorkflows', () => {
     const moved = clone(before);
     moved.nodes[0]!.position = { x: 999, y: 999 };
     moved.name = 'Renamed';
-    expect(diffWorkflows([before], [moved])).toEqual({ start: [], stop: [] });
+    expect(diffWorkflows([before], [moved])).toEqual({ start: [], restart: [], stop: [] });
   });
 
   it('ignores disabled workflows', () => {
@@ -61,17 +72,17 @@ describe('diffWorkflows', () => {
     before.enabled = false;
     const edited = clone(before);
     edited.nodes[0]!.config = { seconds: 45 };
-    expect(diffWorkflows([before], [edited])).toEqual({ start: [], stop: [] });
-    expect(diffWorkflows(undefined, undefined)).toEqual({ start: [], stop: [] });
+    expect(diffWorkflows([before], [edited])).toEqual({ start: [], restart: [], stop: [] });
+    expect(diffWorkflows(undefined, undefined)).toEqual({ start: [], restart: [], stop: [] });
   });
 });
 
-describe('behaviourSignature', () => {
+describe('rootSignature', () => {
   it('does not depend on node order', () => {
     const wf = base();
     const reordered = clone(wf);
     reordered.nodes.reverse();
-    expect(behaviourSignature(reordered)).toBe(behaviourSignature(wf));
+    expect(rootSignature(reordered)).toBe(rootSignature(wf));
   });
 });
 
@@ -94,6 +105,11 @@ describe('sampleWorkflows', () => {
       expect(sample.enabled).toBe(false);
       const problems = validateWorkflow(sample, registry).filter((issue) => issue.level === 'error');
       expect(problems).toEqual([]);
+      // Only settings the block knows (no legacy keys such as Open Tab's old `newTab`).
+      for (const node of sample.nodes) {
+        const known = (registry.get(node.type)?.fields ?? []).map((field) => field.key);
+        expect(Object.keys(node.config).filter((key) => !known.includes(key)), node.type).toEqual([]);
+      }
     }
   });
 });

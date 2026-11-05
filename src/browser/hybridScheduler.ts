@@ -90,6 +90,8 @@ export class HybridScheduler implements Scheduler {
   private readonly minAlarmMs: number;
   private readonly pingEveryMs: number;
   private readonly armed = new Map<string, Armed>();
+  /** Reasons to stay awake besides short timers (live runs), see `hold`. */
+  private readonly holds = new Set<string>();
   private pingHandle: unknown = null;
 
   constructor(options: HybridSchedulerOptions) {
@@ -189,6 +191,27 @@ export class HybridScheduler implements Scheduler {
     }
   }
 
+  /**
+   * Keeps the worker awake (keep-alive ping) until `release(reason)`, e.g. while a run is in
+   * progress: a run waiting on a person or a slow page makes no extension calls, and Chrome would
+   * otherwise stop the worker after 30 s and the run would be interrupted.
+   */
+  hold(reason: string): void {
+    this.holds.add(reason);
+    this.syncPing();
+  }
+
+  /** Ends a `hold`. Unknown reasons are ignored. */
+  release(reason: string): void {
+    this.holds.delete(reason);
+    this.syncPing();
+  }
+
+  /** Test helper: is the keep-alive ping running? */
+  isPinging(): boolean {
+    return this.pingHandle !== null;
+  }
+
   /** Test helper: is an in-memory timer armed for `key`? */
   isArmed(key: string): boolean {
     return this.armed.has(key);
@@ -259,9 +282,9 @@ export class HybridScheduler implements Scheduler {
     }
   }
 
-  /** Keep-alive runs exactly while at least one short timer is armed. */
+  /** Keep-alive runs exactly while at least one short timer is armed or something holds the worker. */
   private syncPing(): void {
-    const needed = this.armed.size > 0;
+    const needed = this.armed.size > 0 || this.holds.size > 0;
     if (needed && this.pingHandle === null) {
       this.pingHandle = this.clock.setInterval(() => this.ping(), this.pingEveryMs);
       this.ping();

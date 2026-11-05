@@ -242,7 +242,7 @@ describe('Composing blocks in any order', () => {
     expect(host.opened).toHaveLength(1);
   });
 
-  it('Watch Element → Timer (delay) → Open URL: waits before opening', async () => {
+  it('Watch Element → Timer (delay) → Open URL: waits inside the same run before opening', async () => {
     const wf = flow(
       [
         { id: 'w', type: 'watch-element', config: { url: SITE, selector: '.price' } },
@@ -258,14 +258,61 @@ describe('Composing blocks in any order', () => {
     host.pageTexts('a', 'b');
     const h = harness(wf, host);
     await h.runner.start();
-    await h.fire('poll'); // change detected, but the delay holds the flow
-    expect(host.opened).toHaveLength(0);
-    const [delayKey] = host.scheduler.keysNamed('delay:');
-    expect(host.scheduler.timers.get(delayKey!)!.delayMs).toBe(20_000);
-
-    await h.runner.handleTimer(delayKey!);
+    await h.fire('poll');
     expect(host.opened.map((tab) => tab.url)).toEqual([`${SITE}#after-delay`]);
+    // Twenty one-second slices, so Stop takes effect within a second; no timer left behind.
+    expect(host.sleeps.filter((ms) => ms === 1000)).toHaveLength(20);
     expect(host.scheduler.keysNamed('delay:')).toHaveLength(0);
+    expect(h.lastRun()?.steps.map((step) => step.nodeId)).toEqual(['w', 'd', 'o']);
+  });
+
+  it('a delay over 10 minutes uses a durable timer and continues as a new run', async () => {
+    const wf = flow(
+      [
+        { id: 's', type: 'start', config: {} },
+        { id: 'd', type: 'timer', config: { seconds: 3600 } },
+        { id: 'o', type: 'open-url', config: { url: 'https://example.com/later' } },
+      ],
+      [
+        ['s', 'd'],
+        ['d', 'o'],
+      ],
+    );
+    const h = harness(wf);
+    expect((await h.runner.runOnce()).status).toBe('passed');
+    expect(h.host.opened).toHaveLength(0);
+    const [delayKey] = h.host.scheduler.keysNamed('delay:');
+    expect(h.host.scheduler.timers.get(delayKey!)!.delayMs).toBe(3_600_000);
+    await h.runner.handleTimer(delayKey!);
+    expect(h.host.opened.map((tab) => tab.url)).toEqual(['https://example.com/later']);
+    expect(h.lastRun()?.trigger).toBe('timer');
+  });
+
+  it('Stop ends an in-run delay within a second', async () => {
+    const wf = flow(
+      [
+        { id: 's', type: 'start', config: {} },
+        { id: 'd', type: 'timer', config: { seconds: 300 } },
+        { id: 'o', type: 'open-url', config: { url: 'https://example.com' } },
+      ],
+      [
+        ['s', 'd'],
+        ['d', 'o'],
+      ],
+    );
+    const host = new FakeHost();
+    let calls = 0;
+    const realSleep = host.sleep;
+    const h = harness(wf, host);
+    host.sleep = (ms: number) => {
+      calls += 1;
+      if (calls === 5) void h.runner.stop();
+      return realSleep(ms);
+    };
+    const run = await h.runner.runOnce();
+    expect(run.status).toBe('cancelled');
+    expect(host.opened).toHaveLength(0);
+    expect(calls).toBeLessThan(10);
   });
 
   it('fans out: one block feeds several', async () => {
@@ -415,5 +462,32 @@ describe('Lifecycle', () => {
     const h = harness(flow([{ id: 'x', type: 'mystery' }], []));
     await h.runner.start();
     expect(h.messages('error')).toEqual(['Unknown block type "mystery"']);
+  });
+});
+
+describe('Switching on vs restarting', () => {
+  const plain = () => flow([{ id: 'o', type: 'open-url', config: { url: 'https://example.com' } }], []);
+
+  it('a plain start block runs once when switched on, not on a restart (edit, browser start)', async () => {
+    const h = harness(plain());
+    await h.runner.start();
+    expect(h.host.opened).toHaveLength(1);
+    await h.restart().start({ runPlainRoots: false });
+    expect(h.host.opened).toHaveLength(1);
+  });
+
+  it('the Start block runs only by hand, never when switched on', async () => {
+    const wf = flow(
+      [
+        { id: 's', type: 'start', config: { inputs: [{ name: 'u', value: 'https://example.com' }] } },
+        { id: 'o', type: 'open-url', config: { url: '{{u}}' } },
+      ],
+      [['s', 'o']],
+    );
+    const h = harness(wf);
+    await h.runner.start();
+    expect(h.host.opened).toHaveLength(0);
+    expect((await h.runner.runOnce()).status).toBe('passed');
+    expect(h.host.opened.map((o) => o.url)).toEqual(['https://example.com/']);
   });
 });

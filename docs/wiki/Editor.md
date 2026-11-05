@@ -157,11 +157,6 @@ object to both the Sidebar and WorkflowsPage. All work by id and read `latest.cu
 The core side of these (`parseImport`, `uniqueName`, the export format) is in
 [Core Modules](Core-Modules.md).
 
-> **Known issue (2026-11):** `cloneWorkflow` and `parseImport` in `src/core/library.ts` copy only
-> `id`, `type`, `position` and `config` of each block and `source`/`target` of each edge. Step settings
-> (`step`) and edge ports (`sourcePort`) are dropped, so **Duplicate, Import and New from template** lose
-> retries, On error, notes and If/Branch routing (every edge falls back to the block's first output).
-> Export itself keeps them.
 
 ## Talking to the background
 

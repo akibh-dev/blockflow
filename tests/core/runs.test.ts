@@ -180,6 +180,37 @@ describe('Step settings', () => {
     expect(host.sleeps).toContain(2000);
   });
 
+  it('a timed-out step is fenced off: no more outputs, no overlap with the retry, nothing after the run ends', async () => {
+    const host = new FakeHost();
+    // Each item's request takes 5 s; For Each may only take 2 s in all.
+    host.httpHandler = async () => {
+      await host.sleep(5000);
+      return { status: 200, ok: true, headers: {}, body: 'ok' };
+    };
+    const h = harness(
+      flow(
+        [
+          { id: 'loop', type: 'for-each', config: { list: '[1, 2, 3]', as: 'item' }, step: { timeoutSeconds: 2 } },
+          { id: 'get', type: 'http-request', config: { url: 'https://a.test/{{item}}' } },
+          { id: 'after', type: 'log', config: { message: 'after {{item}}' } },
+        ],
+        [
+          ['loop', 'get', 'each'],
+          ['get', 'after'],
+        ],
+      ),
+      host,
+    );
+    const run = await h.runner.runOnce();
+    expect(run.status).toBe('failed');
+    expect(run.error).toBe('For Each: Timed out after 2s');
+    // Let the first item's request finish after the timeout.
+    await host.sleep(10_000);
+    expect(host.requests.map((r) => r.url)).toEqual(['https://a.test/1']);
+    expect(h.messages().some((m) => m.startsWith('after'))).toBe(false);
+    expect(h.lastRun()?.steps.map((s) => s.nodeId)).toEqual(['loop', 'get']);
+  });
+
   it('disabled: skips the block and passes the input on', async () => {
     const h = harness(failing({ disabled: true }), down());
     const run = await h.runner.runOnce();

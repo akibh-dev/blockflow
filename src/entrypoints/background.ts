@@ -19,6 +19,7 @@ import { diffWorkflows } from '../core/workflow';
 import { STORAGE_KEYS } from '../shared/keys';
 import { isExtensionMessage } from '../shared/messages';
 import type { Workflow } from '../core/types';
+import { forgetLegacyWatchTabs } from '../browser/pageReader';
 
 /**
  * Background worker: runs enabled workflows.
@@ -43,9 +44,12 @@ export default defineBackground(() => {
   const onRun = (run: RunRecord) => {
     if (run.status === 'running') {
       liveRuns.set(run.id, { workflowId: run.workflowId, trigger: run.trigger });
+      // Stay awake for the whole run, even while it waits (Manual Step, slow pages, delays).
+      scheduler.hold(`run:${run.id}`);
     } else {
       liveRuns.delete(run.id);
       cancelRequests.delete(run.id);
+      scheduler.release(`run:${run.id}`);
     }
     saveRun(run);
   };
@@ -64,11 +68,15 @@ export default defineBackground(() => {
   // A run still marked "running" from a previous worker can never finish: say so.
   void updateRuns((runs) => markInterrupted(runs, new Set(liveRuns.keys()), new Date().toISOString()));
   void clearStalePrompts().catch(() => {});
+  void forgetLegacyWatchTabs().catch(() => {});
 
-  /** (Re)starts an enabled workflow: `start()` clears its timers and calls its start blocks. */
-  async function startWorkflow(id: string): Promise<void> {
+  /**
+   * (Re)starts an enabled workflow: `start()` clears its timers and calls its start blocks. Plain
+   * start blocks (no trigger of their own) run only when the user has just switched it on.
+   */
+  async function startWorkflow(id: string, runPlainRoots: boolean): Promise<void> {
     const workflow = (await loadWorkflows()).find((candidate) => candidate.id === id);
-    if (workflow?.enabled) await newRunner(workflow).start();
+    if (workflow?.enabled) await newRunner(workflow).start({ runPlainRoots });
   }
 
   /** Clears a workflow's timers and asks its non-manual live runs to stop. */
@@ -80,10 +88,10 @@ export default defineBackground(() => {
     }
   }
 
-  /** On install/update and browser startup: start every enabled workflow. */
+  /** On install/update and browser startup: re-arm every enabled workflow's triggers (plain start blocks do not run). */
   async function startAllEnabled(): Promise<void> {
     for (const workflow of await loadWorkflows()) {
-      if (workflow.enabled) await newRunner(workflow).start();
+      if (workflow.enabled) await newRunner(workflow).start({ runPlainRoots: false });
     }
   }
 
@@ -92,7 +100,10 @@ export default defineBackground(() => {
     const parsed = parseTimerKey(name);
     if (!parsed) return; // not one of ours
     const workflow = (await loadWorkflows()).find((candidate) => candidate.id === parsed.workflowId);
-    if (!workflow || !workflow.enabled) {
+    // A long delay started by the Run button continues even when the workflow is off; switching a
+    // workflow off clears its timers, so anything left for a disabled workflow is such a delay.
+    const isDelay = parsed.name.startsWith('delay:');
+    if (!workflow || (!workflow.enabled && !isDelay)) {
       await host.scheduler.clear(name); // orphaned alarm
       return;
     }
@@ -233,15 +244,16 @@ export default defineBackground(() => {
     if (area !== 'local') return;
     const change = changes[STORAGE_KEYS.workflows];
     if (!change) return;
-    const { start, stop } = diffWorkflows(
+    const { start, restart, stop } = diffWorkflows(
       change.oldValue as Workflow[] | undefined,
       change.newValue as Workflow[] | undefined,
     );
     void (async () => {
       for (const id of stop) await stopWorkflow(id);
-      for (const id of start) await startWorkflow(id);
+      for (const id of start) await startWorkflow(id, true);
+      for (const id of restart) await startWorkflow(id, false);
     })().catch(report('workflow change'));
-    if (start.length > 0 || stop.length > 0) syncContextMenus();
+    if (start.length > 0 || restart.length > 0 || stop.length > 0) syncContextMenus();
   });
 
   // Manual Step answers from the notification (Chrome has buttons; Firefox: a click means Continue).

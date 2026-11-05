@@ -147,9 +147,10 @@ Check in this order:
 5. **Context Menu** items appear only while the workflow is On.
 6. Look at the service worker console (above) for `[BlockFlow] … failed`.
 
-Known issues (from the [product plan](../PLAN.md#6-bugs-and-gaps-found-fix-before-new-features)): a **Start**
-block also runs once whenever its workflow is switched on or the browser starts; a Timer used as a delay in
-the middle of a flow splits the run record, and on a workflow that is Off the delay never resumes.
+Good to know: a workflow whose first block has no trigger of its own (Open Tab, HTTP Request…) runs once
+when you switch it **On**, not again when you edit it or the browser starts. **Start** runs only from ▶ Run
+or a Run Workflow call. A Timer used as a delay waits inside the run for up to 600 s; longer delays continue
+as a new run.
 
 ## Permissions
 
@@ -195,10 +196,8 @@ import and validation message. The common ones:
 - `Unknown block type "x"`: the type is not in the [block reference](../guide/blocks.md) (`openUrl` should be
   `open-url`, `navigate-to` does not exist…).
 - `<Setting> is required`: a required config key is missing or empty.
-- A block that should run after another runs at the start instead: its edge pointed at an id that does not
-  exist and was dropped on import.
-- Branches attach to the wrong output after import: a known bug, see
-  [Import and export](Workflows-as-Scripts.md#import-and-export).
+- `A connection in "…" points at "x", which is not a block id.` / `Two blocks in "…" have the id "x".`: fix the
+  edge's `source`/`target`, or give each node its own `id`.
 
 ## Other messages
 

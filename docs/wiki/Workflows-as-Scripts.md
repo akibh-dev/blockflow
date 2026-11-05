@@ -144,11 +144,8 @@ references.
 
 **+ New ▾** offers the files in [examples/](../guide/examples) as templates.
 
-> **Known issue (November 2026):** import, templates and Duplicate currently drop each block's `step`
-> settings and each edge's `sourcePort`. After import, connections from If `false`, loop `done` and
-> `error` outputs are attached to the block's first output instead, and `onError: "port"` is lost. Until
-> this is fixed, re-check branching blocks on the canvas after importing (drag the connection to the right
-> output, set On error again). Tracked as P0 in [the product plan](../PLAN.md#6-bugs-and-gaps-found-fix-before-new-features).
+Import keeps each block's `step` settings and each connection's `sourcePort`. It refuses a file whose
+connections point at block ids that don't exist, or that uses the same block id twice, and the error names the id.
 
 ## How errors show up
 
@@ -162,9 +159,9 @@ There are two stages.
 | `Import failed: This file does not look like a BlockFlow workflow.` | A workflow without `nodes` and `edges` arrays. |
 | `Import failed: A block in this file is malformed.` | A node without a string `id` or `type`. |
 | `Import failed: No workflows found in this file.` | `"workflows": []`. |
-
-Edges whose `source` or `target` is not a node id in the file are **dropped silently** at this stage. The
-block they pointed to then has no input and becomes an extra start block. Double-check edge ids.
+| `Import failed: Two blocks in "<name>" have the id "<id>".` | Node ids must be unique within a workflow. |
+| `Import failed: A connection in "<name>" points at "<id>", which is not a block id.` | An edge's `source` or `target` names no node. |
+| `Import failed: A connection in "<name>" is malformed (it needs "source" and "target").` | An edge without string `source`/`target`. |
 
 **2. Checking the workflow.** After import the editor validates the workflow (the same check runs all the
 time while you edit):

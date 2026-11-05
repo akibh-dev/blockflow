@@ -100,7 +100,8 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
 ```
 
 - `id`s: any unique strings within the file (node ids unique within a workflow). Import replaces
-  them; Run Workflow references between workflows in the same file are kept working.
+  them; Run Workflow references between workflows in the same file are kept working. A file whose
+  edges name a missing node id, or that repeats a node id, is refused with a message naming the id.
 - `position`: canvas coordinates; about 260 px apart left to right reads well. Branches: ±140 px in y.
 - `step` (optional, per node): see section 7.
 - A single workflow object (without the `format` wrapper) also imports.
@@ -233,7 +234,7 @@ with its own copy of the data.
 | `page-visited` | while On, when any tab loads a page whose URL matches `url` (`when: "any"` also on SPA route changes). Tabs BlockFlow opened never trigger it. The tab becomes `main`. | uses the tab you are on |
 | `context-menu` | while On, when you choose its item (`title`) in the right-click menu; gives `url`, `selection`, `link`, `src` | uses the tab you are on |
 | `watch-element` | while On, when an element's text changes | reads once now |
-| any other block | once when switched On (with empty data) | runs once |
+| any other block | once when you switch the workflow On (with empty data); not again when you edit it or the browser starts | runs once |
 
 A workflow may have several start blocks; each starts its own runs.
 

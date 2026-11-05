@@ -186,6 +186,26 @@ describe('timers under 30s', () => {
     expect(t.pings.count).toBe(afterClear);
   });
 
+  it('hold() keeps the worker awake (for a live run) until every hold is released', async () => {
+    const t = setup();
+    t.scheduler.hold('run:1');
+    t.scheduler.hold('run:2');
+    t.clock.advance(60_000);
+    expect(t.pings.count).toBe(1 + 3);
+    t.scheduler.release('run:1');
+    expect(t.scheduler.isPinging()).toBe(true);
+    // A short timer armed and cleared meanwhile must not stop the ping a run still needs.
+    await t.scheduler.set(KEY, { delayMs: 5_000 });
+    await t.scheduler.clear(KEY);
+    expect(t.scheduler.isPinging()).toBe(true);
+    t.scheduler.release('run:2');
+    t.scheduler.release('unknown');
+    expect(t.scheduler.isPinging()).toBe(false);
+    const after = t.pings.count;
+    t.clock.advance(120_000);
+    expect(t.pings.count).toBe(after);
+  });
+
   it('a one-shot fires once, then releases everything', async () => {
     const t = setup();
     await t.scheduler.set(KEY, { delayMs: 5_000 }, { hello: 'world' });
@@ -454,7 +474,7 @@ describe('with the workflow engine', () => {
     expect(base.opened.map((tab) => tab.url)).toEqual(['https://shop.example.com/item#changed']);
   });
 
-  it('Watch Element → Timer (8s delay) → Open URL waits 8 seconds after a change', async () => {
+  it('Watch Element → Timer (8s delay) → Open URL waits inside the run after a change', async () => {
     const { clock, base, runner } = liveRunner(
       flow(
         [
@@ -475,14 +495,9 @@ describe('with the workflow engine', () => {
     base.pageTexts('a', 'b');
 
     await runner.start(); // baseline "a"
-    clock.advance(10_000); // the poll finds "b"; the delay timer is now holding the flow
-    await settle();
-    expect(base.opened).toHaveLength(0);
-    clock.advance(7_999);
-    await settle();
-    expect(base.opened).toHaveLength(0);
-    clock.advance(1);
-    await settle();
+    clock.advance(10_000); // the poll finds "b"; the delay waits inside the run (virtual sleeps)
+    for (let i = 0; i < 30; i += 1) await settle();
     expect(base.opened.map((tab) => tab.url)).toEqual(['https://shop.example.com/item#after']);
+    expect(base.sleeps.filter((ms) => ms === 1000)).toHaveLength(8);
   });
 });

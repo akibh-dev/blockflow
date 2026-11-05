@@ -24,7 +24,8 @@ export function sampleWorkflows(): Workflow[] {
         id: openId,
         type: 'open-url',
         position: { x: 380, y: 120 },
-        config: { url: 'https://example.com', newTab: true, active: true },
+        // The workflow's own tab, reused: a new tab every 5 minutes would pile up.
+        config: { url: 'https://example.com', where: 'workflow', active: true },
       },
     ],
     edges: [{ id: uid(), source: timerId, target: openId }],
@@ -54,7 +55,7 @@ export function sampleWorkflows(): Workflow[] {
         id: openChangedId,
         type: 'open-url',
         position: { x: 420, y: 120 },
-        config: { url: '{{url}}', newTab: true, active: true },
+        config: { url: '{{url}}', where: 'new', active: true },
       },
     ],
     edges: [{ id: uid(), source: watchId, target: openChangedId }],

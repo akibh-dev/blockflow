@@ -19,7 +19,7 @@ Start here when you press Run, with some starting values (also defaults for Run 
 
 - Outputs (ports): `out` (plus `error` when step.onError is "port")
 - Default timeout: 60s
-- Can start a workflow: yes (runs once with empty data)
+- Can start a workflow: yes (has its own schedule/trigger)
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -32,12 +32,12 @@ Adds to the data: `(your names)` (One key per starting value.)
 Start the flow on a schedule, or delay it when placed after another block.
 
 - Outputs (ports): `out` (plus `error` when step.onError is "port")
-- Default timeout: 60s
+- Default timeout: 660s
 - Can start a workflow: yes (has its own schedule/trigger)
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `seconds` (Seconds) | number | `60` | Under 30 seconds the extension keeps its background worker awake to fire on time (Chromium). 30 seconds or more uses browser alarms. |
+| `seconds` (Seconds) | number | `60` | Under 30 seconds the extension keeps its background worker awake to fire on time (Chromium). 30 seconds or more uses browser alarms. After another block: waits up to 600 s inside the run; longer delays continue as a new run. |
 | `repeat` (Repeat) | boolean | `true` | Only used when this block starts the flow. After another block it always fires once. |
 
 Adds to the data: `tick` (How many times the timer has fired (when it starts the flow).); `firedAt` (ISO time the timer fired.)

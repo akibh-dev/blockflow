@@ -206,6 +206,11 @@ export interface BlockContext<C extends object = BlockConfig> {
   /** Id of the run this step belongs to ('' for start blocks between runs). */
   runId: string;
   /**
+   * True once this step should give up: its run was stopped, the workflow was switched off, or the
+   * step timed out. Long waits inside a block (`host.sleep` in slices) should check it.
+   */
+  aborted(): boolean;
+  /**
    * Marks this step and the run as failed but keeps going (a "soft" assertion). The block still
    * returns its output normally.
    */

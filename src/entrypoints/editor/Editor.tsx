@@ -38,6 +38,8 @@ import { ReportsPage } from './components/ReportsPage';
 import { SecretsPage } from './components/SecretsPage';
 import { DataPage } from './components/DataPage';
 import { registry } from './registry';
+import { mergeStoredWorkflows, syncBase } from './sync';
+import type { SyncBase } from './sync';
 
 /** React Flow node renderers by node `type`; every BlockFlow node is `'block'`. Module-level so it is stable. */
 const nodeTypes = { block: BlockNode };
@@ -97,10 +99,15 @@ export function Editor() {
     history.current = { past: [], future: [], lastAt: 0, restoring: false };
   }, []);
 
+  // What storage held at the last load/save, per workflow: tells this tab's own edits apart from
+  // another editor tab's (see sync.ts).
+  const synced = useRef<SyncBase>(new Map());
+
   useEffect(() => {
     let alive = true;
     void loadWorkflows().then((stored) => {
       if (!alive) return;
+      synced.current = syncBase(stored);
       const list = stored.length > 0 ? stored : [createWorkflow('My first workflow')];
       setWorkflows(list);
       open(list[0] as Workflow);
@@ -142,20 +149,53 @@ export function Editor() {
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
 
+  const persist = useCallback((list: Workflow[]) => {
+    synced.current = syncBase(list);
+    void saveWorkflows(list);
+  }, []);
+
   useEffect(() => {
     if (!workflows) return;
-    const timer = setTimeout(() => void saveWorkflows(workflows), SAVE_DELAY_MS);
+    const timer = setTimeout(() => persist(workflows), SAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [workflows]);
+  }, [workflows, persist]);
+
+  // Another editor tab (or the first-install samples) changed the stored list: merge it in, keeping
+  // this tab's unsaved edits, and reload the canvas if the open workflow changed there.
+  useEffect(() => {
+    const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
+      const change = changes[STORAGE_KEYS.workflows];
+      if (area !== 'local' || !change) return;
+      const theirs = (change.newValue as Workflow[] | undefined) ?? [];
+      const ours = latest.current;
+      if (!ours || JSON.stringify(theirs) === JSON.stringify(ours)) {
+        synced.current = syncBase(theirs);
+        return;
+      }
+      const merged = mergeStoredWorkflows(ours, synced.current, theirs);
+      synced.current = syncBase(theirs);
+      setWorkflows(merged);
+      const id = activeIdRef.current;
+      const before = ours.find((workflow) => workflow.id === id);
+      const after = merged.find((workflow) => workflow.id === id);
+      if (!after) {
+        if (merged[0]) open(merged[0]);
+      } else if (before !== after) {
+        open(after);
+      }
+    };
+    browser.storage.onChanged.addListener(listener);
+    return () => browser.storage.onChanged.removeListener(listener);
+  }, [open]);
 
   // Do not lose the last edit if the tab is closed right away.
   useEffect(() => {
     const flush = () => {
-      if (latest.current) void saveWorkflows(latest.current);
+      if (latest.current) persist(latest.current);
     };
     window.addEventListener('pagehide', flush);
     return () => window.removeEventListener('pagehide', flush);
-  }, []);
+  }, [persist]);
 
   // --- validation --------------------------------------------------------
 

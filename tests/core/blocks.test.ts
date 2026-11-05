@@ -62,16 +62,32 @@ describe('HTTP Request', () => {
     expect(host.requests[0]).not.toHaveProperty('body');
   });
 
-  it('stops the flow on HTTP error by default, continues when told to', async () => {
-    for (const [failOnError, opened] of [[true, 0], [false, 0]] as const) {
-      const host = new FakeHost();
-      host.httpHandler = async () => ({ status: 500, ok: false, body: 'oops' });
-      const h = harness(wf({ url: 'https://api.test/q', failOnError }), host);
-      await h.runner.start();
-      await h.fire('tick');
-      // no JSON in the body, so the Open URL block has no URL and fails either way
-      expect(host.opened.length).toBe(opened);
-    }
+  it('fails the step on an HTTP error by default (run failed, error output usable), continues when told to', async () => {
+    const host = new FakeHost();
+    host.httpHandler = async () => ({ status: 500, ok: false, body: 'oops' });
+    const failing = harness(wf({ url: 'https://api.test/q' }), host);
+    await failing.runner.start();
+    await failing.fire('tick');
+    expect(failing.lastRun()?.status).toBe('failed');
+    expect(failing.lastRun()?.error).toBe('HTTP Request: GET https://api.test/q answered 500: oops');
+
+    const handled = flow(
+      [
+        { id: 'h', type: 'http-request', config: { url: 'https://api.test/q' }, step: { onError: 'port' } },
+        { id: 'n', type: 'notify', config: { title: 'down', message: '{{error}}' } },
+      ],
+      [['h', 'n', 'error']],
+    );
+    const h2 = harness(handled, host);
+    expect((await h2.runner.runOnce()).status).toBe('passed');
+    expect(host.notifications.map((n) => n.message)).toEqual(['GET https://api.test/q answered 500: oops']);
+
+    const lenient = harness(wf({ url: 'https://api.test/q', failOnError: false }), host);
+    await lenient.runner.start();
+    await lenient.fire('tick');
+    // The response goes on (status 500, ok false); Open URL then has no URL from it and fails.
+    expect(host.opened).toHaveLength(0);
+    expect(lenient.lastRun()?.steps.find((s) => s.nodeId === 'h')?.status).toBe('passed');
   });
 });
 

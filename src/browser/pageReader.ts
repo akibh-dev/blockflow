@@ -10,13 +10,23 @@ const ELEMENT_WAIT_MS = 6_000;
 
 type TabMap = Record<string, number>;
 
+/**
+ * URL → tab id of BlockFlow's watch tabs. Kept in `storage.session`: tab ids are reused after a
+ * browser restart, so a map that outlived the session could point at one of the user's own tabs
+ * (which Watch Element would then reload).
+ */
 async function loadTabMap(): Promise<TabMap> {
-  const stored = await browser.storage.local.get(STORAGE_KEYS.watchTabs);
+  const stored = await browser.storage.session.get(STORAGE_KEYS.watchTabs);
   return (stored[STORAGE_KEYS.watchTabs] as TabMap | undefined) ?? {};
 }
 
 async function saveTabMap(map: TabMap): Promise<void> {
-  await browser.storage.local.set({ [STORAGE_KEYS.watchTabs]: map });
+  await browser.storage.session.set({ [STORAGE_KEYS.watchTabs]: map });
+}
+
+/** Removes the map older versions kept in `storage.local` (it could outlive the session). */
+export async function forgetLegacyWatchTabs(): Promise<void> {
+  await browser.storage.local.remove(STORAGE_KEYS.watchTabs);
 }
 
 /**
