@@ -16,9 +16,34 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
+      # The unit tests, with a coverage report (no threshold yet).
+      - run: npm run test:coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore
       - run: npm run learn:check
       - run: npm run guide:check
       - run: npm run wiki:check
       - run: npm run build
       - run: npm run build:firefox
+
+  # The extension in a real Chromium (tests/e2e). New headless supports extensions; xvfb-run is the
+  # fallback display. The GitHub mirror only receives main, so there this runs after a merge.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: npm run e2e
+        run: |
+          export BF_BROWSER="$(node -e "console.log(require('playwright-core').chromium.executablePath())")"
+          BF_HEADLESS=1 xvfb-run -a npm run e2e

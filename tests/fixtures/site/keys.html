@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture: keys</title>
+  </head>
+  <body>
+    <!-- For Press Key (tests/e2e/specs/blocks-coverage.mjs): Enter submits the form, Control+A selects. -->
+    <form id="search">
+      <label for="q">Search</label>
+      <input id="q" name="q" />
+      <button type="submit">Go</button>
+    </form>
+    <p id="status">idle</p>
+    <script>
+      const field = document.getElementById('q');
+      const status = document.getElementById('status');
+      document.getElementById('search').addEventListener('submit', (event) => {
+        event.preventDefault();
+        status.textContent = `submitted: ${field.value}`;
+      });
+      field.addEventListener('select', () => {
+        status.textContent = `selected ${field.selectionEnd - field.selectionStart} of ${field.value.length}`;
+      });
+    </script>
+  </body>
+</html>
