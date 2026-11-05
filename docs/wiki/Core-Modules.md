@@ -70,7 +70,9 @@ Semantics worth knowing:
 - `&&`, `||` short-circuit and return an operand; an empty array is falsy. `??` only for null/undefined.
 - String escapes: only `\n`, `\t`, `\\`, `\'`, `\"`; any other backslash is kept, so `'/#(\d+)/'` works.
 - Regex arguments (`matches`, `extract`, `replace`) accept `/re/flags` or a bare pattern.
-- `now()` and `today()` use the real clock, not `Host.now`.
+- `now()` and `today()` read the clock from the evaluation context (`EvalEnv.now`, third argument of
+  `evaluate` / `render` / `resolveConfig`); the engine and the data blocks pass `Host.now`, so tests with
+  FakeHost's fixed clock get fixed dates. Without one, the system clock.
 
 Called by: `template.ts`, `blocks/dataCommon.ts` (Transform, Filter).
 

@@ -18,7 +18,9 @@ state, and which messages, storage keys or browser APIs it touches. Read [Editor
 [ReportsPage.tsx](../../src/entrypoints/editor/components/ReportsPage.tsx),
 [DataPage.tsx](../../src/entrypoints/editor/components/DataPage.tsx),
 [SecretsPage.tsx](../../src/entrypoints/editor/components/SecretsPage.tsx),
-[PromptBanner.tsx](../../src/entrypoints/editor/components/PromptBanner.tsx)
+[PromptBanner.tsx](../../src/entrypoints/editor/components/PromptBanner.tsx),
+[Dialogs.tsx](../../src/entrypoints/editor/components/Dialogs.tsx),
+[TryItCard.tsx](../../src/entrypoints/editor/components/TryItCard.tsx)
 
 ## At a glance
 
@@ -38,11 +40,14 @@ state, and which messages, storage keys or browser APIs it touches. Read [Editor
 | [DataPage](#datapage) | `data` view | IndexedDB read/delete (polls), downloads |
 | [SecretsPage](#secretspage) | `secrets` view | reads/writes `bf:secrets` |
 | [PromptBanner](#promptbanner) | top of the page, all views | sends `bf:answer-prompt` |
+| [Dialogs](#dialogs) (`DialogHost`) | toasts bottom right, modal dialogs; rendered once by `App` | none |
+| [TryItCard](#tryitcard) | top right of the canvas, first run | reads/writes `bf:onboarding`, `fetch` of the playground, `tabs.create` |
 
 Shared conventions: components are function components with props interfaces declared in the same file;
 everything that changes workflows goes back to `Editor` through callbacks (no component writes
-`bf:workflows`); confirmations use `window.confirm`; block metadata comes from the shared
-[`registry`](Editor.md#registryts).
+`bf:workflows`); messages, confirmations and questions use [Dialogs](#dialogs) (`toast`,
+`confirmDialog`, `promptDialog`), never `window.alert/confirm/prompt`; block metadata comes from the
+shared [`registry`](Editor.md#registryts).
 
 ## BlockNode
 
@@ -140,7 +145,7 @@ The other side is in [Picker and Recorder](Picker-and-Recorder.md) and
 | --- | --- |
 | `RowsInput` | Table editor for `rows` fields (Fill Form, Extract List, Manual Start, Transform). Cells are TemplateInputs (suggestions only for `column.templated`), 🎯 per `column.locator` cell, `+ Add row`, ✕ remove, and **Detect fields** when `field.detectForm`. A row's `hint` becomes the value placeholder. Rows are keyed by index. |
 | `FieldInput` | The scalar control table above. |
-| `StepSettingsEditor` | "Step settings" `<details>`, open when anything is set. On error (`stop`/`continue`/`port`), Retries (0..`MAX_RETRIES`), Timeout (placeholder = `def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS`), Screenshot (`error`/`always`/`never`), **Use real mouse and keyboard** (asks for the `debugger` permission first; stays off if refused), Disabled, Note. Semantics: [ARCHITECTURE.md, Engine model](../ARCHITECTURE.md#engine-model-srccoreenginets). |
+| `StepSettingsEditor` | "Step settings" `<details>`, open when anything is set. On error (`stop`/`continue`/`port`), Retries (0..`MAX_RETRIES`), Timeout (placeholder = `def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS`), Screenshot (`error`/`always`/`never`), **Use real mouse and keyboard** (only for blocks with `realInput: true` in their definition, or when already set; asks for the `debugger` permission first; stays off if refused), Disabled, Note. Semantics: [ARCHITECTURE.md, Engine model](../ARCHITECTURE.md#engine-model-srccoreenginets). |
 | `StepResult` | "Last run" `<details>`: status, duration, attempts, chosen port, error, [Screenshot](#screenshot), input and output as JSON. |
 | `formatMs(ms)` (exported) | `850 ms`, `2.5 s`, `12 s`. Also used by LogPanel and ReportsPage. |
 
@@ -174,7 +179,7 @@ A text input or textarea that offers data names after `{{`, IDE style.
   **Grant** button.
 - `requestPermission` calls `browser.permissions.request`. It must run inside a click handler (browsers only
   show the prompt on a user gesture). If the browser throws (Firefox/Safari lack these permissions) it
-  alerts and returns `false`.
+  shows an error toast and returns `false`.
 
 `userScripts` also needs the user to switch on "Allow User Scripts" in `chrome://extensions`, which the
 note says. Which builds declare these as optional is in `wxt.config.ts`; see
@@ -203,7 +208,9 @@ The bottom row, with two tabs.
 | `workflowName(id)` | Name for a run's workflow in "all" mode. |
 
 **State:** `tab` (`log | runs`). The log tab scrolls to the end when lines are added. The runs tab lists
-newest first with status, start time, trigger, step count (including `droppedSteps`), duration and error.
+newest first with status, start time, trigger (`TRIGGER_LABELS`: `manual` "Run button", `start` "turned
+on", `timer` "schedule", `event` "page event", `call` "called by another workflow"), step count
+(including `droppedSteps`), duration and error.
 
 ## Sidebar
 
@@ -248,16 +255,17 @@ two lists can never behave differently. What each does is in
 
 The "All workflows" view: a file-manager table.
 
-**Props:** [`WorkflowActions`](#workflowactions) plus `workflows`, `activeId`, `logs`, `errorCounts`
-(`Map<id, number>` of validation errors) and `onSetAll(enabled)`.
+**Props:** [`WorkflowActions`](#workflowactions) plus `workflows`, `activeId`, `runs` (`bf:runs`),
+`errorCounts` (`Map<id, number>` of validation errors) and `onSetAll(enabled)`.
 
 **State:** `query` (name filter), `picked` (`Set` of selected ids).
 
 - Bar: search, + New, Import, **Export selected (n)** or **Export all**, Turn all on / off.
 - Columns: select, on/off switch, name (+ "n problems"), block icons (tooltip: block and connection counts),
-  **Last activity** (timestamp of the workflow's newest log line, from `logs`), and Edit / Duplicate /
-  Export / Playwright / Delete.
-- The switch is not disabled for workflows with problems: `onToggle` refuses and explains with an alert.
+  **Last activity** (end time, or start time while running, of the workflow's latest run in `runs`, with
+  its status; "never" without runs), and Edit / Duplicate / Export / Playwright / Delete.
+- The switch of a workflow with problems is disabled while it is off, with the tooltip "Fix the problems
+  first" (like the header switch); it can always be switched off. Its `aria-label` is "<name> on".
 
 ## ReportsPage
 
@@ -268,8 +276,10 @@ Test-report view over the stored runs.
 
 **State:** `workflow` and `status` filters, `openId` (run shown in the detail pane).
 
-- Filters: workflow (from the runs themselves, so deleted workflows still appear) and result; **Failed**
-  also matches `interrupted` runs.
+- Filters: workflow (from the runs themselves, so deleted workflows still appear) and result: Passed,
+  Failed, Cancelled, Interrupted, Running (each matches that status only).
+- The trigger is shown with `TRIGGER_LABELS` (`src/core/runs.ts`): Run button, turned on, schedule, page
+  event, called by another workflow.
 - Totals line from `summarize(shown)` (`src/core/report.ts`).
 - Detail: steps with status, block label, duration, attempts, port taken, error, [Screenshot](#screenshot),
   and **open called run** for Run Workflow steps (`childRunId`).
@@ -287,7 +297,7 @@ Browser for datasets written by Save to Dataset blocks (IndexedDB, `src/browser/
   the page is open (runs keep adding rows), and on the Refresh button.
 - Detail: preview of the first 50 rows (`PREVIEW_ROWS`); columns are the union of object keys in those
   rows, or a single "value" column for non-object rows. Objects in cells are shown as JSON.
-- Download CSV (`toCsv` from `src/core/csv.ts`) or JSON; Delete (`deleteDataset`, after confirm).
+- Download CSV (`toCsv` from `src/core/csv.ts`) or JSON; Delete (`deleteDataset`, after `confirmDialog`).
 
 ## SecretsPage
 
@@ -299,7 +309,7 @@ Editor for named secrets in `bf:secrets` (`Record<string, string>`), through
 - Names must match `/^[A-Za-z_][A-Za-z0-9_]*$/` (so `{{secret.name}}` parses). Adding an existing name
   overwrites it.
 - Existing values are edited in place; every keystroke saves the whole map.
-- Delete asks for confirmation (workflows using it will fail).
+- Delete asks for confirmation in a `confirmDialog` (workflows using it will fail).
 - Values are plain text in `storage.local`; the page says so. Masking in logs and reports is done by the
   engine (see [ARCHITECTURE.md, Engine model](../ARCHITECTURE.md#engine-model-srccoreenginets)), and
   secrets are never part of a workflow export because they are never in a workflow.
@@ -311,6 +321,35 @@ Editor for named secrets in `bf:secrets` (`Record<string, string>`), through
 **Fail the run**, each sending `bf:answer-prompt { runId, ok }`. The background also shows a notification
 with the same buttons; whichever is answered first wins, and the prompt disappears from storage. See
 [Background Worker](Background-Worker.md).
+
+## Dialogs
+
+`Dialogs.tsx` replaces the browser's `alert` / `confirm` / `prompt`, which block the page (React, storage
+listeners) and cannot be driven by the e2e tests. Plain functions over a module-level store, so any code can
+call them (no context needed); `<DialogHost />` in `App.tsx` renders them.
+
+| Export | Does |
+| --- | --- |
+| `toast(message, kind = 'info')` | A note in the bottom right corner (`.bf-toast`, `role="status"`), newlines kept. `info` 5 s, `success` 4 s, `error` 9 s, or the × button. At most 5 at a time. |
+| `confirmDialog({ title?, message, confirmLabel?, danger? })` | Modal (`.bf-modal`, `role="dialog"`); resolves `true` on the confirm button or Enter, `false` on Cancel, Escape or a click on the backdrop. `danger` makes the button red. |
+| `promptDialog({ title?, message, defaultValue?, placeholder?, confirmLabel?, validate? })` | Modal with one input (focused and selected); resolves the trimmed text, or `null` on cancel. `validate(value)` returns an error shown under the input (the dialog stays open) or `null`. |
+
+Several dialogs queue: the oldest is shown. While one is open the canvas shortcuts are ignored.
+
+## TryItCard
+
+`TryItCard({ onCreate })`, first-run onboarding on the canvas (top right).
+
+- Loads `bf:onboarding` (`OnboardingState`) once; renders nothing while loading or once `tryItDismissed`
+  is set (the × button sets it).
+- Step 1 tells the user to run `npm run playground` (serves `docs/manual-test` at
+  `http://localhost:7357`, [scripts/playground.mjs](../../scripts/playground.mjs)) and shows whether
+  `PLAYGROUND_URL` answers (`fetch`, which an extension page may do for any host it has permission for);
+  **Check again** / **Open it**.
+- Step 2, **Create the Try-it workflow**: `onCreate(template.text)` with the `playground-tour` template
+  (Editor's `onCreateFromTemplate`), which opens it on the canvas.
+- Why the playground is not an extension page: Chromium refuses to script `chrome-extension://` pages,
+  the extension's own included, so blocks could not click or fill there.
 
 ## See also
 

@@ -121,8 +121,9 @@ Open Tab (https://shop.test/login)
 
 - **Sidebar** (file-manager style): click a row to open it, the dot turns it on/off, hover for rename (or double-click),
   duplicate, export to a `.blockflow.json` file and delete. `+ New` and `Import` sit on top, plus search.
-- **All workflows** tab: a table with on/off switches, block icons, last activity, Edit / Duplicate / Export / Delete,
-  select several to export together, Turn all on / off.
+- **All workflows** tab: a table with on/off switches (greyed out while a workflow has problems), block icons,
+  last activity (its latest run and result), Edit / Duplicate / Export / Delete, select several to export
+  together, Turn all on / off.
 - Imported and duplicated workflows always arrive **off** with fresh ids. Turning on a workflow with errors is refused with the reason.
 
 ## Getting started
@@ -140,15 +141,20 @@ Click the BlockFlow toolbar icon to open the editor. Two example workflows are c
 
 ### Try it end to end
 
-A page whose text changes on every load is included for testing:
+Two practice pages are included: `playground.html` (things to watch, click and fill) and `clock.html`
+(text that changes on every load). Serve them:
 
 ```bash
-npx serve docs/manual-test        # or: python3 -m http.server 8080 --directory docs/manual-test
+npm run playground                # http://localhost:7357/playground.html  (or: npx serve docs/manual-test)
 ```
 
-In the editor: add a **Watch Element** block, set Page URL to `http://localhost:3000/clock.html` (use the
-port that was printed), press **Pick on page**, click the clock, then add and connect an **Open URL** block
-set to `{{url}}`. Turn the workflow **On** and watch the **Run log** at the bottom.
+The editor's **Try it** card (shown on first run) creates a workflow that fills and clicks the playground;
+press **▶ Run**. Or by hand: add a **Watch Element** block, set Page URL to
+`http://localhost:7357/clock.html`, press **Pick on page**, click the clock, then add and connect an
+**Open URL** block set to `{{url}}`. Turn the workflow **On** and watch the **Run log** at the bottom.
+
+(The pages are served over http, not shipped inside the extension: Chromium does not let an extension
+script its own `chrome-extension://` pages, so blocks could not act on them.)
 
 ### Other browsers
 

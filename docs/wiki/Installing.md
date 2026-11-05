@@ -87,7 +87,6 @@ block calls whatever URL *you* give it.)
 | `webNavigation` | The Page Visited trigger, single-page-app URL changes, popups, iframes |
 | `contextMenus` | The Context Menu trigger |
 | `downloads` | The Download block |
-| `activeTab` | Declared, not needed by any feature today |
 | `offscreen` (Chrome, Safari) | Parsing fetched HTML for Extract List / Extract Table without a tab (Firefox does not need it) |
 
 ### Optional permissions (asked only when you need them)

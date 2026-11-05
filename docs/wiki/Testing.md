@@ -216,6 +216,7 @@ because an automated browser cannot click the permission prompt. See [Build and 
 | Find the extension | Waits for the service worker; its URL gives the extension id; opens `chrome-extension://<id>/editor.html` |
 | Run a workflow | `run(wf)` sends `{ type: 'bf:run-workflow', workflow }` from the editor page, then polls `bf:runs` in `chrome.storage.local` every 200 ms until a finished run appears (90 s limit). See [Message Protocol](Message-Protocol.md) and [Storage Keys](Storage-Keys.md) |
 | Seed state | `seedWorkflows(list)` closes the editor (it saves on close), writes `bf:workflows`, reopens it. Secrets go to `bf:secrets` |
+| First-run card | Sets `bf:onboarding` to dismissed before the editor opens, so the "Try it" card does not cover the canvas (the `editor-ux` spec brings it back) |
 | Report | `check(name, ok, detail)` prints ✓/✗; exit code 1 if any check failed. Last check: no uncaught errors in the editor page |
 
 Scenarios, in order:
@@ -231,6 +232,7 @@ Scenarios, in order:
 | Phase D | `/products` (dynamic), `table.html`, `feed.html`, `login.html` | Paginate + Extract List + Save Dataset + Download CSV, IndexedDB dataset, HTTP Request + Extract Table/List from HTML (offscreen parser), Scroll on an infinite feed, data-driven For Each login, Data tab preview |
 | Phase E | `login.html`, `welcome.html`, `table.html` | Recorder → blocks and replay, Pick on page with alternatives, undo/redo/copy/paste, templates, `{{` autocomplete, Page Visited trigger |
 | Phase F | `upload.html`, `popup.html`, `dialogs.html`, `/frames.html` + `frame-inner.html`, `api.html`, `trusted.html`, `login.html` | Upload File, Wait for Popup (`window.open`, `target=_blank`), Dialogs, same- and cross-origin iframes, Wait For response, real (trusted) input via debugger, background-tab screenshot, Run Script (passes or explains Chrome 135+), Playwright export run with `npx playwright test` |
+| Editor UX (`editor-ux`) | editor UI; `docs/manual-test/playground.html` via `scripts/playground.mjs` on port 7357 | In-editor toasts and confirm/input dialogs (no native ones), the All workflows switch and Turn all on with a problem workflow, `bf:state` cleanup on delete, recorder start-URL check, real-input setting only on page actions, undo per workflow, paste at the mouse, the Try it card and the playground template passing |
 
 The Playwright export step writes `.output-e2e/playwright/exported.spec.ts` plus a config and runs it with
 `LOGINPASSWORD` set, so `@playwright/test` is a dev dependency only for this.
@@ -266,10 +268,13 @@ Exports `PASSWORD` (`Op3n-Sesame!`, the only password the fixture login accepts)
 | `trusted.html` | Only reacts to trusted events (`event.isTrusted`), like some anti-bot checks |
 | `upload.html` | Custom upload button over a hidden file input; echoes name, type and content |
 
-## Manual test page
+## Manual test pages
 
-[docs/manual-test/clock.html](../manual-test/clock.html) shows the load time (changes on every reload) and a
-line that never changes. Serve it (`npx serve docs/manual-test`) and follow README
+[docs/manual-test/playground.html](../manual-test/playground.html) has things to watch, click and fill; the
+editor's "Try it" card and the `playground-tour` template use it, and the `editor-ux` e2e spec runs that
+template against it. [docs/manual-test/clock.html](../manual-test/clock.html) shows the load time (changes on
+every reload) and a line that never changes. Serve both with `npm run playground`
+(`http://localhost:7357`, [scripts/playground.mjs](../../scripts/playground.mjs)) and follow README
 [Try it end to end](../../README.md#try-it-end-to-end) to check Watch Element firing on change and not firing
 on the stable line. Results of manual runs are logged in README
 [What has been verified](../../README.md#what-has-been-verified).

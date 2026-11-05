@@ -62,7 +62,6 @@ are the same everywhere. `version` comes from `package.json`. Icons are picked u
 | `unlimitedStorage` | Screenshots and datasets in IndexedDB (`src/browser/blobStore.ts`) and run history in `storage.local` grow past the default quota |
 | `tabs` | Open / update / close / query tabs, read URLs and titles, `captureVisibleTab` |
 | `scripting` | Inject the page agent, picker and recorder |
-| `activeTab` | Declared; no code path depends on it (`<all_urls>` already covers access) |
 | `notifications` | Notify block, Manual Step prompts with buttons |
 | `webRequest` | Wait For response (per-tab response log) and `networkidle` waiting (`src/browser/navigation.ts`) |
 | `downloads` | Download block |
