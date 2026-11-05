@@ -128,6 +128,40 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   }
 
+  /**
+   * Where the content of `frame` (an `<iframe>` in this document or in a same-origin frame below it)
+   * starts, in this window's viewport: its box, plus border and padding, plus the offsets of the
+   * frames it sits in.
+   */
+  function frameContentOrigin(frame: Element): { x: number; y: number } {
+    const view = frame.ownerDocument.defaultView ?? win;
+    const rect = frame.getBoundingClientRect();
+    const style = view.getComputedStyle(frame);
+    const outer = documentOrigin(frame.ownerDocument);
+    return {
+      x: outer.x + rect.left + frame.clientLeft + (parseFloat(style.paddingLeft) || 0),
+      y: outer.y + rect.top + frame.clientTop + (parseFloat(style.paddingTop) || 0),
+    };
+  }
+
+  /** Where a (same-origin) document's viewport starts in this window's viewport: (0, 0) for our own. */
+  function documentOrigin(owner: Document): { x: number; y: number } {
+    const frame = owner === doc ? null : owner.defaultView?.frameElement;
+    return frame ? frameContentOrigin(frame) : { x: 0, y: 0 };
+  }
+
+  /** For `locate` into a cross-origin frame: bring the frame on screen, then say where its content starts. */
+  function frameOffset(frame: Element): { x: number; y: number } {
+    if (hasLayout() && typeof (frame as HTMLElement).scrollIntoView === 'function') {
+      const rect = frame.getBoundingClientRect();
+      const view = frame.ownerDocument.defaultView ?? win;
+      if (rect.top < 0 || rect.left < 0 || rect.bottom > view.innerHeight || rect.right > view.innerWidth) {
+        (frame as HTMLElement).scrollIntoView({ block: 'center', inline: 'center' });
+      }
+    }
+    return frameContentOrigin(frame);
+  }
+
   /** What a real click at the element's center would hit. Null = fine. */
   function coveredBy(element: Element): Element | null {
     // Inside a same-origin iframe, coordinates and hit-testing belong to the frame's own document.
@@ -662,14 +696,23 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   /**
    * For real (debugger) input: same waits as the action, then the center in this document's viewport
-   * coordinates. Inside an iframe these are frame-local, not top-level, coordinates.
+   * coordinates. Elements in same-origin iframes get their frames' offsets added; for cross-origin
+   * frames the driver adds the `offset` of the `frame` answer.
    */
   function locate(request: Extract<AgentRequest, { op: 'locate' }>): Done {
     const element = one(request.locator);
     const kind = element.localName === 'select' ? 'select' : checkedState(element) !== null ? 'check' : textKind(element) ? 'text' : 'other';
     ready(element, { enabled: true, editable: request.purpose === 'fill' || (request.purpose === 'set-field' && kind === 'text'), hit: true });
+    // Same-origin frames around it must be on screen too.
+    for (let owner = element.ownerDocument; owner !== doc; ) {
+      const frame = owner.defaultView?.frameElement;
+      if (!frame) break;
+      frameOffset(frame);
+      owner = frame.ownerDocument;
+    }
     const { x, y } = center(element);
-    return { x, y, kind };
+    const origin = documentOrigin(element.ownerDocument);
+    return { x: x + origin.x, y: y + origin.y, kind };
   }
 
   // --- forms ----------------------------------------------------------------
@@ -775,7 +818,10 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
         try {
           return { status: 'done', result: attempt(request) };
         } catch (error) {
-          if (error instanceof FrameBoundaryError) return { status: 'frame', src: error.src, rest: error.rest };
+          if (error instanceof FrameBoundaryError) {
+            const offset = request.op === 'locate' && error.frame ? frameOffset(error.frame) : undefined;
+            return { status: 'frame', src: error.src, rest: error.rest, ...(offset ? { offset } : {}) };
+          }
           if (error instanceof Fatal) return { status: 'error', message: error.message };
           if (!(error instanceof Pending)) {
             return { status: 'error', message: error instanceof Error ? error.message : String(error) };

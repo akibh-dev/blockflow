@@ -4,8 +4,7 @@ The page agent is the content script that carries out page blocks inside a web p
 waits until it is ready, dispatches the events and answers with plain data. Read this page when you add a
 page op, debug a "waiting for…" timeout, or need to know what an action really does to the DOM.
 
-**Source:** [agent.ts](../../src/dom/agent.ts), [agent.content.ts](../../src/entrypoints/agent.content.ts),
-[readElement.ts](../../src/dom/readElement.ts) (legacy). Request/response types live in
+**Source:** [agent.ts](../../src/dom/agent.ts), [agent.content.ts](../../src/entrypoints/agent.content.ts). Request/response types live in
 [page.ts](../../src/core/page.ts) (see [Page Protocol](Page-Protocol.md)); the extension side is
 [pageDriver.ts](../../src/browser/pageDriver.ts) (see [Browser Host](Browser-Host.md)).
 
@@ -211,17 +210,6 @@ kind; `set-field` on non-text fields and all non-action ops fall back to the syn
 Scraping helpers: `textOf` collapses whitespace; `attributeOf` resolves `href`, `src`, `action`, `poster`,
 `data-src` against `doc.baseURI`. `table` uses `<thead>`'s first row, else the first row with a `<th>`,
 else the first row as headers (empty header → `columnN`).
-
-### `readSelectorInPage` (legacy)
-
-```ts
-export function readSelectorInPage(selector: string, kind?: 'text'|'value'|'attribute'|'has-class'|'exists'|'count', name?: string)
-  : { found: boolean; text: string; count: number; error?: string };
-```
-
-A self-contained CSS-only reader meant to be passed as `executeScript({ func })`. Nothing in `src/` calls it
-any more: Watch Element and Read Element go through [pageReader.ts](../../src/browser/pageReader.ts) →
-`actInTab(… {op: 'read'} …)`, so all locator engines work there. Only `tests/dom/selector.test.ts` uses it.
 
 ## Error shapes
 

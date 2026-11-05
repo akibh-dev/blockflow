@@ -76,7 +76,7 @@ against real Chromium.
 | [browser/hybridScheduler.test.ts](../../tests/browser/hybridScheduler.test.ts) | Timers ≥ 30 s (alarms), < 30 s (in-memory + keep-alive), clearing, worker restart, end to end with the engine. Uses local `FakeClock`, `FakeAlarms`, `MemoryTimerStore`. See [Scheduling and Timers](Scheduling-and-Timers.md) |
 | [dom/agent.test.ts](../../tests/dom/agent.test.ts) | Page agent ops: click, fill/type, select/check/press, read/wait/detect-form, scraping, frames, upload and locate. See [Page Agent](Page-Agent.md) |
 | [dom/locator.test.ts](../../tests/dom/locator.test.ts) | `parseLocator`, `resolveLocator`, ARIA name/role, `locatorCandidates`. See [Locators](Locators.md) |
-| [dom/selector.test.ts](../../tests/dom/selector.test.ts) | `cssEscape`, stable id/class heuristics, `generateSelector` (incl. a property test: every element gets a selector matching only itself), `ElementNavigator`, `sampleText`, `readSelectorInPage` |
+| [dom/selector.test.ts](../../tests/dom/selector.test.ts) | `cssEscape`, stable id/class heuristics, `generateSelector` (incl. a property test: every element gets a selector matching only itself), `ElementNavigator`, `sampleText` |
 | [dom/picker.test.ts](../../tests/dom/picker.test.ts) | Element picker overlay. See [Picker and Recorder](Picker-and-Recorder.md) |
 | [dom/recorder.test.ts](../../tests/dom/recorder.test.ts) | Recorder captures user actions in a page |
 | [editor/convert.test.ts](../../tests/editor/convert.test.ts) | Workflow ⇄ React Flow canvas conversion, ports and step settings. See [Editor](Editor.md) |

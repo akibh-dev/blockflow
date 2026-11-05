@@ -82,8 +82,12 @@ export type AgentResponse =
   | { status: 'pending'; reason: string }
   /** Will never work (bad locator, wrong element type...). */
   | { status: 'error'; message: string }
-  /** The locator enters an iframe from another site: run `rest` inside the frame showing `src`. */
-  | { status: 'frame'; src: string; rest: string };
+  /**
+   * The locator enters an iframe from another site: run `rest` inside the frame showing `src`.
+   * `offset` (for `locate` only) is where the frame's content starts in this frame's viewport, so
+   * the driver can turn the inner frame's coordinates into the tab's.
+   */
+  | { status: 'frame'; src: string; rest: string; offset?: { x: number; y: number } };
 
 /** One row of a Fill Form block, also what "Detect fields" produces. */
 export interface FormFieldRow {
