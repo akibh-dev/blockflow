@@ -16,6 +16,7 @@ export const pressKeyBlock: BlockDefinition<PressKeyConfig> = {
   icon: '⏎',
   accent: PAGE_ACCENT,
   defaultConfig: { tab: 'main', key: 'Enter', locator: '' },
+  realInput: true,
   timeoutSeconds: PAGE_TIMEOUT_SECONDS,
   fields: [
     {

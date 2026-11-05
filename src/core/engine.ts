@@ -1,4 +1,5 @@
 import { resolveConfig } from './config';
+import type { EvalEnv } from './expression';
 import { uid } from './id';
 import { DEFAULT_PORT, ERROR_PORT, Routed, edgePort, nodePorts } from './ports';
 import { MAX_STEPS_KEPT, compactPayload, maskPayload, maskText } from './runs';
@@ -83,6 +84,8 @@ export class WorkflowRunner {
   private readonly callDepth: number;
   private readonly nodesById = new Map<string, NodeDef>();
   private readonly hasIncoming = new Set<string>();
+  /** Expressions in settings read the host's clock (now(), today()). */
+  private readonly evalEnv: EvalEnv = { now: () => this.host.now() };
   private stopped = false;
   /** Secret values seen by this runner, masked in every log line. */
   private secretValues: string[] = [];
@@ -188,7 +191,7 @@ export class WorkflowRunner {
     const def = node ? this.registry.get(node.type) : undefined;
     if (!node || !def || !def.onTimer) return;
 
-    const resolved = resolveConfig(def, node.config, {});
+    const resolved = resolveConfig(def, node.config, {}, this.evalEnv);
     if (resolved.errors.length > 0) {
       this.log('error', node.id, `${def.label}: ${resolved.errors.join('; ')}`);
       return;
@@ -213,7 +216,7 @@ export class WorkflowRunner {
       if (def.run && runPlainRoots) await this.inRun('start', (run) => this.runStep(node, {}, run));
       return;
     }
-    const resolved = resolveConfig(def, node.config, {});
+    const resolved = resolveConfig(def, node.config, {}, this.evalEnv);
     if (resolved.errors.length > 0) {
       this.log('error', node.id, `${def.label}: ${resolved.errors.join('; ')}`);
       return;
@@ -373,7 +376,7 @@ export class WorkflowRunner {
     step: StepRecord,
   ): Promise<{ ok: true; output: RunOutput; softError?: string } | { ok: false; error: string }> {
     // {{secret.name}} works in every templated setting, but secrets never enter the payload.
-    const resolved = resolveConfig(def, node.config, Object.keys(run.secrets).length > 0 ? { ...input, secret: run.secrets } : input);
+    const resolved = resolveConfig(def, node.config, Object.keys(run.secrets).length > 0 ? { ...input, secret: run.secrets } : input, this.evalEnv);
     if (resolved.errors.length > 0) return { ok: false, error: resolved.errors.join('; ') };
 
     const settings = node.step ?? {};

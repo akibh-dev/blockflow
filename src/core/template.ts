@@ -1,4 +1,5 @@
 import { ExpressionError, evaluate, parseExpression, toText } from './expression';
+import type { EvalEnv } from './expression';
 import type { Payload } from './types';
 
 /**
@@ -49,11 +50,11 @@ export function getPath(data: unknown, rawPath: string): unknown {
 }
 
 /** The value of one `{{…}}` token: a path, or an expression. Invalid expressions give ''. */
-export function resolveToken(token: string, data: Payload): unknown {
+export function resolveToken(token: string, data: Payload, env: EvalEnv = {}): unknown {
   const text = token.trim();
   if (PATH.test(text)) return getPath(data, text);
   try {
-    return evaluate(text, data);
+    return evaluate(text, data, env);
   } catch (error) {
     if (error instanceof ExpressionError) return '';
     throw error;
@@ -61,8 +62,8 @@ export function resolveToken(token: string, data: Payload): unknown {
 }
 
 /** Replaces every `{{…}}` token with its value as text (missing = '', objects = JSON). */
-export function render(template: string, data: Payload): string {
-  return template.replace(TOKEN, (_match, token: string) => toText(resolveToken(token, data)));
+export function render(template: string, data: Payload, env: EvalEnv = {}): string {
+  return template.replace(TOKEN, (_match, token: string) => toText(resolveToken(token, data, env)));
 }
 
 /** Problems with the `{{…}}` expressions in a setting, for the editor. */

@@ -43,13 +43,16 @@ const TARGETS = {
   },
 };
 
-/** GitHub's heading anchor slug (close enough for checking links: lowercase, drop punctuation). */
+/**
+ * GitHub's heading anchor slug (close enough for checking links: lowercase, drop punctuation and
+ * emoji; marks such as the U+FE0F variation selector stay, like github-slugger keeps them).
+ */
 function slug(heading) {
   return heading
     .trim()
     .toLowerCase()
     .replace(/<[^>]+>/g, '')
-    .replace(/[^\p{L}\p{N}\s_-]/gu, '')
+    .replace(/[^\p{L}\p{M}\p{N}\s_-]/gu, '')
     .replace(/\s/g, '-');
 }
 

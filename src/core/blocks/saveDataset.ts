@@ -1,4 +1,4 @@
-import { DATA_ACCENT, valueAt } from './dataCommon';
+import { DATA_ACCENT, evalEnv, valueAt } from './dataCommon';
 import type { BlockDefinition } from '../types';
 
 /** Save to Dataset settings. `value` is an expression (not a template). */
@@ -40,7 +40,7 @@ export const saveDatasetBlock: BlockDefinition<SaveDatasetConfig> = {
   outputs: [{ key: 'datasetSize', description: 'Rows in the dataset afterwards.' }],
 
   async run(ctx, input) {
-    const value = valueAt(ctx.config.value, input, 'What to save');
+    const value = valueAt(ctx.config.value, input, 'What to save', evalEnv(ctx));
     const rows = Array.isArray(value) ? value : [value === undefined ? null : value];
     const size = await ctx.host.datasets.write(ctx.config.dataset.trim(), rows, ctx.config.mode);
     ctx.log('info', `Saved ${rows.length} row${rows.length === 1 ? '' : 's'} to "${ctx.config.dataset}" (${size} in total)`);

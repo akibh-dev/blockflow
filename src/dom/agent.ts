@@ -373,7 +373,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       return check(element, TRUTHY.has(value.trim().toLowerCase()));
     }
     if (element.localName === 'input' && (element as HTMLInputElement).type === 'file') {
-      throw new Fatal('File inputs cannot be filled with text (Upload File comes in a later version)');
+      throw new Fatal('File inputs cannot be filled with text: use the Upload File block for <input type="file">');
     }
     fill(element, value, 'fill');
     return { value };

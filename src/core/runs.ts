@@ -7,6 +7,14 @@ import type { Payload } from './types';
 
 /** call = started by a Run Workflow block; event = a page visit or context menu. */
 export type RunTrigger = 'manual' | 'start' | 'timer' | 'call' | 'event';
+/** How the editor names each trigger ("Started by: …"). */
+export const TRIGGER_LABELS: Record<RunTrigger, string> = {
+  manual: 'Run button',
+  start: 'turned on',
+  timer: 'schedule',
+  event: 'page event',
+  call: 'called by another workflow',
+};
 /** interrupted = the worker died mid-run (set by `markInterrupted`). */
 export type RunStatus = 'running' | 'passed' | 'failed' | 'cancelled' | 'interrupted';
 /** handled = failed, but the failure was dealt with (continue / error output). */

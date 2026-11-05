@@ -14,7 +14,7 @@ import { readElement } from './pageReader';
 import { requireTabId, sleep } from './tabs';
 import type { Host, HttpRequestOptions, HttpResult, NavigateOptions, NotifyOptions, OpenTabOptions, TabInfo, Scheduler, StateStore } from '../core/types';
 
-/** `Host.state`: block state in `storage.local` under `bf:state:<key>`. Never cleaned up. */
+/** `Host.state`: block state in `storage.local` under `bf:state:<key>`. Removed when its workflow is deleted (background). */
 class StorageState implements StateStore {
   async get(key: string): Promise<unknown> {
     const storageKey = STORAGE_KEYS.statePrefix + key;

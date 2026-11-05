@@ -63,6 +63,15 @@ describe('expressions', () => {
     expect(() => evaluate("'open", data)).toThrow('Unclosed text');
     expect(() => evaluate('a # b', data)).toThrow('Unexpected "#"');
   });
+
+  it('now() and today() read the clock from the evaluation context', () => {
+    const now = () => new Date('2030-04-05T06:07:08.000Z');
+    expect(evaluate('now()', data, { now })).toBe('2030-04-05T06:07:08.000Z');
+    expect(evaluate('today()', data, { now })).toBe('2030-04-05');
+    expect(render('{{ today() }}', data, { now })).toBe('2030-04-05');
+    // Without one, the system clock.
+    expect(Math.abs(Date.parse(evaluate('now()', data) as string) - Date.now())).toBeLessThan(5000);
+  });
 });
 
 describe('templates with expressions', () => {

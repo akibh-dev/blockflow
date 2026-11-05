@@ -296,6 +296,9 @@ describe('upload and locate', () => {
       message: 'This page cannot receive files (no DataTransfer)',
     });
     expect(await run({ op: 'upload', locator: '#b', files: [] })).toMatchObject({ status: 'error', message: expect.stringContaining('is not a file input') });
+    // Fill Form on a file input points at the Upload File block.
+    page('<input id="v" type="file">');
+    expect(await run({ op: 'set-field', locator: '#v', value: 'cv.txt' })).toMatchObject({ status: 'error', message: expect.stringContaining('use the Upload File block') });
   });
 
   it('locate says what kind of field it found (geometry needs a real browser)', async () => {

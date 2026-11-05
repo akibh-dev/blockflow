@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { TRIGGER_LABELS } from '../../../core/runs';
 import type { RunRecord } from '../../../core/runs';
 import type { LogEntry } from '../../../core/types';
 import { formatMs } from './ConfigPanel';
@@ -76,7 +77,7 @@ export function LogPanel(props: LogPanelProps) {
               <span className={`bf-run-status ${run.status}`}>{run.status}</span>
               <time>{new Date(run.startedAt).toLocaleTimeString()}</time>
               {showAll && <span className="bf-log-label">{props.workflowName(run.workflowId)}</span>}
-              <span className="bf-muted">{run.trigger === 'manual' ? 'Run button' : run.trigger === 'timer' ? 'schedule' : 'turned on'}</span>
+              <span className="bf-muted">{TRIGGER_LABELS[run.trigger] ?? run.trigger}</span>
               <span>
                 {run.steps.length + (run.droppedSteps ?? 0)} steps
                 {run.endedAt && ` · ${formatMs(Date.parse(run.endedAt) - Date.parse(run.startedAt))}`}

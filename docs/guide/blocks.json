@@ -549,6 +549,7 @@
         "out"
       ],
       "timeoutSeconds": 30,
+      "realInput": true,
       "defaultConfig": {
         "tab": "main",
         "locator": "",
@@ -606,6 +607,7 @@
         "out"
       ],
       "timeoutSeconds": 30,
+      "realInput": true,
       "defaultConfig": {
         "tab": "main",
         "locator": "",
@@ -661,6 +663,7 @@
         "out"
       ],
       "timeoutSeconds": 30,
+      "realInput": true,
       "defaultConfig": {
         "tab": "main",
         "fields": [],
@@ -718,6 +721,7 @@
         "out"
       ],
       "timeoutSeconds": 30,
+      "realInput": true,
       "defaultConfig": {
         "tab": "main",
         "locator": "",
@@ -765,6 +769,7 @@
         "out"
       ],
       "timeoutSeconds": 30,
+      "realInput": true,
       "defaultConfig": {
         "tab": "main",
         "locator": "",
@@ -813,6 +818,7 @@
         "out"
       ],
       "timeoutSeconds": 30,
+      "realInput": true,
       "defaultConfig": {
         "tab": "main",
         "key": "Enter",
@@ -1441,6 +1447,7 @@
         "done"
       ],
       "timeoutSeconds": 1800,
+      "realInput": true,
       "defaultConfig": {
         "tab": "main",
         "next": "role=link[name=\"Next\"]",
@@ -1995,6 +2002,8 @@
           "key": "left",
           "label": "Value (per item)",
           "kind": "text",
+          "templated": true,
+          "perItem": true,
           "help": "Rendered for each item: {{item.…}} is the item, other {{…}} the data."
         },
         {
@@ -2022,7 +2031,9 @@
         {
           "key": "right",
           "label": "Compare to",
-          "kind": "text"
+          "kind": "text",
+          "templated": true,
+          "perItem": true
         },
         {
           "key": "into",

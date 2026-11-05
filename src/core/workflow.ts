@@ -29,6 +29,8 @@ export interface WorkflowDiff {
   restart: string[];
   /** Workflows to stop: disabled or deleted. */
   stop: string[];
+  /** Workflows deleted (on or off): their block state and timers are removed too. */
+  removed: string[];
 }
 
 /** Compares two saved lists and says what the background worker must do about it. */
@@ -38,7 +40,7 @@ export function diffWorkflows(
 ): WorkflowDiff {
   const before = new Map((previous ?? []).map((workflow) => [workflow.id, workflow]));
   const after = new Map((next ?? []).map((workflow) => [workflow.id, workflow]));
-  const diff: WorkflowDiff = { start: [], restart: [], stop: [] };
+  const diff: WorkflowDiff = { start: [], restart: [], stop: [], removed: [] };
 
   for (const [id, workflow] of after) {
     const old = before.get(id);
@@ -50,7 +52,9 @@ export function diffWorkflows(
     }
   }
   for (const [id, workflow] of before) {
-    if (!after.has(id) && workflow.enabled) diff.stop.push(id);
+    if (after.has(id)) continue;
+    if (workflow.enabled) diff.stop.push(id);
+    diff.removed.push(id);
   }
   return diff;
 }
