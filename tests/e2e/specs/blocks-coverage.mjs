@@ -169,21 +169,13 @@ export default async function (h) {
       { id: 'goto', type: 'navigate', config: { action: 'goto', url: `${base}/spa/two` } },
       { id: 'reload', type: 'navigate', config: { action: 'reload' } },
       { id: 'here', type: 'assert', config: { subject: 'url', operator: 'contains', expected: '/spa/two' } },
-      { id: 'back', type: 'navigate', config: { action: 'back' }, step: { onError: 'continue' } },
-      { id: 'fwd', type: 'navigate', config: { action: 'forward' }, step: { onError: 'continue' } },
+      { id: 'back', type: 'navigate', config: { action: 'back' } },
+      { id: 'fwd', type: 'navigate', config: { action: 'forward' } },
       { id: 'close', type: 'close-tab' },
     ]));
     const url = (id) => step(record, id)?.output?.url;
     check('goto and reload land on the page', record.status === 'passed' && url('goto') === `${base}/spa/two` && url('reload') === `${base}/spa/two`, summary(record));
-    const backError = String(step(record, 'back')?.error ?? '');
-    if (backError.includes('Cannot find a next page in history')) {
-      // Known bug (reported in M0.3): Chromium's tabs.goBack skips history entries that were added
-      // without a user gesture, so Back after an Open Tab + goto finds nothing to go back to.
-      // Not counted as a failure until it is fixed; then this branch stops being taken.
-      console.log(`  ! KNOWN BUG: Navigate back fails after a goto (${backError})`);
-    } else {
-      check('back and forward land on the previous and next page', url('back') === `${base}/spa.html` && url('fwd') === `${base}/spa/two`, JSON.stringify([url('back'), url('fwd'), backError]));
-    }
+    check('back and forward land on the previous and next page', url('back') === `${base}/spa.html` && url('fwd') === `${base}/spa/two`, JSON.stringify([url('back'), url('fwd'), step(record, 'back')?.error]));
   }
 
   {

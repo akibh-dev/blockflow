@@ -31,7 +31,7 @@ import { forgetLegacyWatchTabs } from '../browser/pageReader';
  */
 export default defineBackground(() => {
   // e2e builds only: a bridge content script on the local fixture server, for the Firefox e2e runner.
-  if (import.meta.env.BF_E2E === '1') {
+  if (import.meta.env.BF_E2E) {
     void browser.scripting
       .registerContentScripts([{ id: 'bf-e2e-bridge', matches: ['http://127.0.0.1/*'], js: ['content-scripts/e2e-bridge.js'], runAt: 'document_start' }])
       .catch(() => {}); // already registered
