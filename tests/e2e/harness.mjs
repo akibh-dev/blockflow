@@ -53,9 +53,37 @@ export async function launch() {
     args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, '--no-first-run', ...(process.env.BF_HEADLESS ? ['--headless=new'] : [])],
   });
   // (If launching times out, the browser may be mid-update or blocked: try another with BF_BROWSER.)
-  let [worker] = context.serviceWorkers();
-  worker ??= await context.waitForEvent('serviceworker');
-  const extensionId = worker.url().split('/')[2];
+  let [liveWorker] = context.serviceWorkers();
+  liveWorker ??= await context.waitForEvent('serviceworker');
+  const extensionId = liveWorker.url().split('/')[2];
+  /**
+   * The extension's service worker. An idle MV3 worker is stopped by the browser and a new one starts
+   * on the next event, which makes an old handle throw "Target … closed". `worker.evaluate` therefore
+   * finds the current worker, waking it through the editor page when none is running.
+   */
+  /** The current editor tab (set below, reopened by seedWorkflows). */
+  let editor;
+  const worker = {
+    url: () => liveWorker.url(),
+    async evaluate(fn, arg) {
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          return await liveWorker.evaluate(fn, arg);
+        } catch (error) {
+          if (attempt >= 3 || !/closed|destroyed|Target/i.test(String(error))) throw error;
+          const running = context.serviceWorkers().find((candidate) => candidate.url().startsWith(`chrome-extension://${extensionId}/`) && candidate !== liveWorker);
+          if (running) {
+            liveWorker = running;
+            continue;
+          }
+          const waiting = context.waitForEvent('serviceworker', { timeout: 15_000 });
+          // Any extension message wakes the worker; an unknown type is ignored by the background.
+          await editor?.evaluate(() => chrome.runtime.sendMessage({ type: 'bf:wake' }).catch(() => {})).catch(() => {});
+          liveWorker = await waiting.catch(() => context.serviceWorkers().at(-1) ?? liveWorker);
+        }
+      }
+    },
+  };
   const pageErrors = [];
   /** Opens the extension's editor page in a new tab, collecting its uncaught errors in `pageErrors`. */
   async function openEditor() {
@@ -66,7 +94,7 @@ export async function launch() {
   }
   // The first-run "Try it" card floats over the canvas; specs other than editor-ux do not want it.
   await worker.evaluate(() => chrome.storage.local.set({ 'bf:onboarding': { tryItDismissed: true } }));
-  let editor = await openEditor();
+  editor = await openEditor();
 
   let failures = 0;
   /** Prints ✓/✗ for one assertion (with `detail` on failure) and counts failures for the exit code. */
@@ -110,10 +138,13 @@ export async function launch() {
 
   /** Replaces the saved workflows. The editor saves its copy when it closes, so it is reopened around this. */
   async function seedWorkflows(list) {
+    // Keep a tab open meanwhile: when its last tab closes, a headed browser (Brave) quits.
+    const placeholder = await context.newPage();
     await editor.close();
     await new Promise((resolve) => setTimeout(resolve, 400));
     await worker.evaluate((workflows) => chrome.storage.local.set({ 'bf:workflows': workflows }), list);
     editor = await openEditor();
+    await placeholder.close();
   }
 
   /** The step record of node `id` in a run record (the first one, for nodes inside loops). */

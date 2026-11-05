@@ -5,6 +5,17 @@
 /** @param {import('../harness.mjs').Harness} h */
 export default async function (h) {
   const { base, check, context, run, seedWorkflows, server, step, summary, worker, workflow } = h;
+  /**
+   * Presses ● Record and returns the recording tab. The start URL is asked in the editor's own dialog
+   * (components/Dialogs.tsx), prefilled from the workflow's Open Tab when it has one.
+   */
+  async function startRecording(url) {
+    await h.editor.click('button:has-text("● Record")');
+    await h.editor.waitForSelector('.bf-modal input', { timeout: 5_000 });
+    await h.editor.fill('.bf-modal input', url);
+    const [tab] = await Promise.all([context.waitForEvent('page'), h.editor.click('.bf-modal button:has-text("Start recording")')]);
+    return tab;
+  }
   const port = server.address().port;
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const saved = async (name) => (await worker.evaluate(() => chrome.storage.local.get('bf:workflows')))['bf:workflows'].find((w) => w.name === name);
@@ -103,8 +114,7 @@ export default async function (h) {
         { id: 'note', type: 'log', config: { message: 'ready' } },
       ]),
     ]);
-    h.editor.once('dialog', (dialog) => dialog.accept(`${base}/frames.html`));
-    const [recTab] = await Promise.all([context.waitForEvent('page'), h.editor.click('button:has-text("● Record")')]);
+    const recTab = await startRecording(`${base}/frames.html`);
     await recTab.waitForLoadState('load');
     await recTab.waitForSelector('blockflow-recorder', { state: 'attached', timeout: 10_000 });
     await wait(800); // the frames' recorders work out where they are
@@ -154,8 +164,7 @@ export default async function (h) {
   // --- Recording that opens a popup (M0.2d) ----------------------------------------------------
   {
     await seedWorkflows([workflow('rec popup', [])]);
-    h.editor.once('dialog', (dialog) => dialog.accept(`${base}/popup.html`));
-    const [recTab] = await Promise.all([context.waitForEvent('page'), h.editor.click('button:has-text("● Record")')]);
+    const recTab = await startRecording(`${base}/popup.html`);
     await recTab.waitForLoadState('load');
     await recTab.waitForSelector('blockflow-recorder', { state: 'attached', timeout: 10_000 });
     const [popup] = await Promise.all([context.waitForEvent('page'), recTab.locator('text=Feed in a new tab').click()]);
