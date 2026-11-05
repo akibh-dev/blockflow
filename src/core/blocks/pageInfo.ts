@@ -2,6 +2,7 @@ import { DEFAULT_TAB } from '../session';
 import { inPage, PAGE_ACCENT, tabField } from './pageCommon';
 import type { BlockDefinition } from '../types';
 
+/** Page Info settings: `page` uses the `page-info` op, the other areas the `storage` op. */
 export interface PageInfoConfig {
   tab: string;
   area: 'page' | 'local' | 'session' | 'cookies';

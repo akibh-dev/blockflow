@@ -2,6 +2,7 @@ import { OPERATOR_OPTIONS, describeClause, testClause } from '../condition';
 import { routeTo } from '../ports';
 import type { BlockDefinition } from '../types';
 
+/** If settings: a condition.ts clause (`left`, `operator`, `right`), both sides templated. */
 export interface IfConfig {
   left: string;
   operator: string;

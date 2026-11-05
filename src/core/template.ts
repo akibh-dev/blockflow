@@ -21,11 +21,13 @@ const PATH = /^\$?[\w-]+(?:\.[\w$-]+|\[\d+\])*$/;
 
 const TOKEN = /\{\{\s*([^{}]+?)\s*\}\}/g;
 
+/** True when `text` contains at least one `{{…}}` token. */
 export function hasTemplate(text: string): boolean {
   TOKEN.lastIndex = 0;
   return TOKEN.test(text);
 }
 
+/** Reads a dotted/indexed path (`a.b[0].c`, optional `$json.` prefix) through own properties only. */
 export function getPath(data: unknown, rawPath: string): unknown {
   let path = rawPath.trim();
   if (path === '$json') return data;
@@ -58,6 +60,7 @@ export function resolveToken(token: string, data: Payload): unknown {
   }
 }
 
+/** Replaces every `{{…}}` token with its value as text (missing = '', objects = JSON). */
 export function render(template: string, data: Payload): string {
   return template.replace(TOKEN, (_match, token: string) => toText(resolveToken(token, data)));
 }

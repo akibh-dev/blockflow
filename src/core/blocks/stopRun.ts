@@ -1,5 +1,6 @@
 import type { BlockDefinition } from '../types';
 
+/** Stop settings: `fail` throws (the step and run fail), `pass` just ends the path. */
 export interface StopConfig {
   outcome: 'pass' | 'fail';
   message: string;

@@ -43,6 +43,7 @@ import { timerBlock } from './timer';
 import { waitForBlock } from './waitFor';
 import { watchElementBlock } from './watchElement';
 
+/** Every built-in block definition, re-exported so tests and tools can use one block directly. */
 export {
   dialogsBlock,
   runScriptBlock,
@@ -103,6 +104,11 @@ export const BLOCK_GROUPS: { category: BlockCategory; blocks: AnyBlockDefinition
   { category: 'output', blocks: [notifyBlock, httpRequestBlock, logBlock] },
 ];
 
+/**
+ * A fresh registry with every built-in block, each stamped with its palette `category` from
+ * BLOCK_GROUPS. Used by the background worker, the editor (`editor/registry.ts`), scripts/guide.ts
+ * and the test harness. Throws if two blocks share a `type`.
+ */
 export function createDefaultRegistry(): BlockRegistry {
   const registry = new BlockRegistry();
   for (const group of BLOCK_GROUPS) {

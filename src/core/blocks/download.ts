@@ -2,6 +2,7 @@ import { toCsv } from '../csv';
 import { DATA_ACCENT, valueAt } from './dataCommon';
 import type { BlockDefinition } from '../types';
 
+/** Download settings. `value` is an expression; `dataset` / `filename` are templated. */
 export interface DownloadConfig {
   from: 'value' | 'dataset';
   value: string;

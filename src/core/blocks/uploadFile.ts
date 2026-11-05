@@ -1,6 +1,7 @@
 import { inPage, locatorField, PAGE_ACCENT, PAGE_TIMEOUT_SECONDS, tabField } from './pageCommon';
 import type { BlockDefinition } from '../types';
 
+/** Upload File settings. `content` and `mime` are used for `source: 'text'`, `url` for `source: 'url'`. */
 export interface UploadFileConfig {
   tab: string;
   locator: string;

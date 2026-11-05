@@ -14,9 +14,12 @@ import type { Payload, Scheduler, TimerOptions, TimerRecord } from '../core/type
  * is tested with a fake clock and fake alarms. The real ports are in ./scheduler.ts.
  */
 
+/** Shortest delay/period `browser.alarms` honours in a packed extension; below it a timer is "short". */
 export const ALARM_MIN_MS = 30_000;
+/** Keep-alive interval: comfortably below Chrome's 30 s idle shutdown of the service worker. */
 export const PING_EVERY_MS = 20_000;
 
+/** A timer as persisted under `bf:timer:<key>`. Carries everything needed to recreate it after a restart. */
 export interface StoredTimer {
   data?: Payload;
   periodic: boolean;
@@ -28,17 +31,20 @@ export interface StoredTimer {
   short: boolean;
 }
 
+/** Subset of `alarms.AlarmCreateInfo` the scheduler uses. */
 export interface AlarmInfo {
   when: number;
   periodInMinutes?: number;
 }
 
+/** Port onto `browser.alarms`. */
 export interface AlarmPort {
   create(name: string, info: AlarmInfo): Promise<void>;
   clear(name: string): Promise<void>;
   names(): Promise<string[]>;
 }
 
+/** Port onto `storage.local`; keys here are timer keys without the `bf:timer:` prefix. */
 export interface TimerStore {
   get(key: string): Promise<StoredTimer | undefined>;
   set(key: string, record: StoredTimer): Promise<void>;
@@ -46,6 +52,7 @@ export interface TimerStore {
   keys(): Promise<string[]>;
 }
 
+/** Port onto wall-clock time and JS timers (fake in tests). The only sanctioned setTimeout user. */
 export interface Clock {
   now(): number;
   setTimeout(fn: () => void, ms: number): unknown;
@@ -54,6 +61,7 @@ export interface Clock {
   clearInterval(handle: unknown): void;
 }
 
+/** Constructor options; `minAlarmMs` / `pingEveryMs` exist for tests. */
 export interface HybridSchedulerOptions {
   alarms: AlarmPort;
   store: TimerStore;
@@ -66,11 +74,13 @@ export interface HybridSchedulerOptions {
   pingEveryMs?: number;
 }
 
+/** An in-memory timer currently armed in this worker. */
 interface Armed {
   handle: unknown;
   record: StoredTimer;
 }
 
+/** The `Scheduler` the engine uses in the browser. See the file header and Scheduling-and-Timers in docs/wiki. */
 export class HybridScheduler implements Scheduler {
   private readonly alarms: AlarmPort;
   private readonly store: TimerStore;
@@ -94,6 +104,7 @@ export class HybridScheduler implements Scheduler {
 
   // --- Scheduler interface ---------------------------------------------------
 
+  /** Creates or replaces timer `key`: stores the record, creates its alarm (real or heartbeat), arms short ones. */
   async set(key: string, options: TimerOptions, data?: Payload): Promise<void> {
     const periodic = options.periodMs !== undefined;
     const short =
@@ -114,12 +125,14 @@ export class HybridScheduler implements Scheduler {
     if (short) this.arm(key, record, false);
   }
 
+  /** Cancels one timer: in-memory, alarm and stored record. */
   async clear(key: string): Promise<void> {
     this.disarm(key);
     await this.alarms.clear(key);
     await this.store.remove(key);
   }
 
+  /** Cancels every timer whose key starts with `prefix` (a workflow's timers: `bf::<workflowId>::`). */
   async clearPrefix(prefix: string): Promise<void> {
     for (const key of [...this.armed.keys()]) {
       if (key.startsWith(prefix)) this.disarm(key);
@@ -130,6 +143,10 @@ export class HybridScheduler implements Scheduler {
     await Promise.all(keys.map((key) => this.store.remove(key)));
   }
 
+  /**
+   * Called by the engine when a timer fires. One-shots are removed (and a short one's heartbeat cleared);
+   * periodic records stay. Undefined means stale: its alarm is cleared too.
+   */
   async take(key: string): Promise<TimerRecord | undefined> {
     const record = await this.store.get(key);
     if (!record) {
@@ -172,16 +189,19 @@ export class HybridScheduler implements Scheduler {
     }
   }
 
+  /** Test helper: is an in-memory timer armed for `key`? */
   isArmed(key: string): boolean {
     return this.armed.has(key);
   }
 
+  /** Test helper: number of armed in-memory timers (keep-alive runs while > 0). */
   armedCount(): number {
     return this.armed.size;
   }
 
   // --- internals -------------------------------------------------------------
 
+  /** The alarm for a record: a 30 s periodic heartbeat for short timers, the real schedule otherwise. */
   private alarmFor(record: StoredTimer, restoring = false): AlarmInfo {
     const now = this.clock.now();
     if (record.short) {
@@ -199,6 +219,7 @@ export class HybridScheduler implements Scheduler {
     };
   }
 
+  /** Arms the in-memory timer. A restored periodic timer waits a full period; a one-shot fires at `dueAt` (or now). */
   private arm(key: string, record: StoredTimer, restored: boolean): void {
     this.disarm(key);
     const delay =
@@ -219,6 +240,7 @@ export class HybridScheduler implements Scheduler {
     this.syncPing();
   }
 
+  /** In-memory timer due: re-arm (periodic) or forget (one-shot), then call `fire`. Errors are swallowed. */
   private tick(key: string): void {
     const entry = this.armed.get(key);
     if (!entry) return;

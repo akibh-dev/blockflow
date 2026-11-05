@@ -19,6 +19,7 @@ function short(text: string | null | undefined, max = 60): string | null {
   return value && value.length <= max ? value : null;
 }
 
+/** The locator resolves (from the element's document) to exactly this element. */
 function finds(locator: string, element: Element): boolean {
   try {
     const found = resolveLocator(locator, element.ownerDocument);
@@ -28,6 +29,12 @@ function finds(locator: string, element: Element): boolean {
   }
 }
 
+/**
+ * Up to `max` locators for `element`, best first. Ideas are tried in this order and kept only if
+ * they match exactly this element: testid, label / placeholder (form fields), role+name,
+ * role+name exact (not form fields), text (not form fields), alt, title, `tag[name=...]` (form
+ * fields; radios add `[value=...]`). The generated CSS selector is always appended last.
+ */
 export function locatorCandidates(element: Element, max = 5): string[] {
   const ideas: string[] = [];
   const testId = TEST_IDS.map((name) => element.getAttribute(name)).find(Boolean);
@@ -63,6 +70,7 @@ export function locatorCandidates(element: Element, max = 5): string[] {
   return [...unique.slice(0, Math.max(0, max - 1)), ...(unique.includes(css) ? [] : [css])];
 }
 
+/** The first candidate, or the generated CSS selector. Used by the recorder and Detect fields. */
 export function bestLocator(element: Element): string {
   return locatorCandidates(element)[0] ?? generateSelector(element);
 }

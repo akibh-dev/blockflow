@@ -39,6 +39,7 @@ export default defineBackground(() => {
   const liveRuns = new Map<string, Pick<RunRecord, 'workflowId' | 'trigger'>>();
   const cancelRequests = new Set<string>();
 
+  /** Every run update from any runner: track live runs, then persist (coalesced) to `bf:runs`. */
   const onRun = (run: RunRecord) => {
     if (run.status === 'running') {
       liveRuns.set(run.id, { workflowId: run.workflowId, trigger: run.trigger });
@@ -49,6 +50,7 @@ export default defineBackground(() => {
     saveRun(run);
   };
 
+  /** A fresh runner per event: runners are cheap and hold no state worth keeping across events. */
   const newRunner = (workflow: Workflow) =>
     new WorkflowRunner({
       workflow,
@@ -63,11 +65,13 @@ export default defineBackground(() => {
   void updateRuns((runs) => markInterrupted(runs, new Set(liveRuns.keys()), new Date().toISOString()));
   void clearStalePrompts().catch(() => {});
 
+  /** (Re)starts an enabled workflow: `start()` clears its timers and calls its start blocks. */
   async function startWorkflow(id: string): Promise<void> {
     const workflow = (await loadWorkflows()).find((candidate) => candidate.id === id);
     if (workflow?.enabled) await newRunner(workflow).start();
   }
 
+  /** Clears a workflow's timers and asks its non-manual live runs to stop. */
   async function stopWorkflow(id: string): Promise<void> {
     await host.scheduler.clearPrefix(workflowTimerPrefix(id));
     // Turning a workflow off also stops its background runs (not a run started with the Run button).
@@ -76,12 +80,14 @@ export default defineBackground(() => {
     }
   }
 
+  /** On install/update and browser startup: start every enabled workflow. */
   async function startAllEnabled(): Promise<void> {
     for (const workflow of await loadWorkflows()) {
       if (workflow.enabled) await newRunner(workflow).start();
     }
   }
 
+  /** A timer is due (alarm or short in-memory timer): hand it to a fresh runner, or clear it if orphaned. */
   async function onAlarm(name: string): Promise<void> {
     const parsed = parseTimerKey(name);
     if (!parsed) return; // not one of ours
@@ -106,6 +112,7 @@ export default defineBackground(() => {
     return found;
   }
 
+  /** Page Visited trigger: top-frame loads (and SPA route changes when `when: any`) of tabs BlockFlow did not open. */
   async function onPageVisited(tabId: number, url: string, kind: 'load' | 'route'): Promise<void> {
     if (!/^https?:/.test(url) || (await isOwnTab(tabId))) return;
     for (const { workflow, nodeId, config } of await eventRoots('page-visited')) {
@@ -144,6 +151,7 @@ export default defineBackground(() => {
       .catch(report('context menus'));
   }
 
+  /** Context Menu trigger: item id `bf-menu::<workflowId>::<nodeId>`. */
   async function onMenuClicked(menuItemId: string, info: { pageUrl?: string; selectionText?: string; linkUrl?: string; srcUrl?: string }, tabId: number | undefined): Promise<void> {
     if (!menuItemId.startsWith(MENU_PREFIX)) return;
     const [workflowId, nodeId] = menuItemId.slice(MENU_PREFIX.length).split('::');
@@ -153,6 +161,7 @@ export default defineBackground(() => {
     await newRunner(workflow).handleEvent(nodeId, tabId === undefined ? payload : withSessionTab(payload, 'main', tabId));
   }
 
+  /** Toolbar button: focus the editor tab if open, else open it. */
   async function openEditor(): Promise<void> {
     const url = browser.runtime.getURL('/editor.html');
     const [existing] = await browser.tabs.query({ url });

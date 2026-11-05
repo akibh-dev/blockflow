@@ -9,6 +9,7 @@ import type { AnyBlockDefinition, FieldSpec, Payload } from './types';
  */
 export type ValidationMode = 'design' | 'run';
 
+/** The first problem with one setting value, or null. */
 function fieldError(field: FieldSpec, value: unknown, mode: ValidationMode): string | null {
   switch (field.kind) {
     case 'workflow': {
@@ -60,6 +61,7 @@ function fieldError(field: FieldSpec, value: unknown, mode: ValidationMode): str
   }
 }
 
+/** Every problem with a block's settings. In design mode also reports broken `{{ }}` expressions. */
 export function validateConfig(
   def: AnyBlockDefinition,
   config: Record<string, unknown>,
@@ -92,6 +94,7 @@ export function withDefaults(
   return merged;
 }
 
+/** Settings ready to run, plus any validation errors. */
 export interface ResolvedConfig<C> {
   config: C;
   errors: string[];

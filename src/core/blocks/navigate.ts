@@ -5,6 +5,7 @@ import { PAGE_ACCENT, tabField } from './pageCommon';
 import type { WaitUntil } from '../page';
 import type { BlockDefinition } from '../types';
 
+/** Navigate settings. `url` is only used (and validated) for `action: 'goto'`. */
 export interface NavigateConfig {
   tab: string;
   action: 'goto' | 'back' | 'forward' | 'reload';
@@ -12,6 +13,7 @@ export interface NavigateConfig {
   waitUntil: WaitUntil;
 }
 
+/** Navigate: goto/back/forward/reload through `Host.tabs.navigate` (not the page agent); adds `url`. */
 export const navigateBlock: BlockDefinition<NavigateConfig> = {
   type: 'navigate',
   label: 'Navigate',

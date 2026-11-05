@@ -39,6 +39,7 @@ export function cloneWorkflow(source: Workflow, name: string): Workflow {
   return { schemaVersion: 1, id: uid(), name, enabled: false, nodes, edges };
 }
 
+/** A disabled copy named "<name> copy" (numbered when taken). */
 export function duplicateWorkflow(source: Workflow, existing: Workflow[]): Workflow {
   return cloneWorkflow(source, uniqueName(`${source.name} copy`, existing.map((w) => w.name)));
 }
@@ -56,12 +57,14 @@ export function exportWorkflows(workflows: Workflow[]): string {
   );
 }
 
+/** Outcome of `parseImport`. */
 export type ImportResult = { ok: true; workflows: Workflow[] } | { ok: false; error: string };
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** A node from untrusted JSON, or null when it has no string id/type. */
 function readNode(raw: unknown): NodeDef | null {
   if (!isObject(raw) || typeof raw.id !== 'string' || typeof raw.type !== 'string') return null;
   const position = isObject(raw.position) ? raw.position : {};
@@ -130,6 +133,7 @@ export function parseImport(text: string, existing: Workflow[]): ImportResult {
   return { ok: true, workflows: imported };
 }
 
+/** `cloneWorkflow` over loose parts (fresh ids, disabled). */
 function cloneWorkflowFromParts(name: string, nodes: NodeDef[], edges: EdgeDef[]): Workflow {
   return cloneWorkflow({ schemaVersion: 1, id: '', name, enabled: false, nodes, edges }, name);
 }

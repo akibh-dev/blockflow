@@ -1,6 +1,7 @@
 import { normalizeHttpUrl } from '../url';
 import type { BlockDefinition } from '../types';
 
+/** HTTP Request settings. `headers` is "Name: value" lines. */
 export interface HttpRequestConfig {
   url: string;
   method: string;

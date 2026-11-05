@@ -9,6 +9,13 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../fixture
 /** The fixture login accepts this password (e2e passes it as a secret). */
 export const PASSWORD = 'Op3n-Sesame!';
 
+/**
+ * Starts the fixture server on 127.0.0.1 with a random free port; resolves with the `http.Server`
+ * (read the port from `server.address().port`). Static files come from tests/fixtures/site
+ * (`/` is login.html, `/spa/*` is spa.html); a few routes are dynamic:
+ * POST /login (303 to /welcome.html or back with ?error=1), GET /api/slow (700 ms, rising order number),
+ * POST /api/save (400 ms, 201), /frames.html (same-origin and cross-origin iframe), /products?page=1..3.
+ */
 export function startServer() {
   let orders = 1000;
   const server = http.createServer(async (req, res) => {

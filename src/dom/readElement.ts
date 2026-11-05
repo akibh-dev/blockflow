@@ -6,6 +6,9 @@
  *
  * `kind`: text (default), attribute, has-class, exists, count.
  * `exists` and `count` are always "found": a missing element is a valid answer (false / 0).
+ *
+ * CSS only. Not used by the extension any more: src/browser/pageReader.ts reads through the page
+ * agent's `read` op instead. Kept with its tests.
  */
 export function readSelectorInPage(
   selector: string,

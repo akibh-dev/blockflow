@@ -1,12 +1,14 @@
 import { PAGE_ACCENT, PAGE_TIMEOUT_SECONDS, inPage, locatorField, tabField } from './pageCommon';
 import type { BlockDefinition } from '../types';
 
+/** Press Key settings. `key` uses KeyboardEvent.key names joined with `+` for modifiers. */
 export interface PressKeyConfig {
   tab: string;
   key: string;
   locator: string;
 }
 
+/** Press Key: one `press` agent request, on `locator` (focused first) or on whatever has focus. */
 export const pressKeyBlock: BlockDefinition<PressKeyConfig> = {
   type: 'press-key',
   label: 'Press Key',

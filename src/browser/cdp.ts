@@ -7,8 +7,10 @@ import { browser } from 'wxt/browser';
  * attaches and detaches again.
  */
 
+/** Sends one CDP command to the attached tab. */
 type Send = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 
+/** True if the optional "debugger" permission is granted (false where the API does not exist). */
 export async function hasDebugger(): Promise<boolean> {
   try {
     return await browser.permissions.contains({ permissions: ['debugger'] });
@@ -17,6 +19,10 @@ export async function hasDebugger(): Promise<boolean> {
   }
 }
 
+/**
+ * Attaches the debugger to `tabId` (protocol 1.3), runs `fn`, and always detaches. Throws a readable
+ * error when the permission is missing.
+ */
 export async function withDebugger<T>(tabId: number, fn: (send: Send) => Promise<T>): Promise<T> {
   if (!(await hasDebugger()) || !browser.debugger) {
     throw new Error(
@@ -56,6 +62,10 @@ const KEYS: Record<string, { code: string; keyCode: number; text?: string }> = {
 
 const MODIFIERS: Record<string, number> = { alt: 1, control: 2, ctrl: 2, meta: 4, cmd: 4, command: 4, shift: 8 };
 
+/**
+ * Moves the mouse to (x, y) in CSS pixels of the viewport, then presses and releases `clicks` times
+ * (clickCount increases, so 2 is a double click). `hoverOnly` stops after the move.
+ */
 export async function mouseClick(send: Send, x: number, y: number, options: { button?: 'left' | 'right'; clicks?: number; hoverOnly?: boolean } = {}): Promise<void> {
   const button = options.button ?? 'left';
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
@@ -66,6 +76,10 @@ export async function mouseClick(send: Send, x: number, y: number, options: { bu
   }
 }
 
+/**
+ * Presses a key or combo like "Enter", "a", "Control+a", "Shift+Tab". Text is only sent without
+ * modifiers other than Shift.
+ */
 export async function pressKey(send: Send, combo: string): Promise<void> {
   const parts = combo.split('+').map((part) => part.trim());
   const name = parts.pop() || combo;

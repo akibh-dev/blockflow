@@ -14,6 +14,7 @@ const out = path.resolve(import.meta.dirname ?? __dirname, '../docs/guide');
 const registry = createDefaultRegistry();
 const blocks = registry.list();
 
+/** A field's entry in blocks.json: key, label, kind and only the extras that kind has. */
 function fieldJson(field: FieldSpec) {
   return {
     key: field.key,
@@ -28,6 +29,7 @@ function fieldJson(field: FieldSpec) {
   };
 }
 
+/** A block's entry in blocks.json (ports and timeout as the engine computes them). */
 function blockJson(def: AnyBlockDefinition) {
   return {
     type: def.type,
@@ -44,6 +46,7 @@ function blockJson(def: AnyBlockDefinition) {
   };
 }
 
+/** Human wording for a field's type in the blocks.md settings table. */
 function kindText(field: FieldSpec): string {
   switch (field.kind) {
     case 'select':
@@ -59,10 +62,12 @@ function kindText(field: FieldSpec): string {
   }
 }
 
+/** Escapes text for a Markdown table cell (pipes, newlines). */
 function cell(text: string): string {
   return text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
 }
 
+/** One block's section in blocks.md: heading, description, ports, timeout, settings table, outputs. */
 function blockMarkdown(def: AnyBlockDefinition): string {
   const ports = nodePorts(def, {});
   const lines = [
@@ -177,6 +182,7 @@ function schema() {
   };
 }
 
+/** Generated file name (in docs/guide) → expected content. */
 const files: Record<string, string> = {
   'blocks.md': [
     '# Block reference',

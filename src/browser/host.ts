@@ -14,6 +14,7 @@ import { readElement } from './pageReader';
 import { requireTabId, sleep } from './tabs';
 import type { Host, HttpRequestOptions, HttpResult, NavigateOptions, NotifyOptions, OpenTabOptions, TabInfo, Scheduler, StateStore } from '../core/types';
 
+/** `Host.state`: block state in `storage.local` under `bf:state:<key>`. Never cleaned up. */
 class StorageState implements StateStore {
   async get(key: string): Promise<unknown> {
     const storageKey = STORAGE_KEYS.statePrefix + key;
@@ -26,6 +27,10 @@ class StorageState implements StateStore {
   }
 }
 
+/**
+ * `Host.tabs.open`: reuses `reuseTabId` if it still exists, else navigates the active tab (`newTab: false`),
+ * else opens a tab or window. Marks the tab as BlockFlow's own and starts its response log.
+ */
 async function openTab({ url, newTab, active, reuseTabId, newWindow, waitUntil = 'none', timeoutMs = 30_000 }: OpenTabOptions): Promise<{ tabId: number }> {
   let tabId: number | undefined;
   if (reuseTabId !== undefined && (await tabInfo(reuseTabId))) {
@@ -56,6 +61,7 @@ async function openTab({ url, newTab, active, reuseTabId, newWindow, waitUntil =
   return { tabId };
 }
 
+/** `Host.tabs.navigate`: goto / back / forward / reload, then waits per `waitUntil`; returns the final URL. */
 async function navigate(tabId: number, { action, url, waitUntil, timeoutMs }: NavigateOptions): Promise<{ url: string }> {
   if (action === 'goto') {
     if (!url) throw new Error('Navigate needs a URL');
@@ -70,12 +76,14 @@ async function navigate(tabId: number, { action, url, waitUntil, timeoutMs }: Na
 
 const MAX_BODY_CHARS = 200_000;
 
+/** `Host.http.fetch`: plain `fetch` from the extension origin (host permissions bypass CORS). Body capped at MAX_BODY_CHARS. */
 async function httpFetch({ url, method, headers, body }: HttpRequestOptions): Promise<HttpResult> {
   const response = await fetch(url, { method, headers, ...(body !== undefined ? { body } : {}) });
   const text = await response.text();
   return { status: response.status, ok: response.ok, body: text.slice(0, MAX_BODY_CHARS) };
 }
 
+/** `Host.notify`: a basic system notification. */
 async function notify({ title, message }: NotifyOptions): Promise<void> {
   await browser.notifications.create({
     type: 'basic',
@@ -85,6 +93,7 @@ async function notify({ title, message }: NotifyOptions): Promise<void> {
   });
 }
 
+/** `Host.screenshots.capture`: JPEG of the tab saved in IndexedDB; returns its id, or null when it cannot be taken. */
 async function capture(tabId: number, runId: string): Promise<string | null> {
   const tab = await browser.tabs.get(tabId);
   // captureVisibleTab only sees the tab that is showing in its window. A background tab needs the
@@ -99,11 +108,13 @@ async function capture(tabId: number, runId: string): Promise<string | null> {
   return id;
 }
 
+/** `Host.secrets.all`: the `bf:secrets` map. */
 async function allSecrets(): Promise<Record<string, string>> {
   const stored = await browser.storage.local.get(STORAGE_KEYS.secrets);
   return (stored[STORAGE_KEYS.secrets] as Record<string, string> | undefined) ?? {};
 }
 
+/** `Host.downloads.save`: saves text as a file in the Downloads folder (unsafe filename characters replaced). */
 async function saveDownload(filename: string, content: string, mime: string): Promise<void> {
   // Firefox's background page can make blob: URLs; Chrome's service worker cannot, so data: there.
   const url =
@@ -113,6 +124,7 @@ async function saveDownload(filename: string, content: string, mime: string): Pr
   await browser.downloads.download({ url, filename: filename.replace(/[\\/:*?"<>|]+/g, '-'), conflictAction: 'uniquify' });
 }
 
+/** `Host.tabs.current`: the focused http(s) tab, or the most recently used one when the editor has focus. */
 async function currentTab(): Promise<(TabInfo & { tabId: number }) | null> {
   const tabs = await browser.tabs.query({ active: true, lastFocusedWindow: true });
   let tab = tabs.find((candidate) => /^https?:/.test(candidate.url ?? ''));
@@ -127,6 +139,7 @@ async function currentTab(): Promise<(TabInfo & { tabId: number }) | null> {
   return { tabId: tab.id, url: tab.url ?? '', title: tab.title ?? '', loading: tab.status === 'loading' };
 }
 
+/** `Host.http.download`: fetches a file as base64 (Upload File), with its MIME type and file name. */
 async function downloadFile(url: string): Promise<{ base64: string; mime: string; name: string }> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Downloading ${url} failed: HTTP ${response.status}`);
@@ -170,6 +183,10 @@ async function dialogs(tabId: number, options: { mode: 'accept' | 'dismiss'; tex
   return (injection?.result as { type: string; message: string }[] | undefined) ?? [];
 }
 
+/**
+ * `Host.page.runScript`: runs user code with `chrome.userScripts.execute` (Chrome 135+, optional permission).
+ * `data` is available as a constant; the code's return value is the result.
+ */
 async function runScript(tabId: number, code: string, data: Record<string, unknown>): Promise<unknown> {
   const needs =
     'Run Script needs Chrome 135 or newer, the "userScripts" permission (press Grant on the block), and "Allow User Scripts" (or developer mode) switched on for BlockFlow in chrome://extensions.';

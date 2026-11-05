@@ -3,6 +3,7 @@ export function normalizeText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/** Cuts `text` to `max` characters, ending with an ellipsis when cut. */
 export function truncate(text: string, max = 80): string {
   return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`;
 }

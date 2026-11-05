@@ -1,6 +1,7 @@
 import { DATA_ACCENT, valueAt } from './dataCommon';
 import type { BlockDefinition } from '../types';
 
+/** Save to Dataset settings. `value` is an expression (not a template). */
 export interface SaveDatasetConfig {
   dataset: string;
   value: string;

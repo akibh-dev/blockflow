@@ -7,6 +7,7 @@ import type { EdgeDef, NodeDef, StepSettings, Workflow } from '../../../core/typ
  * compatible with React Flow's Node and Edge types.
  */
 
+/** What a React Flow node of type `block` carries: the block type, its settings and step settings. */
 // Must be a `type` alias (not an interface) to satisfy React Flow's Record<string, unknown> constraint.
 export type BlockNodeData = {
   blockType: string;
@@ -14,6 +15,7 @@ export type BlockNodeData = {
   step?: StepSettings;
 };
 
+/** A canvas node, structurally a React Flow `Node<BlockNodeData>`. `type` is always `'block'`. */
 export interface FlowNode {
   id: string;
   type?: string;
@@ -22,6 +24,7 @@ export interface FlowNode {
   selected?: boolean;
 }
 
+/** A canvas edge, structurally a React Flow `Edge`. */
 export interface FlowEdge {
   id: string;
   source: string;
@@ -31,6 +34,8 @@ export interface FlowEdge {
 }
 
 /**
+ * Saved workflow → canvas nodes and edges (copies, so editing the canvas never mutates `workflow`).
+ *
  * `portOf` says which output an edge leaves from (edges saved before ports existed have none);
  * React Flow needs it to attach the edge to the right dot.
  */
@@ -58,7 +63,11 @@ export function toFlow(
   };
 }
 
-/** Builds the saved model from the canvas, keeping the workflow's id, name and enabled flag from `base`. */
+/**
+ * Builds the saved model from the canvas, keeping the workflow's id, name and enabled flag from `base`.
+ * Positions are rounded to whole pixels, empty step settings and the default `out` port are dropped,
+ * so `fromFlow(w, ...toFlow(w))` equals `w` (tested in `tests/editor/convert.test.ts`).
+ */
 export function fromFlow(base: Workflow, nodes: FlowNode[], edges: FlowEdge[]): Workflow {
   return {
     ...base,
@@ -83,7 +92,11 @@ export function fromFlow(base: Workflow, nodes: FlowNode[], edges: FlowEdge[]): 
   };
 }
 
-/** True when two workflows have identical blocks, settings, positions and connections. */
+/**
+ * True when two workflows have identical blocks, settings, positions and connections.
+ * Compares JSON, so key order matters; the editor uses it to ignore canvas changes that are only
+ * selection or measurement.
+ */
 export function sameGraph(a: Workflow, b: Workflow): boolean {
   return JSON.stringify([a.nodes, a.edges]) === JSON.stringify([b.nodes, b.edges]);
 }

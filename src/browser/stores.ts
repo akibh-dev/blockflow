@@ -5,18 +5,21 @@ import type { LogEntry, Workflow } from '../core/types';
 
 // --- workflows -------------------------------------------------------------
 
+/** All saved workflows from `bf:workflows` ([] if missing or not an array). */
 export async function loadWorkflows(): Promise<Workflow[]> {
   const stored = await browser.storage.local.get(STORAGE_KEYS.workflows);
   const value = stored[STORAGE_KEYS.workflows];
   return Array.isArray(value) ? (value as Workflow[]) : [];
 }
 
+/** Replaces `bf:workflows`. The worker reacts through `storage.onChanged`. */
 export async function saveWorkflows(workflows: Workflow[]): Promise<void> {
   await browser.storage.local.set({ [STORAGE_KEYS.workflows]: workflows });
 }
 
 // --- logs ------------------------------------------------------------------
 
+/** The run log from `bf:logs`. */
 export async function loadLogs(): Promise<LogEntry[]> {
   const stored = await browser.storage.local.get(STORAGE_KEYS.logs);
   const value = stored[STORAGE_KEYS.logs];
@@ -26,6 +29,7 @@ export async function loadLogs(): Promise<LogEntry[]> {
 // Appends are queued so two log lines written back-to-back do not overwrite each other.
 let writeQueue: Promise<void> = Promise.resolve();
 
+/** Appends one log line (serialised, capped at MAX_LOG_ENTRIES). Never rejects. */
 export function appendLog(entry: LogEntry): Promise<void> {
   writeQueue = writeQueue
     .then(async () => {
@@ -39,12 +43,14 @@ export function appendLog(entry: LogEntry): Promise<void> {
   return writeQueue;
 }
 
+/** Deletes the run log (editor's Clear). */
 export async function clearLogs(): Promise<void> {
   await browser.storage.local.remove(STORAGE_KEYS.logs);
 }
 
 // --- runs ------------------------------------------------------------------
 
+/** Run history from `bf:runs`. */
 export async function loadRuns(): Promise<RunRecord[]> {
   const stored = await browser.storage.local.get(STORAGE_KEYS.runs);
   const value = stored[STORAGE_KEYS.runs];
@@ -90,6 +96,7 @@ export function saveRun(run: RunRecord): void {
   });
 }
 
+/** Deletes finished runs; runs still marked running are kept. */
 export async function clearRuns(): Promise<void> {
   await updateRuns((runs) => runs.filter((run) => run.status === 'running'));
 }

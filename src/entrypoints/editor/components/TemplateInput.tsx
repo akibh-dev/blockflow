@@ -24,6 +24,7 @@ export function TemplateInput({ value, onChange, suggestions, placeholder, multi
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
 
+  /** Open the menu when the caret is inside an unclosed `{{` and the typed name matches suggestions. */
   const look = (text: string, caret: number) => {
     const before = text.slice(0, caret);
     const open = before.lastIndexOf('{{');
@@ -35,6 +36,7 @@ export function TemplateInput({ value, onChange, suggestions, placeholder, multi
     setMenu(items.length > 0 ? { items, start: caret - typed.length, active: 0 } : null);
   };
 
+  /** Replace the typed name with `item}}` (swallowing an existing `}}`) and put the caret after it. */
   const insert = (item: string) => {
     const field = ref.current;
     if (!field || !menu) return;

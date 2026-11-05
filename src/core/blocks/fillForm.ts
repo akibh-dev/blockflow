@@ -1,6 +1,7 @@
 import { PAGE_ACCENT, PAGE_TIMEOUT_SECONDS, inPage, locatorField, tabField } from './pageCommon';
 import type { BlockDefinition, Row } from '../types';
 
+/** Fill Form settings: `fields` rows are `{locator, value}` (plus an editor-only `hint` from Detect fields). */
 export interface FillFormConfig {
   tab: string;
   fields: Row[];

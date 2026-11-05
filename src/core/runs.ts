@@ -7,10 +7,12 @@ import type { Payload } from './types';
 
 /** call = started by a Run Workflow block; event = a page visit or context menu. */
 export type RunTrigger = 'manual' | 'start' | 'timer' | 'call' | 'event';
+/** interrupted = the worker died mid-run (set by `markInterrupted`). */
 export type RunStatus = 'running' | 'passed' | 'failed' | 'cancelled' | 'interrupted';
 /** handled = failed, but the failure was dealt with (continue / error output). */
 export type StepStatus = 'running' | 'passed' | 'failed' | 'handled' | 'skipped';
 
+/** One block's execution within a run. Payloads are masked and compacted. */
 export interface StepRecord {
   nodeId: string;
   blockType: string;
@@ -30,6 +32,7 @@ export interface StepRecord {
   childRunId?: string;
 }
 
+/** One run, as stored in `bf:runs` and shown in the editor. */
 export interface RunRecord {
   id: string;
   workflowId: string;
@@ -50,6 +53,7 @@ export interface RunRecord {
 /** Receives a fresh copy of a run after every change. The background stores it; tests collect it. */
 export type RunObserver = (run: RunRecord) => void;
 
+/** Steps stored per run; later ones are only counted in `droppedSteps`. */
 export const MAX_STEPS_KEPT = 300;
 const MAX_PAYLOAD_CHARS = 3_000;
 
@@ -93,6 +97,7 @@ export function maskText(text: string, secrets: string[]): string {
   return out;
 }
 
+/** `maskText` over a JSON-serialisable value (secrets are matched in their JSON-escaped form). */
 export function maskPayload<T>(value: T, secrets: string[]): T {
   if (secrets.length === 0 || value === undefined) return value;
   try {

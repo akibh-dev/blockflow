@@ -1,3 +1,9 @@
+/**
+ * React hooks that mirror `browser.storage.local` keys into component state. Each hook loads the key
+ * once, then follows `storage.onChanged`, so whatever the background worker writes (logs, runs,
+ * prompts, recording) shows up without polling. Workflows are not read through these hooks: the
+ * editor owns `bf:workflows` and loads it once (see `Editor.tsx`).
+ */
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { loadLogs, loadRuns } from '../../browser/stores';
@@ -6,7 +12,7 @@ import type { PendingPrompt } from '../../browser/prompts';
 import { STORAGE_KEYS } from '../../shared/keys';
 import type { LogEntry } from '../../core/types';
 
-/** Live view of the run log written by the background worker. */
+/** Live view of the run log (`bf:logs`) written by the background worker, oldest first. */
 export function useLogs(): LogEntry[] {
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
@@ -30,7 +36,7 @@ export function useLogs(): LogEntry[] {
   return logs;
 }
 
-/** Live view of run history, written by the background worker step by step. */
+/** Live view of run history (`bf:runs`, newest last), written by the background worker step by step. */
 export function useRuns(): RunRecord[] {
   const [runs, setRuns] = useState<RunRecord[]>([]);
 
@@ -54,7 +60,13 @@ export function useRuns(): RunRecord[] {
   return runs;
 }
 
-/** Any storage.local key, kept live. */
+/**
+ * Any storage.local key, kept live, like `useState` backed by storage.
+ *
+ * Returns `[value, save]`. `save` updates local state at once, then writes the key; the write echoes
+ * back through `onChanged` (harmless). A removed key falls back to `fallback`. `fallback` must be
+ * stable per call site (it is not an effect dependency).
+ */
 export function useStorageValue<T>(key: string, fallback: T): [T, (next: T) => Promise<void>] {
   const [value, setValue] = useState<T>(fallback);
 
@@ -82,7 +94,7 @@ export function useStorageValue<T>(key: string, fallback: T): [T, (next: T) => P
   return [value, save];
 }
 
-/** Manual Steps waiting for an answer. */
+/** Manual Steps waiting for an answer (`bf:prompts`, written by the background's prompt host). */
 export function usePrompts(): PendingPrompt[] {
   return useStorageValue<PendingPrompt[]>(STORAGE_KEYS.prompts, [])[0];
 }

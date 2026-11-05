@@ -2,6 +2,7 @@ import { requireSessionTab } from '../session';
 import { PAGE_ACCENT, tabField } from './pageCommon';
 import type { BlockDefinition } from '../types';
 
+/** Dialogs settings: how to answer from now on (accept/dismiss), or only `read` what was shown. */
 export interface DialogsConfig {
   tab: string;
   action: 'accept' | 'dismiss' | 'read';

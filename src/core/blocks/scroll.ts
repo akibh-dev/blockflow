@@ -2,6 +2,10 @@ import { DEFAULT_TAB } from '../session';
 import { inPage, locatorField, PAGE_ACCENT, tabField } from './pageCommon';
 import type { BlockDefinition } from '../types';
 
+/**
+ * Scroll settings. `end` is block-only (the agent knows bottom/top/element): it repeats `bottom`
+ * until the page height is unchanged twice, or `maxScrolls` is reached, sleeping `pauseMs` between.
+ */
 export interface ScrollConfig {
   tab: string;
   to: 'bottom' | 'top' | 'element' | 'end';

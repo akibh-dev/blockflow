@@ -12,8 +12,10 @@ import { fileURLToPath } from 'node:url';
 const learning = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const examples = path.join(learning, 'examples');
 const check = process.argv.includes('--check');
+// Matches a fenced block whose info string has file=<path>; captures the path and the body.
 const fence = /^```[\w-]*\s+file=(\S+)\s*\n([\s\S]*?)^```[ \t]*$/gm;
 
+/** examples-relative path → { body, from: lesson file }. A path defined twice is an error. */
 const wanted = new Map();
 for (const name of fs.readdirSync(learning).filter((f) => /^\d\d-.*\.md$/.test(f)).sort()) {
   const text = fs.readFileSync(path.join(learning, name), 'utf8');
@@ -38,6 +40,7 @@ for (const [file, { body, from }] of wanted) {
   }
 }
 // Files in examples/ that no lesson defines are stale.
+/** All file paths under `dir`, recursively. */
 const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
   e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
 if (fs.existsSync(examples)) {

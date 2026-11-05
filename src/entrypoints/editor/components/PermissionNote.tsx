@@ -18,6 +18,10 @@ export async function requestPermission(permission: Permission): Promise<boolean
   }
 }
 
+/**
+ * Shown in the config panel for blocks that declare `permissions`: lists the optional permissions
+ * not yet granted, each with a Grant button. Checks with `permissions.contains` on mount.
+ */
 export function PermissionNote({ permissions }: { permissions: Permission[] }) {
   const [missing, setMissing] = useState<Permission[]>([]);
 

@@ -3,6 +3,10 @@ import { render } from '../template';
 import { DATA_ACCENT, listAt, listField } from './dataCommon';
 import type { BlockDefinition } from '../types';
 
+/**
+ * Filter settings. `left` / `right` are deliberately not `templated` fields: the block renders them
+ * itself once per item, with `item` in scope.
+ */
 export interface FilterConfig {
   list: string;
   left: string;

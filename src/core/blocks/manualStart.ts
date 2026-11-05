@@ -1,5 +1,6 @@
 import type { BlockDefinition, Row } from '../types';
 
+/** Start settings: `inputs` rows are `{name, value}` (value templated). */
 export interface ManualStartConfig {
   inputs: Row[];
 }

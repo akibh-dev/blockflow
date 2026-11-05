@@ -1,6 +1,7 @@
 import { DATA_ACCENT, valueAt } from './dataCommon';
 import type { BlockDefinition, Row } from '../types';
 
+/** Transform settings: `values` rows are `{name, expression}`, evaluated top to bottom. */
 export interface TransformConfig {
   values: Row[];
 }

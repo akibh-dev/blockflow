@@ -4,6 +4,7 @@ import { normalizeHttpUrl } from '../url';
 import { pageWaitMs } from './pageCommon';
 import type { BlockDefinition, ReadKind } from '../types';
 
+/** Read Element settings. A non-empty `url` selects background-tab mode; otherwise `tab` is read. */
 export interface ReadElementConfig {
   url: string;
   /** Read from this tab of the run (Open Tab) instead of BlockFlow's own background tab for `url`. */
@@ -14,11 +15,13 @@ export interface ReadElementConfig {
   reload: boolean;
 }
 
+/** What Read Element keeps in `ctx.state` (key `last`) to produce `previous` / `changed` next time. */
 interface LastRead {
   signature: string;
   value: string;
 }
 
+/** Read kinds that need the attribute / class name setting. */
 const NEEDS_NAME: ReadKind[] = ['attribute', 'has-class'];
 
 /**

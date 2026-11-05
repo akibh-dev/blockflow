@@ -2,10 +2,15 @@ import { routeTo } from '../ports';
 import { DATA_ACCENT } from './dataCommon';
 import type { BlockDefinition } from '../types';
 
+/** Repeat settings: how many iterations. */
 export interface RepeatConfig {
   times: number;
 }
 
+/**
+ * Repeat: emits `{...input, iteration}` on "each" `times` times (each emit awaits the whole downstream
+ * subtree), then routes the unchanged input to "done".
+ */
 export const repeatBlock: BlockDefinition<RepeatConfig> = {
   type: 'repeat',
   label: 'Repeat',

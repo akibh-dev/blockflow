@@ -4,6 +4,7 @@ import { PAGE_ACCENT, pageWaitMs, tabField } from './pageCommon';
 import type { WaitUntil } from '../page';
 import type { BlockContext, BlockDefinition } from '../types';
 
+/** Wait for Popup settings: the opener tab (`tab`), and the session name to give the new tab. */
 export interface WaitForPopupConfig {
   tab: string;
   name: string;

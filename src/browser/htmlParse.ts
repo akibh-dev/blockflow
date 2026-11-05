@@ -23,6 +23,7 @@ export async function runOnHtml(html: string, baseUrl: string, request: AgentReq
 const OFFSCREEN_URL = '/offscreen.html';
 let creating: Promise<void> | null = null;
 
+/** Opens the offscreen parser document if none exists. Concurrent callers share one `createDocument`. */
 async function ensureOffscreen(): Promise<void> {
   const offscreen = browser.offscreen;
   if (await offscreen.hasDocument?.()) return;
@@ -38,6 +39,10 @@ async function ensureOffscreen(): Promise<void> {
   await creating;
 }
 
+/**
+ * `Host.html.act`: runs an agent request on an HTML string. Parses here when a DOM exists (Firefox),
+ * otherwise sends `bf:parse-html` to the offscreen document (Chrome).
+ */
 export async function actOnHtml(html: string, baseUrl: string, request: AgentRequest): Promise<Record<string, unknown>> {
   if (typeof DOMParser !== 'undefined') return runOnHtml(html, baseUrl, request);
   await ensureOffscreen();

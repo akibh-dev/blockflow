@@ -3,6 +3,7 @@ import { DEFAULT_TAB, requireSessionTab } from '../session';
 import { inPage, locatorField, PAGE_ACCENT, pageWaitMs, tabField } from './pageCommon';
 import type { BlockContext, BlockDefinition } from '../types';
 
+/** Paginate settings: the Next control and a page cap. */
 export interface PaginateConfig {
   tab: string;
   next: string;

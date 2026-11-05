@@ -1,11 +1,16 @@
 import { uid } from '../id';
 import type { BlockDefinition, Payload } from '../types';
 
+/** Timer settings: the interval or delay in seconds, and whether a root Timer repeats. */
 export interface TimerConfig {
   seconds: number;
   repeat: boolean;
 }
 
+/**
+ * Timer-name prefix for delays (one timer per incoming payload, `delay:<uid>`), so `onTimer` can
+ * tell them from the root schedule's single `tick` timer.
+ */
 const DELAY_PREFIX = 'delay:';
 
 /**

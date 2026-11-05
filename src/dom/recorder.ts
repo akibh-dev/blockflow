@@ -8,14 +8,19 @@ import type { RecordedStep } from '../core/recording';
  * into blocks. Runs inside pages: DOM only.
  */
 
+/** Callbacks for {@link startRecorder}. */
 export interface RecorderOptions {
+  /** One user action, as soon as it is known (fills are reported when the field is left or Enter is pressed). */
   onStep(step: RecordedStep): void;
   /** The toolbar's Stop button. */
   onStop(): void;
+  /** Defaults to the global document. Tests pass their own. */
   document?: Document;
 }
 
+/** Returned by {@link startRecorder}. */
 export interface RecorderHandle {
+  /** Reports a pending fill, removes the listeners and the toolbar. Does not call onStop. */
   stop(): void;
 }
 
@@ -39,7 +44,9 @@ const TOOLBAR = `
   <button data-act="stop" class="stop">Stop</button>
 </div>`;
 
+/** Input types recorded as `fill` (unlike the agent's TEXT_INPUTS, color and range are left out). */
 const TEXT_TYPES = new Set(['', 'text', 'email', 'password', 'search', 'tel', 'url', 'number', 'date', 'time', 'datetime-local', 'month', 'week']);
+/** A click is recorded on the closest of these around the target, so a click on an icon inside a button records the button. */
 const CLICKABLE = 'button, a, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="option"], input[type="submit"], input[type="button"], input[type="image"], summary';
 
 function isTextField(element: Element): element is HTMLInputElement | HTMLTextAreaElement {
@@ -47,6 +54,11 @@ function isTextField(element: Element): element is HTMLInputElement | HTMLTextAr
   return element.localName === 'input' && TEXT_TYPES.has((element as HTMLInputElement).type);
 }
 
+/**
+ * Starts recording `document`: adds the toolbar (`<blockflow-recorder>` with an open shadow root) and
+ * capture-phase click/input/change/keydown listeners on the window, plus `pagehide` to flush typing.
+ * In record mode the page's events are not touched; in an assert mode the next click is swallowed.
+ */
 export function startRecorder(options: RecorderOptions): RecorderHandle {
   const doc = options.document ?? document;
   const win = doc.defaultView as Window;
@@ -69,6 +81,7 @@ export function startRecorder(options: RecorderOptions): RecorderHandle {
 
   const fromToolbar = (event: Event) => event.composedPath().includes(host);
 
+  /** Reports the field being typed in as one `fill` step, unless that value was already reported. Passwords are sent empty with `secret: true`. */
   const flushFill = () => {
     if (!pendingFill) return;
     const field = pendingFill;

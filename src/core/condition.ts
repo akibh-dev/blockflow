@@ -1,14 +1,16 @@
 /**
- * Comparisons shared by If (and later Assert, Wait For, Loop until, Filter).
+ * Comparisons shared by If, Assert and Filter.
  * Operands are plain strings, already rendered from templates.
  */
 
+/** One comparison: `left operator right`. */
 export interface Clause {
   left: string;
   operator: string;
   right: string;
 }
 
+/** Several clauses combined with AND or OR. */
 export interface Condition {
   /** all = every clause must hold (AND); any = at least one (OR). */
   match: 'all' | 'any';
@@ -48,6 +50,7 @@ function matches(left: string, pattern: string): boolean {
 
 const TRUTHY = new Set(['true', 'yes', 'on', '1']);
 
+/** Every comparison operator, in the order the editor lists them. */
 export const OPERATORS: Operator[] = [
   { value: 'equals', label: 'equals', usesRight: true, test: (l, r) => l === r },
   { value: 'not-equals', label: 'does not equal', usesRight: true, test: (l, r) => l !== r },
@@ -66,8 +69,10 @@ export const OPERATORS: Operator[] = [
   { value: 'false', label: 'is false', usesRight: false, test: (l) => !TRUTHY.has(l.trim().toLowerCase()) },
 ];
 
+/** `OPERATORS` as select-field options. */
 export const OPERATOR_OPTIONS = OPERATORS.map(({ value, label }) => ({ value, label }));
 
+/** Readable label of an operator (the value itself when unknown). */
 export function operatorLabel(value: string): string {
   return OPERATORS.find((op) => op.value === value)?.label ?? value;
 }
@@ -79,6 +84,7 @@ export function testClause({ left, operator, right }: Clause): boolean {
   return op.test(left, right);
 }
 
+/** Evaluates all clauses (AND) or any (OR). No clauses = true. */
 export function testCondition(condition: Condition): boolean {
   if (condition.clauses.length === 0) return true;
   return condition.match === 'any'
@@ -86,6 +92,7 @@ export function testCondition(condition: Condition): boolean {
     : condition.clauses.every(testClause);
 }
 
+/** A clause as a sentence, for summaries and logs. */
 export function describeClause({ left, operator, right }: Clause): string {
   const op = OPERATORS.find((candidate) => candidate.value === operator);
   return [left, operatorLabel(operator), op?.usesRight === false ? '' : right].filter(Boolean).join(' ');

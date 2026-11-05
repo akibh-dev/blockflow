@@ -4,11 +4,13 @@ import type { SourceConfig } from './extractList';
 import { PAGE_ACCENT, locatorField, tabField } from './pageCommon';
 import type { BlockDefinition } from '../types';
 
+/** Extract Table settings: the table locator and the payload key for the rows. */
 export interface ExtractTableConfig extends SourceConfig {
   locator: string;
   into: string;
 }
 
+/** Extract Table: one `table` agent request, rebuilt into objects by `tableToObjects`; adds the rows and `count`. */
 export const extractTableBlock: BlockDefinition<ExtractTableConfig> = {
   type: 'extract-table',
   label: 'Extract Table',

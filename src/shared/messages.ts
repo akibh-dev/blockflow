@@ -87,6 +87,7 @@ export interface RecordedMessage {
   step: RecordedStep;
 }
 
+/** Every message in this file. Messages not listed here (`bf:parse-html`) are ignored by `isExtensionMessage`. */
 export type ExtensionMessage =
   | StartPickMessage
   | PickedMessage
@@ -100,6 +101,7 @@ export type ExtensionMessage =
   | StopRecordingMessage
   | RecordedMessage;
 
+/** Runtime list of the `type` values above; keep it in sync with `ExtensionMessage`. */
 const TYPES = new Set<string>([
   'bf:start-pick',
   'bf:picked',
@@ -114,6 +116,10 @@ const TYPES = new Set<string>([
   'bf:recorded',
 ]);
 
+/**
+ * Type guard for `runtime.onMessage` listeners: true for an object whose `type` is one of ours.
+ * Checks only the `type`, not the payload's shape.
+ */
 export function isExtensionMessage(value: unknown): value is ExtensionMessage {
   if (typeof value !== 'object' || value === null) return false;
   const type = (value as { type?: unknown }).type;

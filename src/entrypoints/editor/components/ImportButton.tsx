@@ -5,6 +5,7 @@ interface ImportButtonProps {
   className?: string;
 }
 
+/** "Import" button backed by a hidden multi-file input. Clears the input after each pick so the same file can be chosen again. */
 export function ImportButton({ onFiles, className }: ImportButtonProps) {
   const input = useRef<HTMLInputElement>(null);
   return (

@@ -9,6 +9,7 @@ import type { RecordedStep } from '../core/recording';
  * it live and turn it into blocks when it stops.
  */
 
+/** The recording kept in `bf:recording`. `status: 'stopped'` tells the editor to turn `steps` into blocks. */
 export interface RecordingState {
   workflowId: string;
   tabId: number;
@@ -20,6 +21,7 @@ export interface RecordingState {
 
 const RECORDER_SCRIPT = '/content-scripts/recorder.js';
 
+/** The current recording, if any. */
 export async function loadRecording(): Promise<RecordingState | undefined> {
   const stored = await browser.storage.local.get(STORAGE_KEYS.recording);
   return stored[STORAGE_KEYS.recording] as RecordingState | undefined;
@@ -27,6 +29,7 @@ export async function loadRecording(): Promise<RecordingState | undefined> {
 
 // Steps arrive quickly (type, change, click): one write at a time.
 let queue: Promise<void> = Promise.resolve();
+/** Read-modify-write of `bf:recording`, serialised. `change` returning undefined skips the write. */
 function update(change: (state: RecordingState) => RecordingState | undefined): Promise<void> {
   queue = queue
     .then(async () => {
@@ -39,12 +42,14 @@ function update(change: (state: RecordingState) => RecordingState | undefined): 
   return queue;
 }
 
+/** Injects the recorder content script; it guards itself against running twice in one document. */
 async function inject(tabId: number): Promise<void> {
   await browser.scripting.executeScript({ target: { tabId }, files: [RECORDER_SCRIPT] }).catch(() => {
     // Pages the browser protects (chrome://, the web store) cannot be recorded.
   });
 }
 
+/** Handles `bf:start-recording`: opens `url` in a new active tab, stores a fresh recording and injects the recorder. */
 export async function startRecording(workflowId: string, url: string): Promise<void> {
   const tab = await browser.tabs.create({ url, active: true });
   const tabId = requireTabId(tab);
@@ -56,6 +61,7 @@ export async function startRecording(workflowId: string, url: string): Promise<v
   await inject(tabId);
 }
 
+/** Handles `bf:recorded`: appends the step, but only from the recording tab and while recording. */
 export function recordStep(step: RecordedStep, fromTabId: number | undefined): Promise<void> {
   return update((state) => (state.status === 'recording' && state.tabId === fromTabId ? { ...state, steps: [...state.steps, step] } : undefined));
 }
@@ -71,6 +77,10 @@ export async function onRecordedTabUpdated(tabId: number, change: { url?: string
   if (change.status === 'complete') await inject(tabId);
 }
 
+/**
+ * Handles `bf:stop-recording` (from the editor or the in-page toolbar): marks the recording stopped and
+ * removes the recorder from the page. The editor converts and then deletes `bf:recording`.
+ */
 export async function stopRecording(): Promise<void> {
   const state = await loadRecording();
   if (!state) return;
@@ -87,6 +97,7 @@ export async function stopRecording(): Promise<void> {
     .catch(() => {});
 }
 
+/** Deletes `bf:recording`. (The editor currently removes the key itself.) */
 export async function clearRecording(): Promise<void> {
   await browser.storage.local.remove(STORAGE_KEYS.recording);
 }

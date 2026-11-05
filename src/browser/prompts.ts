@@ -8,6 +8,7 @@ import { sleep } from './tabs';
  * live in this worker's memory, which stays awake because the wait keeps calling extension APIs.
  */
 
+/** A Manual Step waiting for an answer, as listed in `bf:prompts` for the editor's banner. */
 export interface PendingPrompt {
   runId: string;
   workflowName: string;
@@ -27,6 +28,10 @@ async function setPrompts(change: (prompts: PendingPrompt[]) => PendingPrompt[])
   await browser.storage.local.set({ [STORAGE_KEYS.prompts]: change(await listPrompts()) });
 }
 
+/**
+ * `Host.prompt.ask`: lists the question, shows a notification and polls (every 500 ms) for `answerPrompt`.
+ * Resolves true for Continue, false for Fail; throws after `timeoutMs`. Always removes the prompt and notification.
+ */
 export async function askUser(options: { runId: string; workflowName: string; message: string; timeoutMs: number }): Promise<boolean> {
   answers.set(options.runId, undefined);
   await setPrompts((prompts) => [
@@ -69,6 +74,7 @@ export function answerPrompt(runId: string, ok: boolean): void {
   if (answers.has(runId)) answers.set(runId, ok);
 }
 
+/** The run id behind one of our Manual Step notifications, or null for any other notification. */
 export function promptRunId(notificationId: string): string | null {
   return notificationId.startsWith(NOTIFICATION_PREFIX) ? notificationId.slice(NOTIFICATION_PREFIX.length) : null;
 }

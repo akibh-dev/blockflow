@@ -1,10 +1,12 @@
 import type { BlockDefinition, LogLevel } from '../types';
 
+/** Log settings: the (templated) message and its log level. */
 export interface LogConfig {
   message: string;
   level: LogLevel;
 }
 
+/** Log: writes one line to the run log at the chosen level and passes its input on unchanged. */
 export const logBlock: BlockDefinition<LogConfig> = {
   type: 'log',
   label: 'Log',

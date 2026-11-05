@@ -7,10 +7,13 @@
  *   placeholder=you@example.com · testid=submit · xpath=//form · A >> B · A >> nth=1
  */
 
+/** What a `read` request reads from the element. */
 export type ReadKind = 'text' | 'value' | 'attribute' | 'has-class' | 'exists' | 'count' | 'visible' | 'checked' | 'enabled';
 
+/** Condition a `wait` request waits for. */
 export type WaitState = 'visible' | 'hidden' | 'attached' | 'detached' | 'enabled' | 'text' | 'no-text';
 
+/** One thing the page agent can do in a page. Each op is handled by `attempt()` in src/dom/agent.ts. */
 export type AgentRequest =
   | {
       op: 'click';
@@ -28,14 +31,16 @@ export type AgentRequest =
   | { op: 'read'; locator: string; kind: ReadKind; name?: string }
   | { op: 'wait'; state: WaitState; locator?: string; text?: string }
   | { op: 'detect-form'; locator: string }
+  /** URL and title of the page (currently not sent by any block). */
   | { op: 'info' }
   /**
-   * Scraping: one object per element matching `locator`, with one key per field. A field's
-   * locator is searched inside the item (empty = the item itself); `attribute` reads that attribute
-   * instead of the text (href/src come back as absolute URLs).
+   * Scraping: one row per element matching `locator`, one cell per field. A field's locator is
+   * searched inside the item (empty = the item itself); `attribute` reads that attribute instead of
+   * the text (href/src come back as absolute URLs). The answer is `{ columns, values, count }`
+   * (arrays keep key order across executeScript); `tableToObjects` in blocks/extractList.ts makes objects.
    */
   | { op: 'extract'; locator: string; fields: ExtractField[]; limit?: number }
-  /** An HTML table as objects keyed by its header cells. */
+  /** An HTML table as `{ columns, values, count }`: header cells as columns, one row of cells per body row. */
   | { op: 'table'; locator: string }
   /** URL, title, description, canonical, language, meta tags, JSON-LD. */
   | { op: 'page-info' }
@@ -49,6 +54,7 @@ export type AgentRequest =
    */
   | { op: 'locate'; locator: string; purpose: 'click' | 'fill' | 'set-field' | 'check' | 'press' };
 
+/** A file to put on a file input. */
 export interface UploadFile {
   name: string;
   type: string;
@@ -56,6 +62,7 @@ export interface UploadFile {
   base64: string;
 }
 
+/** One column of an `extract` request. */
 export interface ExtractField {
   name: string;
   locator?: string;
@@ -68,6 +75,7 @@ export interface AgentCall {
   budgetMs: number;
 }
 
+/** The agent's answer to one `AgentCall`. */
 export type AgentResponse =
   | { status: 'done'; result: Record<string, unknown> }
   /** Not possible yet (element missing, hidden, disabled...). The driver asks again until its timeout. */
@@ -85,4 +93,5 @@ export interface FormFieldRow {
   hint?: string;
 }
 
+/** How long tab operations wait after navigating. */
 export type WaitUntil = 'load' | 'networkidle' | 'none';
