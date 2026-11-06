@@ -186,8 +186,13 @@ Details: [Scheduling and Timers](Scheduling-and-Timers.md),
 
 ### Gotchas
 
-- **Timeouts do not cancel the block.** `withTimeout` only races; the timed-out call keeps running and,
-  with retries, overlaps the next attempt. A late `ctx.emit` from it still emits into the run.
+- **A timed-out attempt is fenced off, not killed.** JavaScript cannot interrupt the block's promise, so
+  `withTimeout` races it and, on timeout, sets the attempt's `fence.abandoned`. From then on its
+  `ctx.emit`, `ctx.callWorkflow` and soft failures are refused, its late rejection is swallowed, and
+  `ctx.aborted()` returns true so long-running blocks (Timer's inline wait, loops) can stop early. The
+  next retry starts with a fresh fence.
+- A step whose run was stopped while it ran is recorded `skipped` and the run `cancelled`; `runStep`
+  returns early when the run is no longer `running`.
 - Config is resolved once per step, before retries.
 - Start/timer contexts (`start`, `onTimer`) have no run: `softFail` only logs, `callWorkflow` throws,
   `emit` starts a new run.
@@ -242,8 +247,8 @@ worker restarts. A blank name means `main`.
 | --- | --- |
 | `createWorkflow(name?)` | Empty, disabled, fresh id. |
 | `uid` | Re-export of `id.ts`. |
-| `behaviourSignature(workflow)` | JSON of sorted nodes (`id, type, config, step`) and sorted edges. Positions and names excluded. |
-| `diffWorkflows(previous, next)` | `{ start, stop }`: start = newly enabled or enabled and behaviour changed; stop = disabled or deleted while enabled. Drives the background's `storage.onChanged` handler ([Background Worker](Background-Worker.md)). |
+| `rootSignature(workflow)` | JSON of the start blocks (nothing feeds them), sorted by id: `id, type, config, step`. Only these hold schedules and listeners; other blocks are read from storage when a run reaches them, so editing them needs no restart. |
+| `diffWorkflows(previous, next)` | `{ start, restart, stop, removed }`: start = newly enabled (plain start blocks run); restart = enabled and `rootSignature` changed (triggers re-armed, plain start blocks not run); stop = disabled or deleted while enabled; removed = deleted (state and timers cleared). Drives the background's `storage.onChanged` handler ([Background Worker](Background-Worker.md)), which migrates both sides first ([Core Modules: migrate](Core-Modules.md#migrate)). |
 
 ## Validation (`validate.ts`)
 

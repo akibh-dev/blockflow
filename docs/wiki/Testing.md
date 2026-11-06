@@ -66,8 +66,9 @@ against real Chromium.
 | [core/moreBlocks.test.ts](../../tests/core/moreBlocks.test.ts) | Scroll (top/bottom/element; "until nothing more loads" with its height check and `maxScrolls`), Page Info (page, local, session, cookies), Context Menu (config → menu item, item id parsing, click → payload, a click starting the flow), Page Visited start log, Navigate back/forward/reload, Press Key, Stop, Notify, Repeat |
 | [core/config.test.ts](../../tests/core/config.test.ts) | `withDefaults`, `resolveConfig`, `validateConfig` |
 | [core/validate.test.ts](../../tests/core/validate.test.ts) | `validateWorkflow` |
-| [core/workflow.test.ts](../../tests/core/workflow.test.ts) | `diffWorkflows`, `behaviourSignature`, `createWorkflow`, sample workflows, timer keys, `uid` |
+| [core/workflow.test.ts](../../tests/core/workflow.test.ts) | `diffWorkflows`, `rootSignature`, `createWorkflow`, sample workflows, timer keys, `uid` |
 | [core/library.test.ts](../../tests/core/library.test.ts) | `uniqueName`, clone / duplicate, export / import |
+| [core/migrate.test.ts](../../tests/core/migrate.test.ts) | v1 → v2 key renames (`selector`/`next` → `locator`), no-op on current workflows, old keys accepted on import |
 | [core/expression.test.ts](../../tests/core/expression.test.ts) | Expression language and templates with expressions |
 | [core/template.test.ts](../../tests/core/template.test.ts) | `render`, `hasTemplate`, `getPath` |
 | [core/csv.test.ts](../../tests/core/csv.test.ts) | CSV parse / write |
