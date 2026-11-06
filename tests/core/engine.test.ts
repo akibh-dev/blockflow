@@ -89,7 +89,7 @@ describe('Watch Element as a start block', () => {
         {
           id: 'w',
           type: 'watch-element',
-          config: { url: SITE, selector: '.price', intervalSeconds: 30, ...extra },
+          config: { url: SITE, locator: '.price', intervalSeconds: 30, ...extra },
         },
         { id: 'o', type: 'open-url', config: { url: '{{url}}#changed' } },
       ],
@@ -133,7 +133,7 @@ describe('Watch Element as a start block', () => {
   it('puts value and previous into the payload', async () => {
     const wf = flow(
       [
-        { id: 'w', type: 'watch-element', config: { url: SITE, selector: '.price' } },
+        { id: 'w', type: 'watch-element', config: { url: SITE, locator: '.price' } },
         { id: 'o', type: 'open-url', config: { url: 'https://example.com/?now={{value}}&was={{previous}}' } },
       ],
       [['w', 'o']],
@@ -181,7 +181,7 @@ describe('Watch Element as a start block', () => {
     const first = harness(watchFlow(), host);
     await first.runner.start(); // baseline "A" for .price
 
-    const edited = watchFlow({ selector: '.title' });
+    const edited = watchFlow({ locator: '.title' });
     const second = harness({ ...edited, id: first.runner.workflowId }, host);
     await second.runner.start(); // different selector, text "B": new baseline
     expect(host.opened).toHaveLength(0);
@@ -218,7 +218,7 @@ describe('Composing blocks in any order', () => {
     const wf = flow(
       [
         { id: 't', type: 'timer', config: { seconds: 60, repeat: true } },
-        { id: 'w', type: 'watch-element', config: { url: SITE, selector: '.price', intervalSeconds: 9999 } },
+        { id: 'w', type: 'watch-element', config: { url: SITE, locator: '.price', intervalSeconds: 9999 } },
         { id: 'o', type: 'open-url', config: { url: '{{url}}#changed' } },
       ],
       [
@@ -245,7 +245,7 @@ describe('Composing blocks in any order', () => {
   it('Watch Element → Timer (delay) → Open URL: waits inside the same run before opening', async () => {
     const wf = flow(
       [
-        { id: 'w', type: 'watch-element', config: { url: SITE, selector: '.price' } },
+        { id: 'w', type: 'watch-element', config: { url: SITE, locator: '.price' } },
         { id: 'd', type: 'timer', config: { seconds: 20 } },
         { id: 'o', type: 'open-url', config: { url: '{{url}}#after-delay' } },
       ],
@@ -416,7 +416,7 @@ describe('Lifecycle', () => {
   it('a brand-new runner can continue the flow after the background worker restarted', async () => {
     const wf = flow(
       [
-        { id: 'w', type: 'watch-element', config: { url: SITE, selector: '.price' } },
+        { id: 'w', type: 'watch-element', config: { url: SITE, locator: '.price' } },
         { id: 'o', type: 'open-url', config: { url: '{{url}}#changed' } },
       ],
       [['w', 'o']],

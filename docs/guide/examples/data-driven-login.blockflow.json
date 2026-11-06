@@ -3,7 +3,7 @@
   "version": 1,
   "workflows": [
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "ddt",
       "name": "Data-driven login test",
       "enabled": false,

@@ -25,8 +25,8 @@ describe('resolveConfig', () => {
   });
 
   it('does not render fields that are not templated', () => {
-    const { config } = resolveConfig(watchElementBlock, { selector: '{{x}}', url: 'a.com' }, { x: 'y' });
-    expect((config as { selector: string }).selector).toBe('{{x}}');
+    const { config } = resolveConfig(watchElementBlock, { locator: '{{x}}', url: 'a.com' }, { x: 'y' });
+    expect((config as { locator: string }).locator).toBe('{{x}}');
   });
 
   it('reports a missing required value after rendering', () => {

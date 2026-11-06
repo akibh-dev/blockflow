@@ -13,16 +13,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { browser } from 'wxt/browser';
 import { clearLogs, clearRuns, loadWorkflows, saveWorkflows } from '../../browser/stores';
+import { migrateWorkflows } from '../../core/migrate';
 import { edgePort, nodePorts } from '../../core/ports';
 import type { StepStatus } from '../../core/runs';
 import { validateWorkflow } from '../../core/validate';
 import { duplicateWorkflow, exportWorkflows, parseImport, uniqueName } from '../../core/library';
 import { createWorkflow, uid } from '../../core/workflow';
 import type { EdgeDef, LogEntry, StepSettings, Workflow } from '../../core/types';
+import type { Issue } from '../../core/issues';
 import { BlockNode, IssuesContext, RunStatusContext } from './components/BlockNode';
 import type { BlockFlowNode } from './components/BlockNode';
 import { ConfigPanel } from './components/ConfigPanel';
-import { confirmDialog, promptDialog, toast } from './components/Dialogs';
+import { confirmDialog, issuesDialog, promptDialog, toast } from './components/Dialogs';
 import { LogPanel } from './components/LogPanel';
 import { DRAG_MIME, Sidebar } from './components/Sidebar';
 import type { WorkflowActions } from './components/WorkflowActions';
@@ -32,6 +34,8 @@ import { fromFlow, sameGraph, toFlow } from './flow/convert';
 import { useLogs, usePrompts, useRuns, useStorageValue } from './hooks';
 import { recordingIntoWorkflow } from '../../core/recording';
 import { workflowToPlaywright } from '../../core/playwright';
+import { layoutWorkflow } from '../../core/layout';
+import { decompile } from '../../core/script';
 import { STORAGE_KEYS } from '../../shared/keys';
 import type { RecordingState } from '../../browser/recording';
 import { PromptBanner } from './components/PromptBanner';
@@ -93,7 +97,7 @@ function portOfEdge(workflow: Workflow, edge: EdgeDef): string {
  * Run/Stop/Record talk to the background with `runtime.sendMessage`.
  */
 export function Editor() {
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
   const [workflows, setWorkflows] = useState<Workflow[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [nodes, setNodes] = useState<BlockFlowNode[]>([]);
@@ -180,6 +184,10 @@ export function Editor() {
   }, [nodes, edges, activeId, historyOf]);
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  const edgesRef = useRef(edges);
+  edgesRef.current = edges;
 
   const persist = useCallback((list: Workflow[]) => {
     synced.current = syncBase(list);
@@ -198,7 +206,7 @@ export function Editor() {
     const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
       const change = changes[STORAGE_KEYS.workflows];
       if (area !== 'local' || !change) return;
-      const theirs = (change.newValue as Workflow[] | undefined) ?? [];
+      const theirs = migrateWorkflows((change.newValue as Workflow[] | undefined) ?? []).workflows;
       const ours = latest.current;
       if (!ours || sameData(theirs, ours)) {
         synced.current = syncBase(theirs);
@@ -338,6 +346,8 @@ export function Editor() {
   const [view, setView] = useState<'canvas' | 'manage' | 'reports' | 'data' | 'secrets'>('canvas');
   /** A message for the user, as a toast (errors stay longer). */
   const notice = useCallback((message: string, kind: 'info' | 'error' = 'info') => toast(message, kind), []);
+  /** Secret names, so import can warn about `{{secret.x}}` that does not exist (values are not used). */
+  const [secrets] = useStorageValue<Record<string, string>>(STORAGE_KEYS.secrets, {});
 
   const createNew = useCallback(() => {
     const workflow = createWorkflow(uniqueName(`Workflow ${(latest.current?.length ?? 0) + 1}`, (latest.current ?? []).map((w) => w.name)));
@@ -435,23 +445,40 @@ export function Editor() {
 
   const importFiles = useCallback(
     async (files: FileList | null) => {
+      const names = Array.from(files ?? [], (file) => file.name);
       const texts = await readFiles(files);
       let added: Workflow[] = [];
-      for (const text of texts) {
-        const result = parseImport(text, [...(latest.current ?? []), ...added]);
+      const notes: Issue[] = [];
+      for (const [index, text] of texts.entries()) {
+        const result = parseImport(text, [...(latest.current ?? []), ...added], { secrets: Object.keys(secrets) });
+        // Errors refuse the file: list every problem with its JSON path (check.ts), not just the first.
         if (!result.ok) {
-          notice(`Import failed: ${result.error}`, 'error');
+          void issuesDialog({
+            title: `Cannot import ${names[index] ?? 'this file'}`,
+            message: 'Nothing was imported. Fix these problems in the file and import it again (paths point into the file).',
+            issues: result.issues,
+          });
           continue;
         }
         added = [...added, ...result.workflows];
+        notes.push(...result.issues);
       }
       if (added.length === 0) return;
       setWorkflows((current) => [...(current ?? []), ...added]);
       open(added[0] as Workflow);
       setView('manage');
-      notice(`Imported ${added.length} workflow${added.length === 1 ? '' : 's'}. They are off until you turn them on.`);
+      const imported = `Imported ${added.length} workflow${added.length === 1 ? '' : 's'}. They are off until you turn them on.`;
+      const warnings = notes.filter((issue) => issue.level === 'warning').length;
+      if (notes.length === 0) notice(imported);
+      else {
+        const what = warnings > 0 ? `${warnings} warning${warnings === 1 ? '' : 's'}` : `${notes.length} note${notes.length === 1 ? '' : 's'}`;
+        toast(`${imported}\n${what} to look at.`, 'info', {
+          label: 'Details',
+          run: () => void issuesDialog({ title: 'Imported, with warnings', message: 'The workflows were imported. These may stop them from working as intended:', issues: notes }),
+        });
+      }
     },
-    [notice, open],
+    [notice, open, secrets],
   );
 
   const exportPlaywright = useCallback((id: string) => {
@@ -462,11 +489,29 @@ export function Editor() {
     downloadText(fileNameFor(workflow.name).replace('.blockflow.json', '.spec.ts'), spec, 'text/plain');
   }, []);
 
+  /** The open workflow as a script (script.ts), or null when its graph is not a tree of steps. */
+  const activeScript = useMemo(() => (active ? decompile(active, registry) : null), [active]);
+
+  const exportScript = useCallback(() => {
+    if (!active || !activeScript) return;
+    downloadText(fileNameFor(active.name).replace('.blockflow.json', '.script.json'), `${JSON.stringify(activeScript, null, 2)}\n`);
+  }, [active, activeScript]);
+
+  /** "Tidy up": lay the canvas out in columns (layout.ts). A canvas change like any other, so Undo reverts it. */
+  const tidyUp = useCallback(() => {
+    const base = latest.current?.find((workflow) => workflow.id === activeIdRef.current);
+    if (!base) return;
+    const laid = layoutWorkflow(fromFlow(base, nodesRef.current, edgesRef.current), registry);
+    const positions = new Map(laid.nodes.map((node) => [node.id, node.position]));
+    setNodes((current) => current.map((node) => ({ ...node, position: positions.get(node.id) ?? node.position })));
+    requestAnimationFrame(() => void fitView({ padding: 0.4, maxZoom: 1 }));
+  }, [fitView]);
+
   const createFromTemplate = useCallback(
     (text: string) => {
       const result = parseImport(text, latest.current ?? []);
       if (!result.ok) {
-        notice(`Could not use the template: ${result.error}`, 'error');
+        void issuesDialog({ title: 'Could not use the template', message: result.error, issues: result.issues });
         return;
       }
       setWorkflows((current) => [...(current ?? []), ...result.workflows]);
@@ -639,8 +684,6 @@ export function Editor() {
     setEdges((current) => [...current, ...flow.edges]);
   }, [screenToFlowPosition]);
 
-  const nodesRef = useRef(nodes);
-  nodesRef.current = nodes;
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -715,7 +758,6 @@ export function Editor() {
   }, [recording, open]);
 
   const selectedNode = nodes.find((node) => node.selected);
-  const [secrets] = useStorageValue<Record<string, string>>(STORAGE_KEYS.secrets, {});
   const lastStepOfSelected = selectedNode ? [...(inspectedRun?.steps ?? [])].reverse().find((step) => step.nodeId === selectedNode.id) : undefined;
 
   /** For the picker: the URL of the nearest Open Tab before the selected block (none when it is templated). */
@@ -804,6 +846,17 @@ export function Editor() {
           </button>
           <button type="button" onClick={redo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
             ↷
+          </button>
+          <button type="button" onClick={tidyUp} disabled={view !== 'canvas' || active.nodes.length === 0} title="Lay the blocks out in columns, left to right (Undo puts them back)">
+            Tidy up
+          </button>
+          <button
+            type="button"
+            onClick={exportScript}
+            disabled={!activeScript}
+            title={activeScript ? 'Download this workflow as a script (a list of steps)' : 'This workflow cannot be written as a list of steps (several start blocks, or an output feeding several blocks)'}
+          >
+            Export as script
           </button>
           {runningRun ? (
             <button type="button" className="bf-stop" onClick={stopRun} title="Stop the run that is going on">

@@ -103,8 +103,18 @@ Page blocks (Click, Fill, Fill Form, Wait For…) never touch a page themselves.
    a navigation wipes it) and calls it with `scripting.executeScript` (lesson 3).
 2. `src/dom/agent.ts` finds the element with `src/dom/locator.ts` (CSS, `text=`, `role=`, `label=`…),
    waits until it is visible, enabled, not moving and not covered, then dispatches the events a real user
-   would cause. It answers `done`, `error`, or `pending` + the reason.
+   would cause. It answers `done`, `error`, or `pending` + the reason, with an error code such as
+   `locator.strict` (`src/core/errors.ts`): like an API returning `{ error: { code, message } }` instead of
+   only a message, so a program (or a model) can react without parsing English.
 3. The driver asks again until the timeout. Short calls survive navigations and keep the worker awake.
+   It then throws a `CodedError`, and the engine copies the code onto the step record (`StepRecord.code`).
+
+The same agent also answers `{ op: 'snapshot' }` (`src/dom/snapshot.ts`): an outline of the page's
+accessibility tree with a locator per element, the text a model needs to write steps. The editor's
+**📸 Snapshot page** button asks the background for it (`bf:snapshot-page`) and copies it with
+`navigator.clipboard.writeText`. One extension detail: the clipboard only works in a focused page, so the
+background switches back to the editor tab before it answers (`snapshotForEditor` in
+`src/browser/picking.ts`).
 
 Two web-dev ideas you already know show up here. **Controlled inputs**: React ignores `input.value = x`
 from its own JavaScript world, so the agent sets the value through the prototype's setter and fires `input`.
@@ -162,12 +172,26 @@ capture-phase listener per event type on `window`, deciding what each event mean
 - Frames: `FrameBoundaryError` in `src/dom/locator.ts` and how `pageDriver.ts` continues in another frame
   is the extension version of the same-origin policy you know from `postMessage` and iframes.
 - `src/core/playwright.ts` writes code from data: a small compiler. `npm run e2e` runs its output.
+- `src/core/script.ts` is a compiler in the other direction: a list of steps (`{ "click": "text=Save" }`)
+  becomes nodes and edges, and `decompile` turns a tree-shaped graph back into steps, checking itself by
+  compiling the result again. `src/core/layout.ts` then places the blocks (layered layout, the same idea
+  as Graphviz's `dot`). Plain functions over JSON, like a reducer: no extension APIs at all.
 
 ## 13. The editor: `src/entrypoints/editor/`
 
 An ordinary React app (React Flow for the canvas). The interesting file is `flow/convert.ts`: it converts
 between the saved `Workflow` and React Flow's nodes/edges. Everything else is UI. If you know React you
 can already read this directory.
+
+Importing a file is the one place where outside data enters the extension, so it is checked like an API
+request body: think of `zod`'s `safeParse` returning issues with a `path`. `src/core/check.ts` walks the raw
+JSON and returns `Issue`s (`src/core/issues.ts`) with a stable `code`, a JSON Pointer `path` into the file
+and a "Did you mean …?" `hint` (`src/core/suggest.ts`, an edit distance). `parseImport` in `library.ts`
+refuses the file on any error, and the editor lists the issues in a dialog (`issuesDialog` in
+`components/Dialogs.tsx`). The extension-specific twist: the same rules must run in the editor, the
+importer and (later) a script compiler, all without the DOM, so they live in `src/core` and blocks
+declare their own cross-field rules in `validate(config)`. Try it: import a copy of
+`docs/guide/examples/login-test.blockflow.json` with `"locator"` misspelled and read the dialog.
 
 ## Project exercises (pick any, in rising difficulty)
 

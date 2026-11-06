@@ -1,16 +1,30 @@
 import { browser } from 'wxt/browser';
 import { MAX_LOG_ENTRIES, MAX_RUNS, STORAGE_KEYS } from '../shared/keys';
 import type { RunRecord } from '../core/runs';
+import { migrateWorkflows } from '../core/migrate';
 import { workflowStatePrefix } from '../core/timerKey';
 import type { LogEntry, Workflow } from '../core/types';
 
 // --- workflows -------------------------------------------------------------
 
-/** All saved workflows from `bf:workflows` ([] if missing or not an array). */
+/**
+ * All saved workflows from `bf:workflows` ([] if missing or not an array), migrated to the current
+ * schema version (core/migrate.ts). Storage itself is rewritten once by `migrateStoredWorkflows`.
+ */
 export async function loadWorkflows(): Promise<Workflow[]> {
   const stored = await browser.storage.local.get(STORAGE_KEYS.workflows);
   const value = stored[STORAGE_KEYS.workflows];
-  return Array.isArray(value) ? (value as Workflow[]) : [];
+  return Array.isArray(value) ? migrateWorkflows(value as Workflow[]).workflows : [];
+}
+
+/** Rewrites `bf:workflows` at the current schema version when any workflow is older. True when it did. */
+export async function migrateStoredWorkflows(): Promise<boolean> {
+  const stored = await browser.storage.local.get(STORAGE_KEYS.workflows);
+  const value = stored[STORAGE_KEYS.workflows];
+  if (!Array.isArray(value)) return false;
+  const { workflows, changed } = migrateWorkflows(value as Workflow[]);
+  if (changed) await saveWorkflows(workflows);
+  return changed;
 }
 
 /** Replaces `bf:workflows`. The worker reacts through `storage.onChanged`. */

@@ -34,7 +34,7 @@ workflow timing goes through the scheduler.
 | `cdp.ts` | Real input and background screenshots via `debugger` | `withDebugger`, `mouseClick`, `pressKey`, `typeInto`, `captureWithDebugger`, `hasDebugger` | pageDriver, host |
 | `popups.ts` | Tabs opened by pages | `recordPopup`, `waitForPopup` | background, host |
 | `prompts.ts` | Manual Step | `askUser`, `answerPrompt`, `promptRunId`, `clearStalePrompts`, `PendingPrompt` | host, background, editor |
-| `picking.ts` | Background side of the element picker | `startPicking`, `finishPicking`, `cancelPicking`, `relayPickerSync` | background |
+| `picking.ts` | Background side of the element picker and the editor's 📸 Snapshot page | `startPicking`, `finishPicking`, `cancelPicking`, `relayPickerSync`, `snapshotForEditor` | background |
 | `recording.ts` | Background side of the recorder | `startRecording`, `recordStep`, `onRecordedPopup`, `onRecordedTabUpdated`, `relayRecorderSync`, `stopRecording`, `loadRecording`, `RecordingState` | background, editor (type) |
 | `blobStore.ts` | IndexedDB: screenshots, datasets | `saveScreenshot`, `loadScreenshot`, `readDataset`, `writeDataset`, `listDatasets`, `deleteDataset`, … | host, editor |
 | `stores.ts` | `storage.local` for workflows, logs, runs | `loadWorkflows`, `saveWorkflows`, `appendLog`, `saveRun`, `updateRuns`, … | background, editor |
@@ -122,13 +122,16 @@ actInTab(tabId, request: AgentRequest, timeoutMs): Promise<Record<string, unknow
 | Outcome | Handling |
 | --- | --- |
 | `done` | return `result` |
-| `error` | throw its message (strict-mode violations, bad locators…) |
-| `pending` | remember `reason`, ask again immediately |
+| `error` | throw a `CodedError` with its message and `code` (default `step.failed`), the locator, `url` and `matches` (strict-mode violations, bad locators…) |
+| `pending` | remember `reason`, `code` and `url`, ask again immediately |
 | `frame` (`src`, `rest`, `offset?`) | `webNavigation.getAllFrames`, pick the frame whose URL equals `src` (or prefixes it), children of the current frame first, then continue with `locator: rest` in that `frameId`; `offset` is added up and added to a `locate` answer's `x`, `y` |
 | `vanished` | for actions (`click`, `fill`, `set-field`, `select`, `check`, `press`) return `{navigated: true}` (never repeat: it might submit twice); otherwise retry |
-| executeScript threw | tab gone → "The tab was closed"; restricted page (`chrome://`, web store, missing host permission) → "The browser does not let extensions work on this page"; else retry ("the page was busy loading") |
+| executeScript threw | tab gone → "The tab was closed" (`tab.closed`); restricted page (`chrome://`, web store, missing host permission) → "The browser does not let extensions work on this page" (`page.restricted`, or `permission.missing` when the message is about a permission); else retry ("the page was busy loading") |
 
-4. Past the deadline: `Timed out after Ns: <last reason>`. Between non-pending outcomes it sleeps 250 ms.
+4. Past the deadline: `CodedError` `Timed out after Ns: <last reason>`, with the last pending answer's code
+   (`locator.not-found`, `element.covered`…; `frame.unreachable` while a cross-origin frame never showed up,
+   `navigation.failed` while the page was busy loading, else `timeout`). Between non-pending outcomes it
+   sleeps 250 ms. See [Page Protocol: Error codes](Page-Protocol.md#error-codes).
 
 `actWithRealInput` (when `options.realInput` and the op is an action): asks the agent to `locate` the
 element (same auto-wait, returns `x`, `y` in the tab's viewport, frame offsets included, and `kind`), then drives it with `cdp.ts`:
@@ -208,6 +211,10 @@ UX in [Architecture: Element picker](../ARCHITECTURE.md#element-picker).
    frame), sample, fields?) and focus the editor tab again.
 4. `cancelPicking(tabId?)`: take the pending pick, stop the pickers in every frame, focus the editor tab. No
    message is sent to the editor. Also run for a `bf:pick-error` sent by a picker.
+5. `snapshotForEditor(editorTabId, url?)` (`bf:snapshot-page`, the editor's 📸 Snapshot page): the same
+   `findTargetTab(editorTabId, url, 'block')`, then `actInTab(tabId, {op: 'snapshot'}, 15000)`, focus the
+   editor tab again (it copies to the clipboard, which needs focus) and send `bf:snapshot-result` with
+   `snapshotDocument(result)` (title, URL, outline), `lines` and `truncated`, or `error`.
 
 Messages to the editor go through `runtime.sendMessage`; errors (editor closed) are swallowed.
 

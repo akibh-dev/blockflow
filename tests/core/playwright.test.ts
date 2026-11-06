@@ -277,6 +277,11 @@ describe('block mappings', () => {
     );
   });
 
+  it('Page Snapshot → ariaSnapshot of the body or of the part', () => {
+    expect(body([{ id: 'p', type: 'page-snapshot', config: {} }])).toBe(`data = { ...data, snapshot: await tabs["main"].locator('body').ariaSnapshot() };`);
+    expect(body([{ id: 'p', type: 'page-snapshot', config: { locator: 'role=navigation' } }])).toBe('data = { ...data, snapshot: await tabs["main"].getByRole("navigation").ariaSnapshot() };');
+  });
+
   it('disabled blocks are skipped', () => {
     expect(body([{ id: 'c', type: 'click', config: { locator: '#x' }, step: { disabled: true } }])).toBe('// (disabled) Click');
   });

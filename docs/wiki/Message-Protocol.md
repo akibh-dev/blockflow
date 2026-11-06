@@ -42,6 +42,8 @@ rest. Every listener calls it first.
 | `bf:recorded` | `RecordedMessage` | Recorder content script (`onStep`, any frame; locators already `frame=…`-prefixed) | Background → `recordStep(step, sender.tab.id)` | `step: RecordedStep` | none |
 | `bf:picker-sync` | `PickerSyncMessage` | Picker content script, any frame | Background → `relayPickerSync`: `tabs.sendMessage` to every frame of the sender's tab | `sync: PickerSync` (`locked` / `state` / `command`) | none |
 | `bf:recorder-sync` | `RecorderSyncMessage` | Recorder content script, any frame | Background → `relayRecorderSync`: to every frame of the sender's tab | `mode: 'record' \| 'assert-text' \| 'assert-visible'` | none |
+| `bf:snapshot-page` | `SnapshotPageMessage` | Editor (`SnapshotButton`, 📸 Snapshot page on Open Tab) | Background → `snapshotForEditor(sender.tab.id, url)` in `picking.ts`: opens or reuses the editor's picker tab like `bf:start-pick` (or the last-used web tab without a URL), runs the `snapshot` page op, focuses the editor again | `url?: string` (the block's URL, when it has no `{{…}}`) | none; later `bf:snapshot-result` |
+| `bf:snapshot-result` | `SnapshotResultMessage` | Background (`snapshotForEditor`) | Editor (`SnapshotButton` listener; acts only while it is waiting) | `text?` (`snapshotDocument(result)`: title, URL, outline), `lines?`, `truncated?`, or `error?` | n/a |
 
 Notes:
 
@@ -67,6 +69,7 @@ It is deliberately outside `ExtensionMessage`: the background and editor ignore 
 ```text
 Pick:    editor ──bf:start-pick──▶ bg ──executeScript(picker.js)──▶ page
          page ──bf:picked / bf:pick-cancelled──▶ bg ──bf:pick-result / bf:pick-error──▶ editor
+Snapshot: editor ──bf:snapshot-page──▶ bg ──agent snapshot op──▶ page; bg ──bf:snapshot-result──▶ editor (clipboard)
 Run:     editor ──bf:run-workflow──▶ bg          bg ──storage bf:runs, bf:logs──▶ editor
 Stop:    editor ──bf:stop-run──▶ bg
 Prompt:  bg ──storage bf:prompts + notification──▶ user/editor ──bf:answer-prompt / notification click──▶ bg

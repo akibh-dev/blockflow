@@ -24,6 +24,34 @@ Where messages come from: the page agent ([src/dom/agent.ts](../../src/dom/agent
 Screenshots are taken when a step fails (step setting `screenshot`, default `error`), of the run's tab,
 and only while that tab is showing in its window. Use Open Tab with `"where": "window"` for tests.
 
+## Error codes
+
+Every failed step has an error code next to its message (in the settings panel's Last run, in Reports, and
+as `code` in the JSON export, with the step's `locator`, page `url` and, for strict-mode errors, `matches`).
+The code says what kind of failure it was; the message says the details. Defined in
+[errors.ts](../../src/core/errors.ts).
+
+| Code | What to do | Section |
+| --- | --- | --- |
+| `locator.not-found` | Check the locator against a **Page Snapshot** of that page; wait for the page or element first | [Element not found](#element-not-found) |
+| `locator.strict` | Make it more specific (the `matches` say what it found) or add `>> nth=0` | [Locator matches several elements](#locator-matches-several-elements) |
+| `locator.invalid` | Fix the syntax | [Invalid locator](#invalid-locator) |
+| `element.not-visible`, `element.disabled`, `element.not-editable`, `element.covered`, `element.unstable` | Do what reveals, enables or uncovers it first | [Element found but not actionable](#element-found-but-not-actionable) |
+| `element.wrong-type` | Use the block that fits the element (Select Option for `<select>`, Check for checkboxes, Upload File for file inputs) | [Element found but not actionable](#element-found-but-not-actionable) |
+| `option.not-found` | Use one of the options the message lists | [Element found but not actionable](#element-found-but-not-actionable) |
+| `timeout` | Raise the step timeout or wait for the right thing (text, URL, response, popup) | [Timeouts](#timeouts) |
+| `assert.failed` | The page is not what the test expects: fix the expectation or the steps before it | [Where to see what happened](#where-to-see-what-happened) |
+| `http.status`, `http.network` | Check URL, method, headers, body, and the host permission | [Other messages](#other-messages) |
+| `navigation.failed` | Check the URL; raise the timeout for slow pages | [Timeouts](#timeouts) |
+| `tab.missing`, `tab.closed` | Open the tab (Open Tab with that name) before the step; do not close it mid-run | [No tab named "main"](#no-tab-named-main-in-this-run) |
+| `frame.unreachable` | Check the `frame=` part; the frame may not have loaded | [Iframes](#iframes) |
+| `page.restricted` | Use a normal web page (not chrome://, the web store, about:) | [Permissions](#permissions) |
+| `permission.missing` | Grant the permission on the block or in the extension settings | [Permissions](#permissions) |
+| `script.error` | Fix the Run Script code | [Other messages](#other-messages) |
+| `config.invalid` | Fix the setting the message names | [Importing a file fails](#importing-a-file-fails) |
+| `workflow.failed` | Open the called run and fix its failing step | [Other messages](#other-messages) |
+| `step.failed` | Anything else: read the message | |
+
 ## Element not found
 
 > `Timed out after 30s: waiting for <locator>: no element matches`
@@ -209,15 +237,23 @@ them either.
 
 ## Importing a file fails
 
-See [Workflows as Scripts: how errors show up](Workflows-as-Scripts.md#how-errors-show-up) for every
-import and validation message. The common ones:
+A file with any error is refused as a whole, and a **Cannot import <file>** dialog lists every problem:
+level, code, the JSON path in your file, the message and a hint (often "Did you mean …?"). **Copy** copies
+the list as text, e.g. to paste back to the AI tool that wrote the file. A file with only warnings imports;
+the toast's **Details** shows them. Every code is explained in the guide's
+[Repair table](../guide/README.md#repair-what-import-errors-mean); more in
+[Workflows as Scripts: how errors show up](Workflows-as-Scripts.md#how-errors-show-up). The common ones:
 
-- `Import failed: This file is not valid JSON.`: a trailing comma or a comment. JSON allows neither.
-- `Unknown block type "x"`: the type is not in the [block reference](../guide/blocks.md) (`openUrl` should be
-  `open-url`, `navigate-to` does not exist…).
-- `<Setting> is required`: a required config key is missing or empty.
-- `A connection in "…" points at "x", which is not a block id.` / `Two blocks in "…" have the id "x".`: fix the
-  edge's `source`/`target`, or give each node its own `id`.
+- `json.invalid`: a trailing comma or a comment. JSON allows neither. The message gives the position.
+- `node.type.unknown`: the type is not in the [block reference](../guide/blocks.md) (`openUrl` should be
+  `open-url`, `navigate-to` does not exist…). The hint suggests the closest type.
+- `config.key.unknown`: a typo (`locater`) or a key from another block. The hint names the right key or
+  lists the valid ones.
+- `config.required`: a required config key is missing or empty (or one another setting needs, like
+  `locator` for an Assert on an element).
+- `edge.endpoint.missing` / `node.id.duplicate`: fix the edge's `source`/`target`, or give each node its own
+  `id`.
+- `page.no-tab` (warning): a page block with no Open Tab before it on some path. Add one, or fix `tab`.
 
 ## Other messages
 

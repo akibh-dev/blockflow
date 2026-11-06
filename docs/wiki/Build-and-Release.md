@@ -110,7 +110,7 @@ Load an unpacked build:
 
 The single version is `version` in [package.json](../../package.json) (currently `0.1.0`); WXT copies it into
 the manifest and the zip names. Every store upload needs a higher version. There is no changelog file or
-release automation yet; workflow files carry their own `schemaVersion` (1), independent of the app version.
+release automation yet; workflow files carry their own `schemaVersion` (2 since v0.3; see `src/core/migrate.ts`), independent of the app version.
 
 ## Release steps
 

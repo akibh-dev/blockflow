@@ -7,6 +7,7 @@ import { extractTableBlock } from './extractTable';
 import { filterBlock } from './filter';
 import { forEachBlock } from './forEach';
 import { pageInfoBlock } from './pageInfo';
+import { pageSnapshotBlock } from './pageSnapshot';
 import { paginateBlock } from './paginate';
 import { repeatBlock } from './repeat';
 import { saveDatasetBlock } from './saveDataset';
@@ -60,6 +61,7 @@ export {
   filterBlock,
   forEachBlock,
   pageInfoBlock,
+  pageSnapshotBlock,
   paginateBlock,
   repeatBlock,
   saveDatasetBlock,
@@ -97,7 +99,7 @@ export const BLOCK_GROUPS: { category: BlockCategory; blocks: AnyBlockDefinition
   { category: 'start', blocks: [manualStartBlock, timerBlock, scheduleBlock, pageVisitedBlock, contextMenuBlock, watchElementBlock] },
   { category: 'browser', blocks: [openUrlBlock, navigateBlock, waitForPopupBlock, closeTabBlock] },
   { category: 'page', blocks: [clickBlock, fillBlock, fillFormBlock, selectOptionBlock, checkBlock, pressKeyBlock, uploadFileBlock, scrollBlock, dialogsBlock, waitForBlock, runScriptBlock] },
-  { category: 'read', blocks: [readElementBlock, extractListBlock, extractTableBlock, paginateBlock, pageInfoBlock] },
+  { category: 'read', blocks: [readElementBlock, extractListBlock, extractTableBlock, paginateBlock, pageInfoBlock, pageSnapshotBlock] },
   { category: 'test', blocks: [assertBlock, manualStepBlock, stopBlock] },
   { category: 'logic', blocks: [ifBlock, forEachBlock, repeatBlock, runWorkflowBlock] },
   { category: 'data', blocks: [setVariableBlock, transformBlock, filterBlock, dataTableBlock, saveDatasetBlock, downloadBlock] },

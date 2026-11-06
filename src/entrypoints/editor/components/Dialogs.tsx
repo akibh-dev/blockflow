@@ -5,17 +5,26 @@
  *
  * They are plain functions over a module-level store, so they work from anywhere (callbacks, helpers
  * like `requestPermission`) without a context: `toast('Saved')`, `await confirmDialog({...})`,
- * `await promptDialog({...})`. `<DialogHost />` (rendered once in App.tsx) shows them.
+ * `await promptDialog({...})`, `await issuesDialog({...})` (a list of problems with a file, e.g. an
+ * import that was refused). `<DialogHost />` (rendered once in App.tsx) shows them.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { FormEvent } from 'react';
+import type { Issue } from '../../../core/issues';
 
 export type ToastKind = 'info' | 'success' | 'error';
+
+/** A button on a toast, e.g. "Details" opening the import warnings. */
+export interface ToastAction {
+  label: string;
+  run(): void;
+}
 
 interface Toast {
   id: number;
   message: string;
   kind: ToastKind;
+  action?: ToastAction;
 }
 
 export interface ConfirmOptions {
@@ -37,9 +46,17 @@ export interface PromptOptions {
   validate?(value: string): string | null;
 }
 
+export interface IssuesOptions {
+  title?: string;
+  message: string;
+  /** Shown in order, each with level, code, JSON path, message and hint (check.ts). */
+  issues: Issue[];
+}
+
 type Dialog =
   | ({ id: number; kind: 'confirm'; resolve(value: boolean): void } & ConfirmOptions)
-  | ({ id: number; kind: 'prompt'; resolve(value: string | null): void } & PromptOptions);
+  | ({ id: number; kind: 'prompt'; resolve(value: string | null): void } & PromptOptions)
+  | ({ id: number; kind: 'issues'; resolve(value: boolean): void } & IssuesOptions);
 
 interface Snapshot {
   toasts: Toast[];
@@ -63,11 +80,11 @@ function subscribe(listener: () => void): () => void {
 /** How long a toast stays; errors stay longer. Hovering does not matter: each has a close button. */
 const TOAST_MS: Record<ToastKind, number> = { info: 5_000, success: 4_000, error: 9_000 };
 
-/** Shows a short message in the bottom right corner. Newlines are kept. */
-export function toast(message: string, kind: ToastKind = 'info'): void {
+/** Shows a short message in the bottom right corner. Newlines are kept. `action` adds a button. */
+export function toast(message: string, kind: ToastKind = 'info', action?: ToastAction): void {
   const id = nextId++;
-  update((current) => ({ ...current, toasts: [...current.toasts.slice(-4), { id, message, kind }] }));
-  setTimeout(() => dismissToast(id), TOAST_MS[kind]);
+  update((current) => ({ ...current, toasts: [...current.toasts.slice(-4), { id, message, kind, ...(action ? { action } : {}) }] }));
+  setTimeout(() => dismissToast(id), TOAST_MS[kind] * (action ? 2 : 1));
 }
 
 function dismissToast(id: number): void {
@@ -88,10 +105,41 @@ export function promptDialog(options: PromptOptions): Promise<string | null> {
   });
 }
 
+/** Lists problems (errors, warnings, notes) in a modal with a Close button. Resolves when closed. */
+export function issuesDialog(options: IssuesOptions): Promise<void> {
+  return new Promise((resolve) => {
+    update((current) => ({ ...current, dialogs: [...current.dialogs, { ...options, id: nextId++, kind: 'issues', resolve: () => resolve() }] }));
+  });
+}
+
+/** Issues as plain text, one per line: what "Copy" puts on the clipboard (to paste into an AI chat). */
+export function issuesText(issues: Issue[]): string {
+  return issues.map((issue) => `${issue.level} ${issue.code} at ${issue.path || '/'}: ${issue.message}${issue.hint ? ` ${issue.hint}` : ''}`).join('\n');
+}
+
 function closeDialog(dialog: Dialog, value: boolean | string | null): void {
   update((current) => ({ ...current, dialogs: current.dialogs.filter((item) => item.id !== dialog.id) }));
-  if (dialog.kind === 'confirm') dialog.resolve(value === true);
-  else dialog.resolve(typeof value === 'string' ? value : null);
+  if (dialog.kind === 'prompt') dialog.resolve(typeof value === 'string' ? value : null);
+  else dialog.resolve(value === true);
+}
+
+/** The problem list of an issues dialog. */
+function IssueList({ issues }: { issues: Issue[] }) {
+  return (
+    <ul className="bf-issues" aria-label="Problems">
+      {issues.map((issue, index) => (
+        <li key={index} className={`bf-issue ${issue.level}`}>
+          <div className="bf-issue-head">
+            <span className="bf-issue-level">{issue.level}</span>
+            <code className="bf-issue-code">{issue.code}</code>
+            <code className="bf-issue-path">{issue.path || '/'}</code>
+          </div>
+          <div className="bf-issue-message">{issue.message}</div>
+          {issue.hint && <div className="bf-issue-hint">{issue.hint}</div>}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 /** One open dialog (the oldest first; the rest wait their turn). */
@@ -100,6 +148,8 @@ function DialogBox({ dialog }: { dialog: Dialog }) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
+
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (dialog.kind === 'prompt') {
@@ -120,7 +170,7 @@ function DialogBox({ dialog }: { dialog: Dialog }) {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (dialog.kind === 'confirm') {
+    if (dialog.kind !== 'prompt') {
       closeDialog(dialog, true);
       return;
     }
@@ -137,9 +187,10 @@ function DialogBox({ dialog }: { dialog: Dialog }) {
   const titleId = `bf-dialog-title-${dialog.id}`;
   return (
     <div className="bf-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && closeDialog(dialog, dialog.kind === 'confirm' ? false : null)}>
-      <form className="bf-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} onSubmit={submit}>
+      <form className={`bf-modal${dialog.kind === 'issues' ? ' bf-modal-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} onSubmit={submit}>
         <h3 id={titleId}>{dialog.title ?? (dialog.kind === 'confirm' ? 'Are you sure?' : 'BlockFlow')}</h3>
         <p className="bf-modal-message">{dialog.message}</p>
+        {dialog.kind === 'issues' && <IssueList issues={dialog.issues} />}
         {dialog.kind === 'prompt' && (
           <>
             <input
@@ -157,11 +208,21 @@ function DialogBox({ dialog }: { dialog: Dialog }) {
           </>
         )}
         <div className="bf-modal-actions">
-          <button type="button" onClick={() => closeDialog(dialog, dialog.kind === 'confirm' ? false : null)}>
-            Cancel
-          </button>
+          {dialog.kind === 'issues' ? (
+            <button
+              type="button"
+              title="Copy the list as text, e.g. to paste into the AI chat that wrote the file"
+              onClick={() => void navigator.clipboard?.writeText(issuesText(dialog.issues)).then(() => setCopied(true), () => setCopied(false))}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          ) : (
+            <button type="button" onClick={() => closeDialog(dialog, dialog.kind === 'confirm' ? false : null)}>
+              Cancel
+            </button>
+          )}
           <button ref={confirmRef} type="submit" className={dialog.kind === 'confirm' && dialog.danger ? 'bf-danger-solid' : 'bf-run'}>
-            {dialog.confirmLabel ?? 'OK'}
+            {dialog.kind === 'issues' ? 'Close' : (dialog.confirmLabel ?? 'OK')}
           </button>
         </div>
       </form>
@@ -180,6 +241,18 @@ export function DialogHost() {
         {toasts.map((item) => (
           <div key={item.id} className={`bf-toast ${item.kind}`}>
             <span>{item.message}</span>
+            {item.action && (
+              <button
+                type="button"
+                className="bf-toast-action"
+                onClick={() => {
+                  dismissToast(item.id);
+                  item.action?.run();
+                }}
+              >
+                {item.action.label}
+              </button>
+            )}
             <button type="button" className="bf-toast-close" aria-label="Dismiss" onClick={() => dismissToast(item.id)}>
               ×
             </button>

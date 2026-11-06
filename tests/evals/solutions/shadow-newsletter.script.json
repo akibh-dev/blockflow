@@ -1,0 +1,8 @@
+{ "format": "blockflow-script", "version": 1, "name": "Eval: shadow-newsletter",
+  "steps": [
+    { "open": "{{BASE}}/shadow.html" },
+    { "fill": { "locator": "label=Your email", "value": "ada@example.com" } },
+    { "click": "role=button[name=\"Join\"]" },
+    { "assert": { "locator": "sign-up >>> #status", "operator": "equals", "expected": "Joined as ada@example.com" } },
+    { "close-tab": {} }
+  ] }

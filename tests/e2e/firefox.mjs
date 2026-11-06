@@ -148,7 +148,7 @@ function workflow(name, nodes, edges) {
   counter += 1;
   const lines = edges ?? nodes.slice(1).map((node, index) => [nodes[index].id, node.id]);
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: `ff-${counter}`,
     name,
     enabled: false,
@@ -193,7 +193,7 @@ try {
       },
       { id: 'wait', type: 'wait-for', config: { mode: 'url', url: '/welcome' } },
       { id: 'assert', type: 'assert', config: { subject: 'text', locator: '#greeting', operator: 'equals', expected: 'Welcome, akib!' } },
-      { id: 'meta', type: 'read-element', config: { selector: 'text=Country', url: '' } },
+      { id: 'meta', type: 'read-element', config: { locator: 'text=Country', url: '' } },
       { id: 'close', type: 'close-tab' },
     ]));
     check('login form: fill form, submit, wait for URL, assert', record.status === 'passed', summary(record));
@@ -211,8 +211,8 @@ try {
 
   {
     const record = await run(workflow('read url', [
-      { id: 'read', type: 'read-element', config: { url: `${base}/table.html`, selector: '#prices th' } },
-      { id: 'again', type: 'read-element', config: { url: `${base}/table.html`, selector: '#prices th' } },
+      { id: 'read', type: 'read-element', config: { url: `${base}/table.html`, locator: '#prices th' } },
+      { id: 'again', type: 'read-element', config: { url: `${base}/table.html`, locator: '#prices th' } },
     ]));
     check('Read Element with a URL (watch tab in storage.session), twice', record.status === 'passed' && step(record, 'again')?.output?.value === 'Product', summary(record));
   }
@@ -221,7 +221,7 @@ try {
     const upload = await run(workflow('upload', [
       { id: 'open', type: 'open-url', config: { url: `${base}/upload.html`, active: false } },
       { id: 'up', type: 'upload-file', config: { locator: 'label=Upload CV', content: 'name,city\nAkib,Dhaka', filename: 'cv.csv', mime: 'text/csv' } },
-      { id: 'read', type: 'read-element', config: { selector: '#out', url: '' } },
+      { id: 'read', type: 'read-element', config: { locator: '#out', url: '' } },
       { id: 'close', type: 'close-tab' },
     ]));
     check('Upload File', step(upload, 'read')?.output?.value === 'cv.csv|text/csv|name,city Akib,Dhaka', summary(upload));
@@ -241,7 +241,7 @@ try {
       { id: 'open', type: 'open-url', config: { url: `${base}/popup.html`, active: false } },
       { id: 'click', type: 'click', config: { locator: 'role=button[name="Open help"]' } },
       { id: 'catch', type: 'wait-for-popup', config: { name: 'help' } },
-      { id: 'read', type: 'read-element', config: { selector: 'h1', url: '', tab: 'help' } },
+      { id: 'read', type: 'read-element', config: { locator: 'h1', url: '', tab: 'help' } },
       { id: 'close1', type: 'close-tab', config: { tab: 'help' } },
       { id: 'close2', type: 'close-tab' },
     ]));

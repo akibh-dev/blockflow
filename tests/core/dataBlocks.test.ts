@@ -135,7 +135,7 @@ describe('Paginate', () => {
       flow(
         [
           { id: 'open', type: 'open-url', config: { url: 'https://shop.test' } },
-          { id: 'p', type: 'paginate', config: { next: 'text=Next', maxPages: 10 } },
+          { id: 'p', type: 'paginate', config: { locator: 'text=Next', maxPages: 10 } },
           { id: 'l', type: 'log', config: { message: 'page {{page}}' } },
           { id: 'end', type: 'log', config: { message: '{{pages}} pages' } },
         ],

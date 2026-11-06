@@ -50,9 +50,11 @@ describe('click', () => {
     expect(await run({ op: 'click', locator: '#nope', action: 'click' })).toEqual({
       status: 'pending',
       reason: 'waiting for #nope: no element matches',
+      code: 'locator.not-found',
+      url: document.URL,
     });
-    expect(await run({ op: 'click', locator: '#b', action: 'click' })).toMatchObject({ reason: expect.stringContaining('to be enabled') });
-    expect(await run({ op: 'click', locator: '#h', action: 'click' })).toMatchObject({ reason: expect.stringContaining('to be visible') });
+    expect(await run({ op: 'click', locator: '#b', action: 'click' })).toMatchObject({ reason: expect.stringContaining('to be enabled'), code: 'element.disabled' });
+    expect(await run({ op: 'click', locator: '#h', action: 'click' })).toMatchObject({ reason: expect.stringContaining('to be visible'), code: 'element.not-visible' });
   });
 
   it('keeps retrying inside the page until the element shows up', async () => {
@@ -340,6 +342,7 @@ describe('upload and locate', () => {
     expect(await run({ op: 'upload', locator: 'label=Upload CV', files: [{ name: 'cv.txt', type: 'text/plain', base64: btoa('hello') }] })).toEqual({
       status: 'error',
       message: 'This page cannot receive files (no DataTransfer)',
+      url: document.URL,
     });
     expect(await run({ op: 'upload', locator: '#b', files: [] })).toMatchObject({ status: 'error', message: expect.stringContaining('is not a file input') });
     // Fill Form on a file input points at the Upload File block.

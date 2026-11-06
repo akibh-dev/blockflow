@@ -1,5 +1,5 @@
 import { DEFAULT_TAB } from '../session';
-import { inSource, sourceFields, tableToObjects } from './extractList';
+import { inSource, sourceFields, tableToObjects, validateSource } from './extractList';
 import type { SourceConfig } from './extractList';
 import { PAGE_ACCENT, locatorField, tabField } from './pageCommon';
 import type { BlockDefinition } from '../types';
@@ -21,6 +21,7 @@ export const extractTableBlock: BlockDefinition<ExtractTableConfig> = {
   timeoutSeconds: 30,
   fields: [locatorField('locator', 'Table'), { key: 'into', label: 'Save the rows as', kind: 'text', placeholder: 'rows' }, ...sourceFields, tabField],
   summary: (config) => `${config.locator} → {{${config.into || 'rows'}}}`,
+  validate: validateSource,
   outputs: [
     { key: 'rows', description: 'One object per row (or the name you chose).' },
     { key: 'count', description: 'How many rows.' },

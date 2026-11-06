@@ -22,9 +22,9 @@ export default async function (h) {
         },
       },
       { id: 'wait', type: 'wait-for', config: { mode: 'url', url: '/welcome' } },
-      { id: 'read', type: 'read-element', config: { selector: '#greeting', url: '' } },
+      { id: 'read', type: 'read-element', config: { locator: '#greeting', url: '' } },
       { id: 'if', type: 'if', config: { left: '{{value}}', operator: 'equals', right: 'Welcome, akib!' } },
-      { id: 'meta', type: 'read-element', config: { selector: 'text=Country', url: '' } },
+      { id: 'meta', type: 'read-element', config: { locator: 'text=Country', url: '' } },
       { id: 'close', type: 'close-tab' },
     ], [['open', 'form'], ['form', 'wait'], ['wait', 'read'], ['read', 'if'], ['if', 'meta', 'true'], ['meta', 'close']]);
     const record = await run(wf);
@@ -62,14 +62,14 @@ export default async function (h) {
       { id: 'email', type: 'fill', config: { locator: 'placeholder=you@example.com', value: 'akib@test.dev', mode: 'type' } },
       { id: 'plan', type: 'select-option', config: { locator: 'label=Plan', value: 'Pro' } },
       { id: 'terms', type: 'check', config: { locator: 'label="I accept the terms"' } },
-      { id: 'state', type: 'read-element', config: { selector: 'testid=state', url: '' } },
+      { id: 'state', type: 'read-element', config: { locator: 'testid=state', url: '' } },
       { id: 'create', type: 'click', config: { locator: 'role=button[name="Create account"]' } },
       { id: 'thanks', type: 'wait-for', config: { mode: 'text', text: 'Thanks, Akib Hasan!' } },
       { id: 'route', type: 'wait-for', config: { mode: 'url', url: '**/spa/done' } },
-      { id: 'order', type: 'read-element', config: { selector: '#order', url: '' } },
+      { id: 'order', type: 'read-element', config: { locator: '#order', url: '' } },
       { id: 'valid', type: 'if', config: { left: '{{value}}', operator: 'matches', right: '/^#\\d+$/' } },
       { id: 'shadow', type: 'click', config: { locator: 'fancy-counter >>> button' } },
-      { id: 'count', type: 'read-element', config: { selector: 'fancy-counter >>> .count', url: '' } },
+      { id: 'count', type: 'read-element', config: { locator: 'fancy-counter >>> .count', url: '' } },
       { id: 'close', type: 'close-tab' },
     ]);
     wf.edges = wf.edges.map((edge) => (edge.source === 'valid' ? { ...edge, sourcePort: 'true' } : edge));

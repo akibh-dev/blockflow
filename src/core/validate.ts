@@ -4,7 +4,10 @@ import { edgePort, nodePorts } from './ports';
 import type { BlockRegistry } from './registry';
 import type { Workflow } from './types';
 
-/** A problem found by `validateWorkflow`, pinned to a block or connection when possible. */
+/**
+ * A problem found by `validateWorkflow`, pinned to a block or connection when possible. (The editor's
+ * shape; import checking reports `Issue` from issues.ts, with JSON paths and codes.)
+ */
 export interface Issue {
   level: 'error' | 'warning';
   nodeId?: string;
@@ -33,8 +36,13 @@ export function validateWorkflow(workflow: Workflow, registry: BlockRegistry): I
       issues.push({ level: 'error', nodeId: node.id, message: `Unknown block type "${node.type}"` });
       continue;
     }
-    for (const message of validateConfig(def, withDefaults(def, node.config), 'design')) {
+    const config = withDefaults(def, node.config);
+    for (const message of validateConfig(def, config, 'design')) {
       issues.push({ level: 'error', nodeId: node.id, message });
+    }
+    // Rules over several settings, shared with import checking (check.ts).
+    for (const problem of def.validate?.(config) ?? []) {
+      issues.push({ level: 'error', nodeId: node.id, message: problem.message });
     }
   }
 

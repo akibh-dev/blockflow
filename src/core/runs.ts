@@ -1,3 +1,4 @@
+import type { ErrorCode } from './errors';
 import type { Payload } from './types';
 
 /**
@@ -34,6 +35,16 @@ export interface StepRecord {
   /** The output the result was sent from. */
   port?: string;
   error?: string;
+  /** Set with `error`: what kind of failure it was (src/core/errors.ts). */
+  code?: ErrorCode;
+  /** The locator the failing step used. */
+  locator?: string;
+  /** URL of the page when the step failed (page steps). */
+  url?: string;
+  /** For `locator.strict`: up to 5 descriptions of the elements that matched. */
+  matches?: string[];
+  /** The node's id in the file it was imported from (`NodeDef.origin`), so a report maps back to the script. */
+  sourceId?: string;
   /** Id of a screenshot taken for this step (see Host.screenshots). */
   screenshot?: string;
   /** For Run Workflow steps: the run of the called workflow. */

@@ -1029,6 +1029,74 @@ textarea {
   margin-top: 14px;
 }
 
+/* Issues dialog (import problems): level, code, JSON path, message, hint per row */
+
+.bf-modal-wide {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.bf-issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: min(60vh, 520px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.bf-issue {
+  padding: 8px 10px;
+  border-left: 4px solid var(--primary);
+}
+
+.bf-issue + .bf-issue {
+  border-top: 1px solid var(--border);
+}
+
+.bf-issue.error {
+  border-left-color: var(--danger);
+}
+
+.bf-issue.warning {
+  border-left-color: #d97706;
+}
+
+.bf-issue-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+
+.bf-issue-level {
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.bf-issue.error .bf-issue-level {
+  color: var(--danger);
+}
+
+.bf-issue-path {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.bf-issue-hint {
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.bf-toast-action {
+  padding: 2px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .bf-danger-solid {
   background: var(--danger);
   border-color: var(--danger);
@@ -1090,4 +1158,20 @@ textarea {
 
 .bf-tryit-status.up {
   color: var(--ok);
+}
+
+/* Error code of a failed step (ConfigPanel's StepResult, ReportsPage): small, the message says it in words. */
+.bf-error-code {
+  font-size: 11px;
+  margin: 2px 0 4px;
+}
+.bf-error-code code {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+.bf-error-code ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
 }

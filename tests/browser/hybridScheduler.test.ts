@@ -456,7 +456,7 @@ describe('with the workflow engine', () => {
           {
             id: 'w',
             type: 'watch-element',
-            config: { url: 'https://shop.example.com/item', selector: '.price', intervalSeconds: 10 },
+            config: { url: 'https://shop.example.com/item', locator: '.price', intervalSeconds: 10 },
           },
           { id: 'o', type: 'open-url', config: { url: '{{url}}#changed' } },
         ],
@@ -481,7 +481,7 @@ describe('with the workflow engine', () => {
           {
             id: 'w',
             type: 'watch-element',
-            config: { url: 'https://shop.example.com/item', selector: '.price', intervalSeconds: 10 },
+            config: { url: 'https://shop.example.com/item', locator: '.price', intervalSeconds: 10 },
           },
           { id: 'd', type: 'timer', config: { seconds: 8 } },
           { id: 'o', type: 'open-url', config: { url: '{{url}}#after' } },

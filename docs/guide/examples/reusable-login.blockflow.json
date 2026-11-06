@@ -3,7 +3,7 @@
   "version": 1,
   "workflows": [
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "reusable-login",
       "name": "Log in (reusable)",
       "enabled": false,
@@ -51,7 +51,7 @@
       ]
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "checkout-test",
       "name": "Checkout test",
       "enabled": false,

@@ -11,8 +11,11 @@ how to use BlockFlow** without reading the source code. Read it top to bottom on
 | --- | --- |
 | [`blocks.md`](blocks.md) | Every block: type id, settings (`config` keys), defaults, outputs. **Generated from the code.** |
 | [`blocks.json`](blocks.json) | The same, machine-readable. |
-| [`workflow.schema.json`](workflow.schema.json) | JSON Schema of an import file, with every block's config. |
-| [`examples/`](examples) | Importable workflow files. A test checks they import without errors. |
+| [`script.schema.json`](script.schema.json) | JSON Schema of a script file (the format to write): every block, alias, shorthand and branch key. |
+| [`workflow.schema.json`](workflow.schema.json) | JSON Schema of a graph file (what the editor exports), with every block's config (unknown keys not allowed). |
+| [`report.schema.json`](report.schema.json) | JSON Schema of the JSON report (Reports → Export JSON): runs, steps, [error codes](#error-codes). **Generated.** |
+| [`examples/`](examples) | Importable workflows, each as a script (`*.script.json`) and a graph (`*.blockflow.json`). A test checks both import without errors or warnings, to the same graph. |
+| [Repair](#repair-what-import-errors-mean) | What each import error code means and how to fix it. |
 
 If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and `docs/ARCHITECTURE.md`.
 
@@ -20,18 +23,21 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
 
 ## Rules for AI tools generating workflows (read first)
 
-1. Output a JSON file in the **export format** (section 2). Users import it with **Import** in the
-   sidebar or the All workflows page. Imported workflows always arrive **off**, with new ids.
-2. Block `type` values and `config` keys must come from [`blocks.md`](blocks.md). Unknown keys are
-   ignored; unknown types are an error. Missing keys take the block's default.
+1. Output a JSON file in the **script format** (next section). Users import it with **Import** in the
+   sidebar or the All workflows page. Imported workflows always arrive **off**, with new ids. (The graph
+   format of section 2 also imports; write it only when a script cannot express the workflow.)
+2. Block `type` values and `config` keys must come from [`blocks.md`](blocks.md). Unknown types,
+   unknown config or step keys, wrong value types and options that do not exist are **errors**: the
+   whole file is refused, with a list of problems (code, JSON path, did-you-mean). Missing keys take the
+   block's default. When you get that list back, fix each path it names (see [Repair](#repair-what-import-errors-mean)).
 3. Every page block (Click, Fill, Fill Form, Select Option, Check, Press Key, Upload File, Scroll,
    Dialogs, Wait For, Run Script, Assert on the page, Read Element without a URL, Extract List / Extract
    Table / Page Info / Paginate from a tab, Navigate, Wait for Popup, Close Tab) needs an **Open Tab**
    (`type: "open-url"`) **earlier on the same path**, with the same `tab` name (default `"main"`).
    (Page Visited and Context Menu start blocks also provide `main`.)
-4. Connect blocks with `edges`. A block with no incoming edge is a **start block**. Use
-   `sourcePort` only for blocks with several outputs: `"true"`/`"false"` on If, `"error"` when the
-   source has `step.onError: "port"`.
+4. Steps run in list order. Branches are lists under `true`/`false` (If), `each` (For Each, Repeat,
+   Paginate) and `onError` (any block). The step after an If runs after either branch; the step after a
+   loop runs once, when it is done. The first step is the **start block**.
 5. Prefer readable locators: `role=button[name="Sign in"]`, `label=Email`, `text=Welcome`,
    `testid=…`; fall back to CSS. A locator that matches two elements makes actions fail (strict).
 6. Put passwords and tokens in **secrets** (`{{secret.name}}`), never in the workflow. Tell the user
@@ -42,6 +48,56 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
 8. For tests, check results with **Assert**; for monitoring, with **If** + **Notify**.
 9. Values in templates are **strings**. Compare numbers with the numeric operators (`greater`,
    `less`…), which parse `1,250` and `$9.99`.
+10. Ask for a **page snapshot** before writing locators, and copy locators from it as they are
+    ([below](#getting-locators-from-a-page-snapshot)). When a run fails, read the step's **error code**
+    ([table](#error-codes)) and fix what it names.
+
+---
+
+## Script format (write this)
+
+A workflow as a list of steps. Import compiles it into blocks and connections and lays them out.
+
+```json
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Login test",
+  "steps": [
+    { "open": "https://example.com/login" },
+    { "fill-form": {
+        "fields": [
+          { "locator": "label=Email", "value": "me@example.com" },
+          { "locator": "label=Password", "value": "{{secret.loginPassword}}" }
+        ],
+        "submit": "role=button[name=\"Sign in\"]" } },
+    { "id": "landed", "wait-for": { "mode": "url", "url": "/dashboard" }, "step": { "timeoutSeconds": 15 },
+      "onError": [ { "notify": { "title": "Login test failed", "message": "{{error}}" } } ] },
+    { "id": "greets", "assert": { "locator": "role=heading[level=1]", "expected": "Welcome" } }
+  ]
+}
+```
+
+- **A step** is `{ "<block>": settings }`: exactly one block key, a `type` from [`blocks.md`](blocks.md)
+  or an alias, whose value is the block's `config` (missing keys take the default). Optional: `id` (unique;
+  default `s<N>` for the Nth step from the top of the file), `step` (step settings, section 7) and branch
+  lists.
+- **Order and branches**: a step connects to the next one from `out` (loops: from `done`). Lists under
+  `each` (For Each, Repeat, Paginate: the loop body) and `onError` (any block: runs when it fails, and sets
+  `step.onError: "port"`) end where they end. **If rejoins**: the step after an If runs after the last
+  step of `true` or of `false`; a missing branch goes straight to it.
+- **Aliases**: `open` = `open-url`, `goto` = `navigate`, `press` = `press-key`, `select` = `select-option`.
+- **A bare value** instead of settings: `open-url`/`navigate` → `url`; `click`/`check`/`wait-for` →
+  `locator`; `press-key` → `key`; `log`/`notify` → `message`; `run-script` → `code`; `run-workflow` →
+  `workflow`; `for-each` → `list`; `repeat` → `times`. E.g. `{ "click": "text=Save" }`, `{ "repeat": 3,
+  "each": [ … ] }`.
+- **Several scripts**: `{ "format": "blockflow-script", "version": 1, "scripts": [ { "id": "login",
+  "name": "Log in", "steps": [ … ] }, … ] }`; Run Workflow names another script of the file by `id` or `name`.
+- Mistakes are refused at import with a code and the JSON Pointer of the step, e.g. `error
+  node.type.unknown at /steps/1/clik: Unknown block "clik". Did you mean "click"?` or `error
+  config.key.unknown at /steps/2/click/locater`. All codes: [Repair](#repair-what-import-errors-mean).
+
+The editor's **Export as script** turns a workflow back into this format when it is a tree of steps.
 
 ---
 
@@ -66,13 +122,15 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
 
 ## 2. Workflow file format
 
+The graph format: what the editor saves and exports. Scripts (above) compile to it.
+
 ```json
 {
   "format": "blockflow-workflows",
   "version": 1,
   "workflows": [
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "any-unique-string",
       "name": "Login test",
       "enabled": false,
@@ -101,13 +159,19 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
 
 - `id`s: any unique strings within the file (node ids unique within a workflow). Import replaces
   them; Run Workflow references between workflows in the same file are kept working. A file whose
-  edges name a missing node id, or that repeats a node id, is refused with a message naming the id.
+  edges name a missing node id, or that repeats a node id, is refused (`edge.endpoint.missing`,
+  `node.id.duplicate`).
 - `position`: canvas coordinates; about 260 px apart left to right reads well. Branches: ±140 px in y.
+  Leave `position` out of every node and import lays the workflow out.
 - `step` (optional, per node): see section 7.
 - A single workflow object (without the `format` wrapper) also imports.
-- Validation the editor applies: required settings present, URLs valid (templates allowed), every
-  edge points at existing nodes, no block connected to itself, at least one start block, no block
-  that cannot take input placed after another block. Unreachable blocks and loops are warnings.
+- Import checks the whole file first and refuses it on any **error**; **warnings** import with a
+  notice. Errors: unknown types and keys, wrong types, invalid options, missing required settings
+  (including ones another setting needs, e.g. `locator` for an Assert on an element), invalid URLs and
+  locators, broken `{{ }}`, connections to missing blocks or from outputs a block does not have, a block
+  connected to itself, no start block, Run Workflow calling a workflow not in the file. Warnings:
+  unreachable blocks, loops, a page block without an Open Tab on every path to it, unknown secrets.
+  Every code is in [Repair](#repair-what-import-errors-mean).
 
 ## 3. Data and templates
 
@@ -178,6 +242,39 @@ Common roles: `button`, `link`, `textbox`, `checkbox`, `radio`, `combobox` (a `<
 with a message listing the matches. Add `>> nth=0` or make it more specific. Reads (Read Element,
 Assert text) use the first match.
 
+### Getting locators from a page snapshot
+
+A page snapshot is an outline of what is on a page, with a ready-made locator for each element that a
+step could use. Two ways to get one:
+
+- In the editor: select an **Open Tab** block and press **📸 Snapshot page**. BlockFlow opens its URL,
+  takes the snapshot and copies it to the clipboard. Paste it into the chat with the AI tool.
+- In a workflow: the **Page Snapshot** block (`type: "page-snapshot"`) outputs `snapshot` (the text) and
+  `elements` (a list of `{ref, role, name, tag, locator, value?, checked?, disabled?, level?, url?}`),
+  for the whole page or one part (`locator`). Useful to record what a page looked like during a run.
+
+```text
+# Page snapshot: Log in
+URL: https://example.com/login
+- main
+  - heading "Log in" [level=1] [ref=e1] locator=role=heading[name="Log in"]
+  - form "Login" [ref=e2] locator=role=form[name="Login"]
+    - textbox "Email" [required] [ref=e3] locator=label="Email"
+    - textbox "Password" [password] [ref=e4] locator=label="Password"
+    - checkbox "Remember me" [ref=e5] locator=label="Remember me"
+    - button "Sign in" [ref=e6] locator=role=button[name="Sign in"]
+  - link "Forgot password?" [url="/reset"] [ref=e7] locator=role=link[name="Forgot password?"]
+```
+
+Each line is `role "name" [state…] [ref] locator=…`. The locator finds exactly that element (inside
+frames it starts with `frame=… >> `), so a workflow can use it unchanged:
+`{ "type": "fill", "config": { "locator": "label=\"Email\"", "value": "{{email}}" } }`. `[ref=…]` ids only
+number the lines of one snapshot; do not use them as locators. States: `[checked]`, `[disabled]`,
+`[expanded]`, `[selected]`, `[required]`, `[value="…"]` (never shown for passwords), `[options="…"]`
+(selects), `[url="…"]` (links), `[level=N]` (headings). Hidden elements are left out; `[shadow]` marks a
+web component's shadow root, `[frame]` an iframe whose content follows, `[cross-origin]` one that could not
+be read. Long pages are cut at 1,500 lines with a note: snapshot one part with the block's `locator`.
+
 ## 5. Waiting and timeouts
 
 - Each action **auto-waits** until its element: exists exactly once, is visible, enabled (and
@@ -217,7 +314,7 @@ with its own copy of the data.
 
 | Key | Meaning |
 | --- | --- |
-| `onError` | `stop` (default): this path stops, the run fails. `continue`: pass the input on as if it worked. `port`: send `{...input, error, errorBlock}` out of the `error` output (connect it with `"sourcePort": "error"`). |
+| `onError` | `stop` (default): this path stops, the run fails. `continue`: pass the input on as if it worked. `port`: send `{...input, error, errorCode, errorBlock}` out of the `error` output (`errorCode`: see [error codes](#error-codes)) (connect it with `"sourcePort": "error"`). |
 | `retries` | 0 to 5 extra attempts, waiting 1 s, 2 s, 4 s… |
 | `timeoutSeconds` | the step fails after this long |
 | `screenshot` | `error` (default), `always`, `never`. Of the run's tab, only while that tab is showing in its window (Open Tab with `"where": "window"` is best for tests) |
@@ -249,6 +346,42 @@ A workflow may have several start blocks; each starts its own runs.
   embedded), **JUnit XML** (for CI dashboards), **JSON**.
 - If the browser stops the extension's background worker during a run, the run is marked
   **interrupted**.
+- The **JSON** export is for programs: `{ "$schema", "schemaVersion": 1, "generatedAt", "summary", "runs" }`
+  ([schema](report.schema.json)). Each step of a run has `nodeId`, `sourceId` (the block's `id` in the
+  file you imported, when it had one), `blockType`, `status`, `durationMs`, `attempts`, `input`, `output`
+  and, when it failed, `error`, `code`, `locator`, `url` (the page) and `matches` (for `locator.strict`,
+  up to 5 descriptions of the elements that matched).
+
+### Error codes
+
+Every failed step has a `code`. Fix by the code, then the message:
+
+| Code | Meaning | Fix |
+| --- | --- | --- |
+| `locator.not-found` | No element matches the locator (within the step timeout). | Check the locator against a page snapshot; wait for the page or the element first. |
+| `locator.strict` | The locator matches more than one element where exactly one is needed. | Make it more specific (see `matches`), or add `>> nth=0`. |
+| `locator.invalid` | The locator cannot be parsed (bad CSS, unknown engine, bad regex). | Fix the locator syntax. |
+| `element.not-visible` | The element exists but stayed hidden. | Open whatever reveals it first (menu, tab, accordion), or wait for it. |
+| `element.disabled` | The element stayed disabled. | Fill in what enables it first, or check the right element is targeted. |
+| `element.not-editable` | The field is read-only. | Target an editable field. |
+| `element.covered` | Another element (an overlay, a cookie banner) sits on top of it. | Close the overlay first, or use `force` on Click. |
+| `element.unstable` | The element kept moving (an animation). | Wait for the animation to end. |
+| `element.wrong-type` | The element cannot do this (typing into a button, selecting on a non-select…). | Use the block that fits the element, or target the real field. |
+| `option.not-found` | The select has no such option (or it is disabled). | Use one of the options the message lists. |
+| `timeout` | Waited too long for something other than an element (text, URL, response, popup). | Raise the step timeout, or wait for the right thing. |
+| `assert.failed` | An Assert did not hold. | Fix the expectation or the steps before it. |
+| `http.status` | HTTP Request got a non-2xx answer with `failOnError`. | Check the URL, method, headers and body. |
+| `http.network` | HTTP Request could not reach the server. | Check the URL and the host permission. |
+| `navigation.failed` | A page did not finish loading. | Check the URL; raise the timeout for slow pages. |
+| `tab.missing` | No tab of that name in this run. | Put an Open Tab (with that tab name) before the step. |
+| `tab.closed` | The tab was closed while the step used it. | Do not close the tab mid-run. |
+| `frame.unreachable` | The element is inside a frame that could not be reached. | Check the `frame=` part of the locator. |
+| `page.restricted` | The browser does not let extensions script this page. | Use a normal web page. |
+| `permission.missing` | An optional permission is not granted. | Grant it on the block or in the extension settings. |
+| `script.error` | Run Script code threw. | Fix the script. |
+| `config.invalid` | A setting is missing or invalid. | Fix the setting the message names. |
+| `workflow.failed` | A workflow called by Run Workflow failed. | Fix the failing step of the called run (`childRunId`). |
+| `step.failed` | Any other failure. | Read the message. |
 
 ## 10. Building workflows in the editor
 
@@ -355,6 +488,9 @@ profile's extension storage.
 
 ## 16. Examples
 
+Each example is in both formats: `<name>.script.json` (the script, start here) and `<name>.blockflow.json`
+(the graph, also the editor's templates). A test checks that both import to the same graph.
+
 | File | Shows |
 | --- | --- |
 | [`login-test`](examples/login-test.blockflow.json) | Fill Form with a secret, Wait For URL with an error branch, Assert |
@@ -385,3 +521,58 @@ profile's extension storage.
 - Runs stop after 1000 blocks (loop guard). Run history keeps 40 runs; payloads over 3 KB are stored
   as a preview.
 - Firefox: grant site access in `about:addons` → BlockFlow → Permissions.
+
+## Repair: what import errors mean
+
+Import reports every problem as `<level> <code> at <path>: <message> <hint>`, for example
+`error config.key.unknown at /workflows/0/nodes/1/config/locater: Block "go" (click) has no setting "locater". Did you mean "locator"?`.
+`path` is a JSON Pointer into the file as written: `/workflows/0/nodes/1/config/locater` is the key
+`locater` in the `config` of the second node of the first workflow (`/nodes/1/...` for a bare workflow).
+In a script, paths point at steps: `/steps/2/click/locater` is the `locater` setting of the third step (a
+Click), `/steps/1/true/0` the first step of the second step's `true` list, `/steps/0/open` a shorthand value,
+`/scripts/1/steps/…` a step of the second script in a file of several.
+**Errors** refuse the whole file, **warnings** import with a notice, **info** is a note. The codes are stable.
+
+| Code | Level | Meaning | Fix |
+| --- | --- | --- | --- |
+| `json.invalid` | error | Not JSON. The message gives the parser's position. | Remove trailing commas and comments, quote keys. |
+| `file.shape` | error | Not a workflow file: not an object, `workflows`/`nodes`/`edges` not lists, a node without string `id`/`type`, `config`/`step` not objects, unknown `format`, schema newer than this BlockFlow. | Follow section 2. `edges: []` when there are none. |
+| `file.key.unknown` | warning | A key BlockFlow does not read on the file, a workflow, a node or a connection (ignored). | Use the hinted key (`config`, not `settings`; `source`, not `from`; `sourcePort`, not `sourceHandle`). |
+| `node.id.duplicate` | error | Two nodes in one workflow share an `id`. | Give each node its own id. |
+| `node.type.unknown` | error | `type` is not a block. | Use the hinted type, or one from [`blocks.md`](blocks.md) (Open Tab is `open-url`). |
+| `config.key.unknown` | error | A `config` key (or a column in a list setting like Fill Form's `fields`) the block does not have. | Use the hinted key; the hint lists valid keys when nothing is close. |
+| `config.key.renamed` | info | An old key name (`selector` on Read/Watch Element, `next` on Paginate). It is moved on import. | Use the new name (`locator`). |
+| `config.type` | error | Wrong JSON type: text as a number, `"true"` in quotes, a list setting that is not a list. | Strings in quotes, numbers and `true`/`false` without. |
+| `config.required` | error | A required setting is missing or empty, or a setting another one needs (Assert on an element → `locator`; Wait For `text` mode → `text`; Upload File from a URL → `url`; Download a dataset → `dataset`; Navigate `goto` → `url`; a list row without its first column). | Fill in the setting at the path. |
+| `config.enum` | error | A choice that is not one of the options. | Use the hinted value; the hint lists the options. |
+| `config.value` | error | A value of the right type that is not allowed: a number out of range, a Schedule time that is not `HH:MM`. | See the setting's notes in [`blocks.md`](blocks.md). |
+| `config.locator.invalid` | error | A locator that cannot work: unclosed quote or bracket, an unknown `engine=` (`rol=button`), `nth=` without a number. | Fix the syntax (section 4). Templated locators are checked when the block runs. |
+| `config.url.invalid` | error | Not an http(s) URL (`javascript:`, `file:`, garbage). | A full `https://…` address, or a `{{template}}`. |
+| `config.template.invalid` | error | A broken `{{ … }}`: unbalanced braces or a bad expression. | Fix the expression (section 3). |
+| `config.template.unsupported` | warning | `{{ … }}` in a setting that does not render templates; the braces stay as typed. | Remove the braces. Expression settings (For Each / Filter `list`, Transform, Save to Dataset / Download `value`) take `items`, not `{{items}}`. |
+| `step.key.unknown` | error | A `step` key that does not exist. | `timeoutSeconds`, `retries`, `onError`, `disabled`, `note`, `screenshot`, `realInput` (section 7). |
+| `step.value` | error | A bad `step` value (`retries` above 5, `onError: "ignore"`…). | See section 7. |
+| `edge.endpoint.missing` | error | A connection's `source` or `target` is not a node id in that workflow. | Use the hinted id. |
+| `edge.port.unknown` | error | `sourcePort` names an output the block does not have, or `"error"` on a block without `step.onError: "port"`. | Use the hinted output (`true`/`false` on If, `each`/`done` on loops), or add `"step": {"onError": "port"}`. |
+| `edge.target.no-input` | error | A connection into a block that only starts workflows (Schedule). | Remove the connection. |
+| `edge.duplicate` | warning | The same connection twice. | Remove one. |
+| `graph.no-start` | error | Every block has an incoming connection, so nothing starts the workflow (a warning for a workflow with no blocks). | Remove the connection into the first block. |
+| `graph.cycle` | warning (error for a block connected to itself) | A connection back to an earlier block makes a loop; runs stop after 1000 blocks. | Loop with Repeat, For Each or Paginate (their `each` output) instead. |
+| `graph.unreachable` | warning | A block no start block leads to; it never runs. | Connect it, or remove it. |
+| `page.no-tab` | warning | A page block whose tab (`tab`, default `main`) is not opened on every path to it. | Add an Open Tab (`open-url`) with that `tab` earlier on every path, or fix `tab`. Fine for a workflow called by Run Workflow from one that opened the tab. |
+| `workflow.call.missing` | error | Run Workflow's `workflow` is not the `id` of a workflow in the file or already saved. | Put the called workflow in the same file and use its `id` (not its name). |
+| `secret.unknown` | warning | `{{secret.x}}` names a secret the user has not created. | Create the secret (Secrets tab) before running, or fix the name. |
+
+Script files only:
+
+| Code | Level | Meaning | Fix |
+| --- | --- | --- | --- |
+| `script.shape` | error | Not an object, no `steps` list, `format` is not `blockflow-script`, or `"scripts": []`. | Follow the script format above. |
+| `script.version` | error | `version` other than `1`. | `"version": 1`. |
+| `script.empty` | warning | `"steps": []`. | Add steps. |
+| `step.shape` | error | A step that is not an object, has no block key or two of them, a bare value for a block without a shorthand, `step` or `onError` of the wrong type, an empty `id`. | One block key per step; settings as an object unless the block has a shorthand. |
+| `step.branch.next` | error | A list under the continue port (`out`, or `done` on loops). | Put those steps after this step instead. |
+| `step.onError.conflict` | error | An `onError` list on a step whose `step.onError` is `stop` or `continue`. | Drop `step.onError` (the list sets `"port"`), or the list. |
+
+`node.type.unknown`, `node.id.duplicate` and `edge.port.unknown` (a list under a key that is not one of
+the block's outputs, like `"ture"`) also apply to scripts, with step paths.

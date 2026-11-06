@@ -81,13 +81,13 @@ All registered synchronously at the top level of `defineBackground`.
 | --- | --- | --- |
 | `alarms.onAlarm` | `scheduler.handleAlarm(name)`; if that returns true (only a short timer's heartbeat) stop, else `onAlarm(name)` | See [Scheduling and Timers](Scheduling-and-Timers.md). |
 | `runtime.onStartup` | `startAllEnabled()`, `syncContextMenus()` | Browser start (profile load). Not fired on a plain worker wake-up. |
-| `runtime.onInstalled` | On `reason === 'install'` with no workflows: `saveWorkflows(sampleWorkflows())`. Then `startAllEnabled()`, `syncContextMenus()` | Also fires on extension update and on reload in developer mode. |
+| `runtime.onInstalled` | On `reason === 'install'` with no workflows: `saveWorkflows(sampleWorkflows())`. Then `migrateStoredWorkflows()` (rewrites `bf:workflows` once when a workflow has an older `schemaVersion`, see [Core Modules: migrate](Core-Modules.md#migrate)), `startAllEnabled()`, `syncContextMenus()` | Also fires on extension update and on reload in developer mode. |
 | `webNavigation.onCompleted` | `onPageVisited(tabId, url, 'load')`, top frame only (`frameId === 0`) | Page Visited trigger. |
 | `webNavigation.onHistoryStateUpdated` | `onPageVisited(tabId, url, 'route')`, top frame only | SPA route changes; only for `when: any`. |
 | `webNavigation.onCreatedNavigationTarget` | `recordPopup(tabId, sourceTabId)`, `onRecordedPopup(tabId, sourceTabId, url)` | For Wait for Popup, and so the recorder follows popups. Not `tabs.onCreated`: its `openerTabId` is empty for popup windows and names the active tab for links opened from a background tab. |
 | `tabs.onUpdated` | `onRecordedTabUpdated(tabId, change)` when `change.url` or `status === 'complete'` | Recorder: adds `navigated` steps and re-injects the recorder after a load. |
 | `contextMenus.onClicked` | `onMenuClicked(...)` | Context Menu trigger. |
-| `storage.onChanged` (area `local`, key `bf:workflows`) | `diffWorkflows(old, new)` → `stopWorkflow` for `stop`; for `removed` (deleted, on or off) also `scheduler.clearPrefix` of its timers and `clearWorkflowState` (its `bf:state:<id>::*` keys); then `startWorkflow` for `start`; `syncContextMenus()` if either list is non-empty | The editor never messages the worker to start or stop: saving is enough. Position/name edits produce an empty diff. |
+| `storage.onChanged` (area `local`, key `bf:workflows`) | `diffWorkflows(migrated old, migrated new)` (so the one-time schema rewrite restarts nothing) → `stopWorkflow` for `stop`; for `removed` (deleted, on or off) also `scheduler.clearPrefix` of its timers and `clearWorkflowState` (its `bf:state:<id>::*` keys); then `startWorkflow(id, true)` for `start` (plain start blocks run) and `startWorkflow(id, false)` for `restart` (triggers re-armed only); `syncContextMenus()` if any list is non-empty | The editor never messages the worker to start or stop: saving is enough. Position/name edits produce an empty diff. |
 | `notifications.onButtonClicked` | Manual Step: button 0 = Continue (`answerPrompt(runId, true)`), button 1 = Fail | Only for notification ids `bf-prompt:<runId>`. |
 | `notifications.onClicked` | Manual Step: Continue | Firefox has no notification buttons, so a click means Continue. |
 | `action.onClicked` | `openEditor()` | Toolbar button. No popup is defined. |
@@ -104,7 +104,7 @@ Full payloads in [Message Protocol](Message-Protocol.md).
 | `bf:pick-cancelled` | `cancelPicking(sender.tab?.id)` |
 | `bf:pick-error` | from a picker in a page: `cancelPicking(sender.tab.id)` (the editor shows the message itself) |
 | `bf:picker-sync` / `bf:recorder-sync` | `relayPickerSync` / `relayRecorderSync`: passed on to every frame of the sender's tab |
-| `bf:run-workflow` | `newRunner(message.workflow).runOnce()`: runs the workflow **as sent** (the canvas, possibly unsaved), enabled or not. |
+| `bf:run-workflow` | `newRunner(migrateWorkflow(message.workflow)).runOnce()`: runs the workflow **as sent** (the canvas, possibly unsaved), enabled or not. |
 | `bf:stop-run` | `cancelRequests.add(runId)` and `answerPrompt(runId, false)` (a run waiting on a Manual Step stops right away). |
 | `bf:answer-prompt` | `answerPrompt(runId, ok)` |
 | `bf:start-recording` / `bf:stop-recording` / `bf:recorded` | `startRecording` / `stopRecording` / `recordStep(step, sender.tab?.id)` |

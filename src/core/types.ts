@@ -57,6 +57,11 @@ export interface NodeDef {
   position: { x: number; y: number };
   config: Record<string, unknown>;
   step?: StepSettings;
+  /**
+   * The node's id in the file it was imported from (import gives every node a fresh id). Run reports
+   * carry it as `StepRecord.sourceId`, so a result maps back to the author's script.
+   */
+  origin?: string;
 }
 
 /** A connection: the output of `source` feeds the input of `target`. */
@@ -70,7 +75,8 @@ export interface EdgeDef {
 
 /** A saved workflow: a graph of blocks and connections. Stored as a list under `bf:workflows`. */
 export interface Workflow {
-  schemaVersion: 1;
+  /** See migrate.ts. Loaded and imported workflows are migrated to the current version. */
+  schemaVersion: 2;
   id: string;
   name: string;
   /** Enabled workflows run in the background. */
@@ -217,9 +223,9 @@ export interface BlockContext<C extends object = BlockConfig> {
   aborted(): boolean;
   /**
    * Marks this step and the run as failed but keeps going (a "soft" assertion). The block still
-   * returns its output normally.
+   * returns its output normally. Pass a `CodedError` (src/core/errors.ts) to record its code.
    */
-  softFail(message: string): void;
+  softFail(failure: string | Error): void;
   /**
    * Runs another saved workflow with `input` as its data, like calling a function, and resolves
    * with the data its last block produced. Throws when that run fails.
@@ -293,6 +299,19 @@ export interface BlockDefinition<C extends object = BlockConfig> {
   permissions?: ('debugger' | 'userScripts')[];
 
   /**
+   * Config keys that are not settings any more but are still read when present (old saved
+   * workflows), so strict validation (check.ts) does not call them unknown. E.g. Open Tab's `newTab`.
+   */
+  legacyKeys?: string[];
+
+  /**
+   * Rules that depend on several settings ("Element is required for this check"). Receives the
+   * config with defaults applied, not rendered. Used by import checking (check.ts, with a JSON path
+   * to `config/<key>`) and by the editor (validate.ts), so both report the same problems.
+   */
+  validate?(config: C): ConfigProblem[];
+
+  /**
    * Called when the workflow starts, for blocks that nothing else feeds ("root" blocks).
    * Long-running sources (timers, watchers) schedule themselves here. If a root block has
    * no `start`, its `run` is called once with an empty payload instead.
@@ -314,6 +333,14 @@ export interface BlockDefinition<C extends object = BlockConfig> {
 
   /** Called when a timer this block scheduled via ctx.timers.set fires. */
   onTimer?(ctx: BlockContext<C>, name: string, data: Payload | undefined): Promise<void> | void;
+}
+
+/** One problem found by `BlockDefinition.validate`: the setting it is about, a stable code, a sentence. */
+export interface ConfigProblem {
+  key: string;
+  /** An Issue code, usually `config.required` or `config.value`. */
+  code: string;
+  message: string;
 }
 
 /** What `run` returns: a payload (sent out of the first output), a routed payload, or nothing (stop). */

@@ -1,4 +1,6 @@
+import { CodedError } from '../errors';
 import { requireSessionTab } from '../session';
+import { hasTemplate } from '../template';
 import { normalizeHttpUrl } from '../url';
 import { WAIT_UNTIL_OPTIONS } from './openUrl';
 import { PAGE_ACCENT, tabField } from './pageCommon';
@@ -39,6 +41,13 @@ export const navigateBlock: BlockDefinition<NavigateConfig> = {
     { key: 'waitUntil', label: 'Continue when', kind: 'select', options: WAIT_UNTIL_OPTIONS },
   ],
   summary: (config) => (config.action === 'goto' ? `Go to ${config.url || '…'}` : config.action),
+  validate: (config) => {
+    if (config.action !== 'goto') return [];
+    const url = String(config.url ?? '').trim();
+    if (!url) return [{ key: 'url', code: 'config.required', message: 'URL is required for "go to URL"' }];
+    if (!hasTemplate(url) && !normalizeHttpUrl(url)) return [{ key: 'url', code: 'config.url.invalid', message: `"${url}" is not a valid http(s) URL` }];
+    return [];
+  },
   outputs: [{ key: 'url', description: 'The URL after navigating.' }],
 
   async run(ctx, input) {
@@ -46,7 +55,7 @@ export const navigateBlock: BlockDefinition<NavigateConfig> = {
     let url: string | undefined;
     if (ctx.config.action === 'goto') {
       url = normalizeHttpUrl(ctx.config.url) ?? undefined;
-      if (!url) throw new Error(`"${ctx.config.url}" is not a valid http(s) URL`);
+      if (!url) throw new CodedError('config.invalid', `"${ctx.config.url}" is not a valid http(s) URL`);
     }
     const result = await ctx.host.tabs.navigate(tabId, {
       action: ctx.config.action,

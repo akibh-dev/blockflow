@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { urlMatches } from '../core/urlPattern';
 import { sleep } from './tabs';
+import { CodedError } from '../core/errors';
 import type { WaitUntil } from '../core/page';
 
 /** Waiting for pages: load, network idle, URL changes (including single-page-app route changes). */
@@ -51,9 +52,9 @@ export async function waitForNetworkIdle(tabId: number, idleMs: number, timeoutM
     for (;;) {
       if (inFlight.size === 0 && Date.now() - lastActivity >= idleMs) return;
       if (Date.now() >= deadline) {
-        throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s waiting for the network to be idle (${inFlight.size} requests still loading)`);
+        throw new CodedError('timeout', `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for the network to be idle (${inFlight.size} requests still loading)`);
       }
-      if ((await tabInfo(tabId)) === null) throw new Error('The tab was closed');
+      if ((await tabInfo(tabId)) === null) throw new CodedError('tab.closed', 'The tab was closed');
       await sleep(100);
     }
   } finally {
@@ -72,9 +73,9 @@ async function waitForComplete(tabId: number, timeoutMs: number): Promise<void> 
   let last: TabInfo | null = null;
   for (;;) {
     last = await tabInfo(tabId);
-    if (!last) throw new Error('The tab was closed');
+    if (!last) throw new CodedError('tab.closed', 'The tab was closed');
     if (!last.loading) return;
-    if (Date.now() >= deadline) throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s waiting for ${last.url || 'the page'} to load`);
+    if (Date.now() >= deadline) throw new CodedError('navigation.failed', `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for ${last.url || 'the page'} to load`, { url: last.url });
     await sleep(100);
   }
 }
@@ -96,10 +97,10 @@ export async function waitForUrl(tabId: number, pattern: string, timeoutMs: numb
   let last = '';
   for (;;) {
     const info = await tabInfo(tabId);
-    if (!info) throw new Error('The tab was closed');
+    if (!info) throw new CodedError('tab.closed', 'The tab was closed');
     last = info.url;
     if (urlMatches(info.url, pattern)) return info.url;
-    if (Date.now() >= deadline) throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s waiting for the URL to match ${pattern} (it is ${last})`);
+    if (Date.now() >= deadline) throw new CodedError('timeout', `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for the URL to match ${pattern} (it is ${last})`, { url: last });
     await sleep(150);
   }
 }
@@ -175,10 +176,10 @@ export async function waitForResponse(
       found.used = true;
       return { url: found.url, status: found.status, method: found.method };
     }
-    if ((await tabInfo(tabId)) === null) throw new Error('The tab was closed');
+    if ((await tabInfo(tabId)) === null) throw new CodedError('tab.closed', 'The tab was closed');
     if (Date.now() >= deadline) {
       const seen = entries.filter((entry) => urlMatches(entry.url, pattern)).map((entry) => entry.status);
-      throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s waiting for a response from ${pattern}${status ? ` with status ${status}` : ''}${seen.length ? ` (saw status ${[...new Set(seen)].join(', ')})` : ''}`);
+      throw new CodedError('timeout', `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for a response from ${pattern}${status ? ` with status ${status}` : ''}${seen.length ? ` (saw status ${[...new Set(seen)].join(', ')})` : ''}`);
     }
     await sleep(150);
   }

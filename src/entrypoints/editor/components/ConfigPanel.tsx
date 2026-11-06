@@ -5,6 +5,7 @@ import { DEFAULT_TIMEOUT_SECONDS, MAX_RETRIES } from '../../../core/engine';
 import type { StepRecord } from '../../../core/runs';
 import type { FieldSpec, Row, RowsField, StepSettings, TextField, WorkflowField } from '../../../core/types';
 import { Screenshot } from './Screenshot';
+import { SnapshotButton } from './SnapshotButton';
 import { TemplateInput } from './TemplateInput';
 import { PermissionNote, requestPermission } from './PermissionNote';
 import { isExtensionMessage } from '../../../shared/messages';
@@ -238,6 +239,8 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
           </label>
         ),
       )}
+
+      {def.type === 'open-url' && <SnapshotButton url={String(config.url ?? '')} />}
 
       {lastStep && <StepResult step={lastStep} />}
 
@@ -508,12 +511,30 @@ function StepResult({ step }: { step: StepRecord }) {
         {step.port && step.port !== 'out' && ` · → ${step.port}`}
       </summary>
       {step.error && <p className="bf-error">{step.error}</p>}
+      <ErrorDetails step={step} />
       {step.screenshot && <Screenshot id={step.screenshot} />}
       <div className="bf-json-label">Input</div>
       <pre className="bf-json">{json(step.input)}</pre>
       <div className="bf-json-label">Output</div>
       <pre className="bf-json">{step.output ? json(step.output) : step.status === 'passed' ? '(nothing: the flow stops here)' : '—'}</pre>
     </details>
+  );
+}
+
+/** A failed step's error code (src/core/errors.ts) and, for strict-mode errors, what matched. Small: the message says it in words. */
+export function ErrorDetails({ step }: { step: StepRecord }) {
+  if (!step.code) return null;
+  return (
+    <div className="bf-error-code">
+      <code title="Error code (in reports and the JSON export)">{step.code}</code>
+      {step.matches && step.matches.length > 0 && (
+        <ul>
+          {step.matches.map((match) => (
+            <li key={match}>{match}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

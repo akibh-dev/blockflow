@@ -1,0 +1,11 @@
+{ "format": "blockflow-script", "version": 1, "name": "Eval: paginate-products",
+  "steps": [
+    { "open": "{{BASE}}/products?page=1" },
+    { "save-dataset": { "dataset": "products", "value": "[]", "mode": "replace" } },
+    { "paginate": { "locator": "a.next" },
+      "each": [
+        { "extract-list": { "locator": ".card", "fields": [ { "name": "name", "locator": "h2", "attribute": "" }, { "name": "price", "locator": ".price", "attribute": "" } ] } },
+        { "save-dataset": { "dataset": "products" } }
+      ] },
+    { "close-tab": {} }
+  ] }

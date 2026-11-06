@@ -30,10 +30,11 @@ export async function launch() {
   })();
   const candidates = [
     process.env.BF_BROWSER,
-    '/opt/brave.com/brave-origin/brave',
-    '/opt/brave.com/brave/brave',
+    // Plain Chromium first: it starts headless next to other browser instances, which Brave does not.
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
+    '/opt/brave.com/brave-origin/brave',
+    '/opt/brave.com/brave/brave',
     '/usr/bin/google-chrome',
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     playwrightChromium,
@@ -111,7 +112,7 @@ export async function launch() {
     counter += 1;
     const lines = edges ?? nodes.slice(1).map((node, index) => [nodes[index].id, node.id]);
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: `e2e-${counter}`,
       name,
       enabled: false,

@@ -15,7 +15,7 @@ Everything saves automatically, a moment after each change. There is no Save but
 
 | Area | What is there |
 | --- | --- |
-| **Header** | The open workflow's name (click to rename), its **On/Off** switch, **● Record**, **↶ ↷** (undo, redo), **▶ Run** / **■ Stop**, the last run's result, a red **N problems** count, and the page tabs: **Canvas**, **All workflows (N)**, **Reports**, **Data**, **Secrets** |
+| **Header** | The open workflow's name (click to rename), its **On/Off** switch, **● Record**, **↶ ↷** (undo, redo), **Tidy up**, **Export as script**, **▶ Run** / **■ Stop**, the last run's result, a red **N problems** count, and the page tabs: **Canvas**, **All workflows (N)**, **Reports**, **Data**, **Secrets** |
 | **Sidebar** (left) | The workflow list and the block palette. Stays visible on every page |
 | **Canvas** (middle) | The blocks of the open workflow |
 | **Settings panel** (right) | The settings of the selected block. Canvas page only |
@@ -26,7 +26,7 @@ Everything saves automatically, a moment after each change. There is no Save but
 At the top of the sidebar, under **Workflows**:
 
 - **+ New ▾**: **Blank workflow**, or one from a template (see [Templates](#templates)).
-- **Import**: one or more `.blockflow.json` files.
+- **Import**: one or more files: scripts (`.script.json`) or graphs (`.blockflow.json`).
 - A **Search…** box appears once you have more than four workflows.
 - Each row: the **dot** switches the workflow On (green) or Off (grey); click the name to open it; double-click to
   rename. On hover: ✎ rename, ⧉ duplicate, ⬇ export to a file, 🎭 download as a Playwright test, 🗑 delete
@@ -88,7 +88,10 @@ Select one block to see, from top to bottom:
    - Tables (Fill Form fields, Extract List fields, Start values…) have **+ Add row**, ✕ per row, 🎯 per
      locator cell, and on Fill Form, **🎯 Detect fields**.
    - Run Workflow has a list of your other workflows.
-5. **Last run**: status, duration, attempts, which output it took, the error, a screenshot if one was taken,
+   - Open Tab has **📸 Snapshot page** ([below](#snapshot-page)).
+5. **Last run**: status, duration, attempts, which output it took, the error with its small **error code**
+   (`locator.strict`, `assert.failed`…, listed in the [usage guide](../guide/README.md#error-codes)) and,
+   when a locator matched several elements, which ones, a screenshot if one was taken,
    and the full **Input** and **Output** data. Shows the run you picked in the Runs tab, or the latest.
 6. **Step settings**: On error, Retries, Timeout, Screenshot of the tab, Use real mouse and keyboard
    (debugger; only on blocks that act on the page: Click, Fill, Fill Form, Select Option, Check, Press Key,
@@ -117,6 +120,19 @@ when the text changes. **Other ways to find it** lists alternatives; click one t
 hint. Fill in the values you need; empty ones are skipped.
 
 The page agent and picker are injected only when you use them; nothing runs in your pages otherwise.
+
+## Snapshot page
+
+**📸 Snapshot page** on an Open Tab block copies an outline of the page to the clipboard: every heading,
+link, field and button with its name, state and a locator that finds exactly it, e.g.
+`- button "Sign in" [ref=e12] locator=role=button[name="Sign in"]`. Paste it into a chat with a model and
+ask for a workflow: the locators can be used as they are.
+
+It opens the block's URL in the picker's tab (or reuses that tab when it already shows the page; with no
+URL, the web tab you used last), takes the snapshot, and brings you back to the editor with a toast saying
+how many lines were copied. Long pages are cut at 1,500 lines with a note; to see one part only, or to keep
+a snapshot with a run, use the **Page Snapshot** block (it has a "Part of the page" locator). Format:
+[Page Protocol: The snapshot op](Page-Protocol.md#the-snapshot-op).
 
 ## Recorder
 
@@ -166,6 +182,10 @@ Shortcuts work on the Canvas page, when you are not typing in a field. Cmd works
 | Delete / Backspace | Delete the selection |
 | Enter / Esc / ↑ ↓ | In the element picker: use / cancel / broader, narrower |
 
+**Tidy up** (header) lays the open workflow out in columns, left to right in the order data flows, with
+If's `true` above `false` and loop bodies above what comes after the loop. It is one undo step, so Ctrl+Z puts
+the blocks back where they were.
+
 Undo covers blocks, connections, positions and settings (quick changes in a row count as one step), up to 100
 steps. Each workflow has its own history, kept while you switch between workflows (until the editor tab is
 reloaded or closed).
@@ -198,10 +218,12 @@ When a **Manual Step** is waiting, a banner across the top says "*Workflow* is w
 
 Header → **Reports**: the last 40 runs of all workflows. Filter by workflow and result; the line on top
 totals runs, passed, failed and time. Click a run for its steps (status, duration, attempts, output taken,
-error, screenshot), **open called run** for Run Workflow steps, and **show on canvas**.
+error and error code, screenshot), **open called run** for Run Workflow steps, and **show on canvas**.
 
 **Export HTML** (one self-contained file with screenshots), **Export JUnit XML** (for CI dashboards) and
-**Export JSON** export the runs currently shown. **Clear** deletes the history.
+**Export JSON** export the runs currently shown. The JSON is versioned (`schemaVersion: 1`) and described
+by [report.schema.json](../guide/report.schema.json): each step has its `code`, `locator`, page `url`,
+`matches` and `sourceId` (the block's id in the file you imported). **Clear** deletes the history.
 
 ## Data
 
@@ -220,9 +242,15 @@ unencrypted in the browser profile.
 
 - **Export** (⬇ in the sidebar, or All workflows → Export / Export all / Export selected) downloads a
   `.blockflow.json` file. Several workflows go in one file. Secrets are never included.
-- **Import** (sidebar or All workflows) reads one or more files, adds the workflows **Off** with new ids
-  (Run Workflow links within a file keep working), opens the first one and switches to All workflows.
-  A bad file is reported and skipped.
+- **Export as script** (header) downloads the open workflow as `<name>.script.json`, a list of steps that
+  is easier to read, diff and edit by hand or with an LLM. It is greyed out when the workflow cannot be
+  written as steps (more than one start block, an output connected to several blocks, joins other than
+  after an If); the button's tooltip says so.
+- **Import** (sidebar or All workflows) reads one or more files, scripts or graphs, adds the workflows
+  **Off** with new ids (Run Workflow links within a file keep working), opens the first one and switches to
+  All workflows. Scripts, and graph files without positions, are laid out automatically.
+  A bad file is reported and skipped; for a script the message names the step (`/steps/1/clik: Unknown
+  block "clik". Did you mean "click"?`).
 - The file format is documented for people and AI tools: [Workflows as Scripts](Workflows-as-Scripts.md),
   [usage guide §2](../guide/README.md#2-workflow-file-format).
 

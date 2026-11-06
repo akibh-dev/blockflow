@@ -1,0 +1,9 @@
+{ "format": "blockflow-script", "version": 1, "name": "Eval: popup-read",
+  "steps": [
+    { "open": "{{BASE}}/popup.html" },
+    { "click": "role=button[name=\"Open help\"]" },
+    { "wait-for-popup": { "name": "help" } },
+    { "read-element": { "tab": "help", "locator": "#prices th >> nth=0" } },
+    { "close-tab": { "tab": "help" } },
+    { "close-tab": {} }
+  ] }

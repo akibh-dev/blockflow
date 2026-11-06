@@ -4,7 +4,7 @@ import type { BlockContext, BlockDefinition, Payload } from '../types';
 
 /** Watch Element settings. `intervalSeconds` is only used when the block is a root. */
 export interface WatchElementConfig {
-  selector: string;
+  locator: string;
   url: string;
   intervalSeconds: number;
   reload: boolean;
@@ -12,7 +12,7 @@ export interface WatchElementConfig {
 }
 
 interface LastRead {
-  /** url + selector the value was read with; a different signature means "start over". */
+  /** url + locator the value was read with; a different signature means "start over". */
   signature: string;
   value: string;
 }
@@ -37,17 +37,17 @@ async function check(ctx: BlockContext<WatchElementConfig>, always = false): Pro
   try {
     const url = normalizeHttpUrl(ctx.config.url);
     if (!url) throw new Error(`"${ctx.config.url}" is not a valid http(s) URL`);
-    const { selector, reload } = ctx.config;
+    const { locator, reload } = ctx.config;
 
-    const result = await ctx.host.page.readElement({ url, selector, reload });
+    const result = await ctx.host.page.readElement({ url, selector: locator, reload });
     if (result.error) throw new Error(result.error);
     if (!result.found) {
-      ctx.log('warn', `Element not found on the page: ${selector}`);
+      ctx.log('warn', `Element not found on the page: ${locator}`);
       return null;
     }
 
     const value = normalizeText(result.text);
-    const signature = `${url}|${selector}`;
+    const signature = `${url}|${locator}`;
     const previous = await ctx.state.get<LastRead>('last');
     await ctx.state.set('last', { signature, value } satisfies LastRead);
 
@@ -55,7 +55,8 @@ async function check(ctx: BlockContext<WatchElementConfig>, always = false): Pro
       value,
       previous: previousValue,
       url,
-      selector,
+      locator,
+      selector: locator,
       changedAt: ctx.host.now().toISOString(),
     });
 
@@ -95,7 +96,7 @@ export const watchElementBlock: BlockDefinition<WatchElementConfig> = {
   icon: '👁',
   accent: '#10b981',
   defaultConfig: {
-    selector: '',
+    locator: '',
     url: '',
     intervalSeconds: 60,
     reload: true,
@@ -103,7 +104,7 @@ export const watchElementBlock: BlockDefinition<WatchElementConfig> = {
   },
   fields: [
     {
-      key: 'selector',
+      key: 'locator',
       label: 'Element',
       kind: 'locator',
       required: true,
@@ -140,12 +141,12 @@ export const watchElementBlock: BlockDefinition<WatchElementConfig> = {
       help: 'Off = the first read just records the starting value.',
     },
   ],
-  summary: (config) => config.selector || 'Pick an element',
+  summary: (config) => config.locator || 'Pick an element',
   outputs: [
     { key: 'value', description: 'The new text of the element.' },
     { key: 'previous', description: 'The text before the change (null on the first read).' },
     { key: 'url', description: 'The page that was watched.' },
-    { key: 'selector', description: 'The element selector.' },
+    { key: 'locator', description: 'The element locator (also as `selector`, its name before v0.3).' },
     { key: 'changedAt', description: 'ISO time the change was noticed.' },
   ],
 
@@ -153,7 +154,7 @@ export const watchElementBlock: BlockDefinition<WatchElementConfig> = {
     const ms = ctx.config.intervalSeconds * 1000;
     // Schedule first so a failed first check does not stop the watcher.
     await ctx.timers.set('poll', { delayMs: ms, periodMs: ms });
-    ctx.log('info', `Watching "${ctx.config.selector}" every ${ctx.config.intervalSeconds}s`);
+    ctx.log('info', `Watching "${ctx.config.locator}" every ${ctx.config.intervalSeconds}s`);
     const result = await check(ctx);
     if (result) await ctx.emit(result);
   },

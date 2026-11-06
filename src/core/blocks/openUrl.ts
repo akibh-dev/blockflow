@@ -1,3 +1,4 @@
+import { CodedError } from '../errors';
 import { DEFAULT_TAB, withSessionTab } from '../session';
 import { normalizeHttpUrl } from '../url';
 import type { WaitUntil } from '../page';
@@ -34,6 +35,7 @@ export const openUrlBlock: BlockDefinition<OpenUrlConfig> = {
   accent: '#3b82f6',
   defaultConfig: { url: '', where: 'new', tab: DEFAULT_TAB, active: true, waitUntil: 'load' },
   timeoutSeconds: 45,
+  legacyKeys: ['newTab'],
   fields: [
     {
       key: 'url',
@@ -73,7 +75,7 @@ export const openUrlBlock: BlockDefinition<OpenUrlConfig> = {
 
   async run(ctx, input) {
     const url = normalizeHttpUrl(ctx.config.url);
-    if (!url) throw new Error(`"${ctx.config.url}" is not a valid http(s) URL`);
+    if (!url) throw new CodedError('config.invalid', `"${ctx.config.url}" is not a valid http(s) URL`);
     const where = ctx.config.newTab === false && ctx.config.where === 'new' ? 'current' : ctx.config.where;
     const ownTab = where === 'workflow' ? await ctx.state.get<number>('tabId') : undefined;
     const { tabId } = await ctx.host.tabs.open({

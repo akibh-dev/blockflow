@@ -30,6 +30,8 @@ side effects. The registry erases `C` (`AnyBlockDefinition`).
 | `ports?: string[]` | no | engine, editor handles, validation | Named outputs; default `['out']`. The engine appends `error` when `step.onError === 'port'` (`nodePorts()` in `ports.ts`). |
 | `timeoutSeconds?` | no | `stepTimeoutSeconds()` | Default step timeout for this block type; the engine default is 60 (`DEFAULT_TIMEOUT_SECONDS`). A node's `step.timeoutSeconds` overrides it. |
 | `permissions?` | no | `PermissionNote.tsx` | Optional browser permissions (`'debugger'`, `'userScripts'`) the editor offers to grant. |
+| `validate?(config)` | no | `check.ts` (import), `validate.ts` (editor) | Rules over several settings that `required` cannot express. Receives the config with defaults applied (not rendered) and returns `ConfigProblem[]` (`{ key, code, message }`, code usually `config.required`, or `config.value` / `config.url.invalid`). Import reports each at `.../config/<key>` and refuses the file; the editor shows the message on the block. Must not throw. In: Assert (element subjects need `locator`, `attribute` needs `name`), Wait For (element modes → `locator`, text modes → `text`, `url`/`response` → `url`), Upload File (`url` or `content` by `source`), Download (`dataset` or `value` by `from`), Read Element (`name` for attribute/has-class), Navigate (`url` for goto, valid when not templated), Schedule (`at` is HH:MM for `day`), Extract List / Extract Table (`html` in HTML mode, `validateSource`). |
+| `legacyKeys?` | no | `check.ts` | Config keys that are no longer settings but that `run` still reads from old workflows (Open Tab: `newTab`), so import does not call them unknown (`config.key.unknown`). Renamed keys go in `RENAMED_KEYS` (migrate.ts) instead. |
 | `start?(ctx)` | no | root blocks when a workflow is switched on | Schedule yourself here (timers), or just log (event-driven triggers). |
 | `trigger?(ctx)` | no | Run button / Run Workflow on a root | What a start block sends "right now". Return `null` to send nothing. |
 | `run?(ctx, input)` | no | every step | The normal path. Returns `RunOutput`. |
@@ -177,7 +179,7 @@ block's default step timeout (60 = engine default). Page ops are the `AgentReque
 | Schedule (`schedule`) | [scheduleBlock.ts](../../src/core/blocks/scheduleBlock.ts) | start, trigger, onTimer | `host.now` | `next` one-shot carrying `scheduledFor` | 60 | `nextOccurrence()` from `schedule.ts`; plans the next timer *before* emitting so a failing run does not stop the schedule. No `run`: cannot take input. |
 | Page Visited (`page-visited`) | [pageVisited.ts](../../src/core/blocks/pageVisited.ts) | start (log only), trigger, run | `tabs.current` | none | 60 | The trigger lives in the background worker (`webNavigation` listeners call `handleEvent` with `$session.tabs.main`); `run` passes the event payload through. See [Background Worker](Background-Worker.md). |
 | Context Menu (`context-menu`) | [contextMenu.ts](../../src/core/blocks/contextMenu.ts) | start (log only), trigger, run | `tabs.current` | none | 60 | Same pattern; menu items are created by the background from `title`/`contexts`. |
-| Watch Element (`watch-element`) | [watchElement.ts](../../src/core/blocks/watchElement.ts) | start, trigger, run, onTimer | `page.readElement` (background tab per URL, not `page.act`) | `poll` (periodic) · `last` = `{signature, value}` | 60 | Schedules `poll` before the first check so a failing check does not stop it. First read is a baseline unless `emitOnFirstRead`; signature `url|selector` change = start over. Module-level `inFlight` set skips overlapping checks. `selector` is not templated (Read Element's is). |
+| Watch Element (`watch-element`) | [watchElement.ts](../../src/core/blocks/watchElement.ts) | start, trigger, run, onTimer | `page.readElement` (background tab per URL, not `page.act`) | `poll` (periodic) · `last` = `{signature, value}` | 60 | Schedules `poll` before the first check so a failing check does not stop it. First read is a baseline unless `emitOnFirstRead`; signature `url|locator` change = start over. Module-level `inFlight` set skips overlapping checks. `locator` is not templated (Read Element's is). |
 
 ### Tabs (`browser`)
 
@@ -208,17 +210,18 @@ block's default step timeout (60 = engine default). Page ops are the `AgentReque
 
 | Block (`type`) | File | Page ops / host | Timers · state | Timeout | Implementation notes |
 | --- | --- | --- | --- | --- | --- |
-| Read Element (`read-element`) | [readElement.ts](../../src/core/blocks/readElement.ts) | URL set: `page.readElement`; else `read` op via `page.act` (wait ≤ 5 s) + `tabs.info` | state `last` = `{signature, value}` | 60 | Tab mode treats a "Timed out" error as not found. Not found → logs a warning and returns `null` (path ends). Signature `url|selector|read|name`; adds `value`, `previous`, `changed`, `count`, `url`, `selector`. |
+| Read Element (`read-element`) | [readElement.ts](../../src/core/blocks/readElement.ts) | URL set: `page.readElement`; else `read` op via `page.act` (wait ≤ 5 s) + `tabs.info` | state `last` = `{signature, value}` | 60 | Tab mode treats a "Timed out" error as not found. Not found → logs a warning and returns `null` (path ends). Signature `url|locator|read|name`; adds `value`, `previous`, `changed`, `count`, `url`, `locator` (and `selector`, the same value under its pre-v0.3 name). |
 | Extract List (`extract-list`) | [extractList.ts](../../src/core/blocks/extractList.ts) | `extract` via `inSource` | none | 30 | Fields with blank names dropped; `limit` sent only when > 0. Adds `[into]` and `count`. |
 | Extract Table (`extract-table`) | [extractTable.ts](../../src/core/blocks/extractTable.ts) | `table` via `inSource` | none | 30 | Adds `[into]` and `count`. |
 | Paginate (`paginate`) · ports `each`, `done` | [paginate.ts](../../src/core/blocks/paginate.ts) | `read` (kind `enabled`), `click` (`next >> nth=0`); `host.sleep(150)`, `tabs.waitForLoad('networkidle')` | none | 1800 | Emits `each` with `page`, then stops when Next is missing/disabled (`enabled` answers `false` for a missing element instead of waiting) or at `maxPages`. Returns `routeTo('done', {pages})`. |
 | Page Info (`page-info`) | [pageInfo.ts](../../src/core/blocks/pageInfo.ts) | `page-info` or `storage` | none | 30 | Adds `page` or `value`. |
+| Page Snapshot (`page-snapshot`) | [pageSnapshot.ts](../../src/core/blocks/pageSnapshot.ts) | `snapshot` (with `locator` when set, `maxLines` at least 10) | none | 30 | Adds `snapshot` (the outline text) and `elements`; logs a warning when the outline was cut. Playwright export: `ariaSnapshot()` of the body or the locator. The editor's 📸 Snapshot page button on Open Tab uses the same op, not this block. |
 
 ### Test (`test`)
 
 | Block (`type`) | File | Host / page ops | Timeout | Implementation notes |
 | --- | --- | --- | --- | --- |
-| Assert (`assert`) | [assert.ts](../../src/core/blocks/assert.ts) | `read` via `page.act` (300 ms each), `tabs.info`, `host.sleep(250)` | 10 | Page subjects retry a number of *attempts* computed from `pageWaitMs` (no wall clock). Yes/no subjects (`STATES`) compare with a fixed answer; others use `testClause` from `condition.ts`. `soft` → `ctx.softFail`. Adds `actual`. |
+| Assert (`assert`) | [assert.ts](../../src/core/blocks/assert.ts) | `read` via `page.act` (300 ms each), `tabs.info`, `host.sleep(250)` | 10 | Page subjects retry a number of *attempts* computed from `pageWaitMs` (no wall clock). Yes/no subjects (`STATES`) compare with a fixed answer; others use `testClause` from `condition.ts`. A failure is a `CodedError('assert.failed')` with the element's locator (page subjects); `soft` passes it to `ctx.softFail`. Adds `actual`. |
 | Manual Step (`manual-step`) | [manualStep.ts](../../src/core/blocks/manualStep.ts) | `prompt.ask` | 600 | `false` from the user throws. Pass-through. |
 | Stop (`stop`) | [stopRun.ts](../../src/core/blocks/stopRun.ts) | none | 60 | `fail` throws `message`; `pass` logs and returns `null`. `outputs: []`. |
 
@@ -256,7 +259,12 @@ All data blocks use the 60 s default timeout and `out`.
 
 - **Renaming is breaking.** `type`, config keys and select option values are stored in users' workflows
   and exports. Add a new key with a default instead, and read old shapes in `run` (see Open Tab's
-  `newTab`).
+  `newTab`, listed in its `legacyKeys` so import accepts it), or rename through `RENAMED_KEYS` in
+  migrate.ts.
+- **Import rejects unknown config keys** (`config.key.unknown`). A key a block reads but does not declare
+  as a field must be in `legacyKeys`, or files using it will be refused.
+- **Rules between settings belong in `validate`**, not only in `run`: then import and the editor report
+  them before the run, with a path. Keep the `run` check too (it guards templated values).
 - **`defaultConfig` is merged shallowly.** A saved `rows` value replaces the default list entirely.
 - **Templated output is a string.** `{{count}}` renders to `"3"`. Compare numbers with If/Assert (which
   coerce) or compute with Transform.

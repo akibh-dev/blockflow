@@ -1,9 +1,10 @@
 import { browser } from 'wxt/browser';
 import { createExtensionHost } from '../browser/host';
 import { createBrowserScheduler } from '../browser/scheduler';
-import { cancelPicking, finishPicking, relayPickerSync, startPicking } from '../browser/picking';
+import { cancelPicking, finishPicking, relayPickerSync, snapshotForEditor, startPicking } from '../browser/picking';
 import { answerPrompt, clearStalePrompts, promptRunId } from '../browser/prompts';
-import { appendLog, clearWorkflowState, loadWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
+import { migrateWorkflow, migrateWorkflows } from '../core/migrate';
+import { appendLog, clearWorkflowState, loadWorkflows, migrateStoredWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
 import { createDefaultRegistry } from '../core/blocks';
 import { menuClickPayload, menuItemFor, parseMenuItemId } from '../core/blocks/contextMenu';
 import { WorkflowRunner } from '../core/engine';
@@ -235,6 +236,8 @@ export default defineBackground(() => {
       if (details.reason === 'install' && (await loadWorkflows()).length === 0) {
         await saveWorkflows(sampleWorkflows());
       }
+      // An update may bring a new workflow schema version: rewrite the stored list once (migrate.ts).
+      await migrateStoredWorkflows();
       await startAllEnabled();
       syncContextMenus();
     })().catch(report('install'));
@@ -245,10 +248,9 @@ export default defineBackground(() => {
     if (area !== 'local') return;
     const change = changes[STORAGE_KEYS.workflows];
     if (!change) return;
-    const { start, restart, stop, removed } = diffWorkflows(
-      change.oldValue as Workflow[] | undefined,
-      change.newValue as Workflow[] | undefined,
-    );
+    // Both sides migrated, so the one-time rewrite to a new schema version restarts nothing.
+    const migrated = (list: unknown) => (Array.isArray(list) ? migrateWorkflows(list as Workflow[]).workflows : undefined);
+    const { start, restart, stop, removed } = diffWorkflows(migrated(change.oldValue), migrated(change.newValue));
     void (async () => {
       for (const id of stop) await stopWorkflow(id);
       // A deleted workflow leaves nothing behind: timers (also a Run-button delay of a workflow
@@ -300,6 +302,9 @@ export default defineBackground(() => {
         // Only a picker in a page sends this here (the editor shows it too): end the pick.
         if (sender.tab?.id !== undefined) void cancelPicking(sender.tab.id).catch(report('cancel picking'));
         break;
+      case 'bf:snapshot-page':
+        void snapshotForEditor(sender.tab?.id, message.url).catch(report('snapshot'));
+        break;
       case 'bf:picker-sync':
         void relayPickerSync(message, sender.tab?.id).catch(report('picker'));
         break;
@@ -307,7 +312,7 @@ export default defineBackground(() => {
         void relayRecorderSync(message, sender.tab?.id).catch(report('recording'));
         break;
       case 'bf:run-workflow':
-        void newRunner(message.workflow).runOnce().catch(report('run'));
+        void newRunner(migrateWorkflow(message.workflow)).runOnce().catch(report('run'));
         break;
       case 'bf:stop-run':
         cancelRequests.add(message.runId);

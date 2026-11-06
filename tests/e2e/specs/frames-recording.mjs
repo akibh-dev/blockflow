@@ -27,11 +27,11 @@ export default async function (h) {
     const real = await run(workflow('real input in frames', [
       { id: 'open', type: 'open-url', config: { url: `${base}/trusted-frames.html`, active: false } },
       { id: 'c1', type: 'click', config: { locator: 'frame=#same >> #press' }, step: { realInput: true } },
-      { id: 'r1', type: 'read-element', config: { selector: 'frame=#same >> #result', url: '' } },
+      { id: 'r1', type: 'read-element', config: { locator: 'frame=#same >> #result', url: '' } },
       { id: 'c2', type: 'click', config: { locator: 'frame=#other >> #press' }, step: { realInput: true } },
-      { id: 'r2', type: 'read-element', config: { selector: 'frame=#other >> #result', url: '' } },
+      { id: 'r2', type: 'read-element', config: { locator: 'frame=#other >> #result', url: '' } },
       { id: 't2', type: 'fill', config: { locator: 'frame=#other >> label=Name', value: 'Akib' }, step: { realInput: true } },
-      { id: 'r3', type: 'read-element', config: { selector: 'frame=#other >> label=Name', url: '', read: 'attribute', name: 'data-trusted' } },
+      { id: 'r3', type: 'read-element', config: { locator: 'frame=#other >> label=Name', url: '', read: 'attribute', name: 'data-trusted' } },
       { id: 'v', type: 'assert', config: { subject: 'input', locator: 'frame=#other >> label=Name', operator: 'equals', expected: 'Akib' } },
       { id: 'close', type: 'close-tab' },
     ]));
@@ -46,7 +46,7 @@ export default async function (h) {
       workflow('pick in frames', [
         { id: 'open', type: 'open-url', config: { url: `${base}/frames.html` } },
         { id: 'c', type: 'click', config: { locator: '' } },
-        { id: 'r', type: 'read-element', config: { selector: '', url: `${base}/shadow.html` } },
+        { id: 'r', type: 'read-element', config: { locator: '', url: `${base}/shadow.html` } },
       ]),
     ]);
     // An upstream URL prefers a tab already open on that site: leave only the editor open, so the

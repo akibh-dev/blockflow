@@ -1,0 +1,6 @@
+{ "format": "blockflow-script", "version": 1, "name": "Eval: scrape-table",
+  "steps": [
+    { "open": "{{BASE}}/table.html" },
+    { "extract-table": { "locator": "#prices" } },
+    { "close-tab": {} }
+  ] }

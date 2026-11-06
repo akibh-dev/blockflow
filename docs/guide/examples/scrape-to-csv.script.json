@@ -1,0 +1,67 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Scrape all pages to CSV",
+  "steps": [
+    {
+      "id": "open",
+      "open": {
+        "url": "https://shop.example.com/products",
+        "active": false
+      }
+    },
+    {
+      "id": "clear",
+      "save-dataset": {
+        "dataset": "products",
+        "value": "[]",
+        "mode": "replace"
+      }
+    },
+    {
+      "id": "pages",
+      "paginate": {
+        "maxPages": 20
+      },
+      "each": [
+        {
+          "id": "cards",
+          "extract-list": {
+            "locator": ".product-card",
+            "fields": [
+              {
+                "name": "title",
+                "locator": "h2",
+                "attribute": ""
+              },
+              {
+                "name": "price",
+                "locator": ".price",
+                "attribute": ""
+              },
+              {
+                "name": "link",
+                "locator": "a",
+                "attribute": "href"
+              }
+            ]
+          }
+        },
+        {
+          "id": "save",
+          "save-dataset": {
+            "dataset": "products"
+          }
+        }
+      ]
+    },
+    {
+      "id": "file",
+      "download": {
+        "from": "dataset",
+        "dataset": "products",
+        "filename": "products-{{ today() }}.csv"
+      }
+    }
+  ]
+}

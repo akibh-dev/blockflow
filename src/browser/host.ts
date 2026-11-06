@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { uid } from '../core/id';
+import { CodedError } from '../core/errors';
 import { STORAGE_KEYS } from '../shared/keys';
 import { readDataset, saveScreenshot, writeDataset } from './blobStore';
 import { actOnHtml } from './htmlParse';
@@ -81,7 +82,7 @@ async function goHistory(tabId: number, action: 'back' | 'forward'): Promise<voi
 /** `Host.tabs.navigate`: goto / back / forward / reload, then waits per `waitUntil`; returns the final URL. */
 async function navigate(tabId: number, { action, url, waitUntil, timeoutMs }: NavigateOptions): Promise<{ url: string }> {
   if (action === 'goto') {
-    if (!url) throw new Error('Navigate needs a URL');
+    if (!url) throw new CodedError('config.invalid', 'Navigate needs a URL');
     await browser.tabs.update(tabId, { url });
   } else if (action === 'back' || action === 'forward') await goHistory(tabId, action);
   else await browser.tabs.reload(tabId);
@@ -211,12 +212,12 @@ async function runScript(tabId: number, code: string, data: Record<string, unkno
     // Reading the property throws while user scripts are not allowed.
     api = (browser as unknown as { userScripts?: typeof api }).userScripts;
   } catch (error) {
-    throw new Error(`${needs} (${error instanceof Error ? error.message : String(error)})`);
+    throw new CodedError('permission.missing', `${needs} (${error instanceof Error ? error.message : String(error)})`);
   }
-  if (!api?.execute) throw new Error(needs);
+  if (!api?.execute) throw new CodedError('permission.missing', needs);
   const wrapped = `(async () => {\nconst data = ${JSON.stringify(data)};\n${code}\n})()`;
   const [result] = await api.execute({ target: { tabId }, js: [{ code: wrapped }], world: 'USER_SCRIPT' });
-  if (result?.error) throw new Error(result.error);
+  if (result?.error) throw new CodedError('script.error', result.error);
   return result?.result;
 }
 

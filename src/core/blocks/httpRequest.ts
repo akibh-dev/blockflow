@@ -1,3 +1,4 @@
+import { CodedError } from '../errors';
 import { normalizeHttpUrl } from '../url';
 import type { BlockDefinition } from '../types';
 
@@ -68,21 +69,25 @@ export const httpRequestBlock: BlockDefinition<HttpRequestConfig> = {
 
   async run(ctx, input) {
     const url = normalizeHttpUrl(ctx.config.url);
-    if (!url) throw new Error(`"${ctx.config.url}" is not a valid http(s) URL`);
+    if (!url) throw new CodedError('config.invalid', `"${ctx.config.url}" is not a valid http(s) URL`);
     const { method } = ctx.config;
     const sendsBody = method !== 'GET' && ctx.config.body !== '';
-    const result = await ctx.host.http.fetch({
-      url,
-      method,
-      headers: parseHeaders(ctx.config.headers),
-      ...(sendsBody ? { body: ctx.config.body } : {}),
-    });
+    const result = await ctx.host.http
+      .fetch({
+        url,
+        method,
+        headers: parseHeaders(ctx.config.headers),
+        ...(sendsBody ? { body: ctx.config.body } : {}),
+      })
+      .catch((error: unknown) => {
+        throw new CodedError('http.network', error instanceof Error ? error.message : String(error), { url });
+      });
     ctx.log(result.ok ? 'info' : 'warn', `${method} ${url} → ${result.status}`);
     // A failed step, not a quiet end of the path: the run shows failed, and retries and the
     // error output (step setting onError) apply.
     if (!result.ok && ctx.config.failOnError) {
       const preview = result.body.trim().slice(0, 200);
-      throw new Error(`${method} ${url} answered ${result.status}${preview ? `: ${preview}` : ''}`);
+      throw new CodedError('http.status', `${method} ${url} answered ${result.status}${preview ? `: ${preview}` : ''}`, { url });
     }
 
     let data: unknown;

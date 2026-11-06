@@ -7,7 +7,9 @@ import path from 'node:path';
 import { createDefaultRegistry } from '../src/core/blocks';
 import { DEFAULT_TIMEOUT_SECONDS } from '../src/core/engine';
 import { nodePorts } from '../src/core/ports';
+import { reportSchemaFiles } from './reportSchema';
 import { CATEGORY_LABELS } from '../src/core/types';
+import { scriptSchema } from './scriptSchema';
 import type { AnyBlockDefinition, BlockCategory, FieldSpec } from '../src/core/types';
 
 const out = path.resolve(import.meta.dirname ?? __dirname, '../docs/guide');
@@ -133,13 +135,15 @@ function schema() {
             else if (field.kind === 'rows') {
               Object.assign(base, {
                 type: 'array',
-                items: { type: 'object', properties: Object.fromEntries(field.columns.map((column) => [column.key, { type: 'string', description: column.label }])) },
+                items: { type: 'object', additionalProperties: false, properties: Object.fromEntries(field.columns.map((column) => [column.key, { type: 'string', description: column.label }])) },
               });
             } else base.type = 'string';
             return [field.key, base];
           }),
         ),
         required: def.fields.filter((field) => field.required).map((field) => field.key),
+        // Unknown keys are refused on import (check.ts, config.key.unknown), so editors flag them too.
+        additionalProperties: false,
       },
       step: { $ref: '#/$defs/step' },
     },
@@ -166,7 +170,7 @@ function schema() {
         type: 'object',
         required: ['name', 'nodes', 'edges'],
         properties: {
-          schemaVersion: { const: 1 },
+          schemaVersion: { enum: [1, 2], description: 'Leave it out or use 2. Files with 1 are migrated on import.' },
           id: { type: 'string', description: 'Replaced on import.' },
           name: { type: 'string' },
           enabled: { type: 'boolean', description: 'Ignored on import: imported workflows are always off.' },
@@ -188,13 +192,15 @@ function schema() {
       },
       step: {
         type: 'object',
+        additionalProperties: false,
         properties: {
-          timeoutSeconds: { type: 'number', minimum: 1 },
+          timeoutSeconds: { type: 'number', exclusiveMinimum: 0 },
           retries: { type: 'integer', minimum: 0, maximum: 5 },
           onError: { enum: ['stop', 'continue', 'port'] },
           disabled: { type: 'boolean' },
           note: { type: 'string' },
           screenshot: { enum: ['error', 'always', 'never'] },
+          realInput: { type: 'boolean' },
         },
       },
     },
@@ -222,6 +228,8 @@ const files: Record<string, string> = {
   ].join('\n'),
   'blocks.json': `${JSON.stringify({ generatedBy: 'scripts/guide.ts', blocks: blocks.map(blockJson) }, null, 2)}\n`,
   'workflow.schema.json': `${JSON.stringify(schema(), null, 2)}\n`,
+  'script.schema.json': `${JSON.stringify(scriptSchema(registry), null, 2)}\n`,
+  ...reportSchemaFiles(),
 };
 
 const check = process.argv.includes('--check');
