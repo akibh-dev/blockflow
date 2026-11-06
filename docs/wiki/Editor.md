@@ -152,14 +152,14 @@ object to both the Sidebar and WorkflowsPage. All work by id and read `latest.cu
 | Action | Implementation |
 | --- | --- |
 | `onCreate` | `createWorkflow(uniqueName('Workflow N'))`, open it. |
-| `onCreateFromTemplate(text)` | `parseImport(text, existing)`; adds all workflows of the template, opens the **last** one. |
+| `onCreateFromTemplate(text)` | `parseImport(text, existing)`; adds all workflows of the template, opens the **last** one. A refused template (should not happen: `guideExamples.test.ts` checks them) shows its issues in an `issuesDialog`. |
 | `onToggle` | `setEnabledFor`: turning on is refused with an error toast (`whyNotOn`: `validateWorkflow` errors, or empty). Turning off always works. "Turn all on/off" (`setAllEnabled`) switches everything it can in one update and names the workflows left off in one toast. |
 | `onDuplicate` | `duplicateWorkflow` (core/library: new ids, "… copy", off), open it. |
 | `onExport(ids)` | `exportWorkflows` → `downloadText(fileNameFor(...))`. One file per click; exported workflows are always `enabled: false`. |
 | `onExportPlaywright(id)` | `workflowToPlaywright(workflow, { registry, lookup })` → `<name>.spec.ts`. `lookup` resolves Run Workflow targets. |
 | Export as script (header, not a `WorkflowActions` entry) | `activeScript = useMemo(decompile(active, registry))` ([script](Core-Modules.md#script)); the button is disabled with an explaining tooltip when it is `null`. `exportScript` → `downloadText(<name>.script.json, JSON)`. |
 | `onDelete` | `confirmDialog` (in-editor), then `deleteNow`. Deleting the last one leaves a new empty workflow; deleting the open one opens the first remaining. The background then clears its timers and `bf:state:<id>::*` ([Background Worker](Background-Worker.md)). |
-| `onImport(files)` | `readFiles` → `parseImport` per file (ids/names made unique against everything, including earlier files of the same import), error toast on failure, then add, open the first, switch to `manage`. |
+| `onImport(files)` | `readFiles` → `parseImport(text, existing, { secrets })` per file (ids/names made unique against everything, including earlier files of the same import; `secrets` = the names in `bf:secrets`, so `{{secret.x}}` with an unknown name is a warning). A refused file opens an [`issuesDialog`](Editor-Components.md#dialogs) titled "Cannot import <file name>" with every issue; the other files still import. Then add, open the first, switch to `manage`, and toast "Imported N workflows"; when there were warnings or notes the toast has a **Details** button that opens them in an `issuesDialog`. |
 
 The core side of these (`parseImport`, `uniqueName`, the export format) is in
 [Core Modules](Core-Modules.md).
@@ -282,8 +282,8 @@ every example imports cleanly. Adding a template = adding an example to `docs/gu
 | `fileNameFor(name)` | Slug + `.blockflow.json` (`workflow.blockflow.json` if the slug is empty). Callers `.replace('.blockflow.json', ...)` for other extensions. |
 | `readFiles(files)` | `FileList \| null` → texts, via `File.text()`. |
 
-The import format itself (`format`, `version`, `workflows`) is defined and validated in
-`src/core/library.ts`.
+The import format itself (`format`, `version`, `workflows`) is defined in `src/core/library.ts` and
+checked by `src/core/check.ts` ([Core Modules](Core-Modules.md#check)).
 
 ## Styling
 

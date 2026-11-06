@@ -67,9 +67,10 @@ against real Chromium.
 | [core/config.test.ts](../../tests/core/config.test.ts) | `withDefaults`, `resolveConfig`, `validateConfig` |
 | [core/validate.test.ts](../../tests/core/validate.test.ts) | `validateWorkflow` |
 | [core/workflow.test.ts](../../tests/core/workflow.test.ts) | `diffWorkflows`, `rootSignature`, `createWorkflow`, sample workflows, timer keys, `uid` |
-| [core/library.test.ts](../../tests/core/library.test.ts) | `uniqueName`, clone / duplicate, export / import |
+| [core/library.test.ts](../../tests/core/library.test.ts) | `uniqueName`, clone / duplicate, export / import (refusals carry `issues`) |
 | [core/migrate.test.ts](../../tests/core/migrate.test.ts) | v1 → v2 key renames (`selector`/`next` → `locator`), no-op on current workflows, old keys accepted on import |
 | [core/evals.test.ts](../../tests/core/evals.test.ts) | The authoring eval set ([tests/evals/tasks.json](../../tests/evals/tasks.json)) is well formed: ten tasks, known check kinds and block types, fixture pages that exist |
+| [core/check.test.ts](../../tests/core/check.test.ts) | `checkFile`: one fixture per issue code (level and JSON path), did-you-mean hints, the blocks' `validate` hooks (import and editor), `parseImport` with errors / warnings, `editDistance` / `closest` |
 | [core/expression.test.ts](../../tests/core/expression.test.ts) | Expression language and templates with expressions |
 | [core/template.test.ts](../../tests/core/template.test.ts) | `render`, `hasTemplate`, `getPath` |
 | [core/csv.test.ts](../../tests/core/csv.test.ts) | CSV parse / write |
@@ -77,7 +78,7 @@ against real Chromium.
 | [core/report.test.ts](../../tests/core/report.test.ts) | JUnit / HTML report generation from run records |
 | [core/recordingSchedule.test.ts](../../tests/core/recordingSchedule.test.ts) | Schedule parsing, recorded actions → blocks |
 | [core/playwright.test.ts](../../tests/core/playwright.test.ts) | Locators and whole workflows → Playwright test source |
-| [core/guideExamples.test.ts](../../tests/core/guideExamples.test.ts) | Every `docs/guide/examples/*.blockflow.json` imports with `parseImport` and has no validation errors (one test per file); each graph survives graph → `decompile` → `compileScript` unchanged, and each `*.script.json` compiles to the same graph and imports cleanly |
+| [core/guideExamples.test.ts](../../tests/core/guideExamples.test.ts) | Every `docs/guide/examples/*.blockflow.json`, and every complete JSON example in `docs/guide/README.md`, imports with `parseImport` with no issues at all (strict check) and no editor validation errors |
 | [core/script.test.ts](../../tests/core/script.test.ts) | Script format: aliases, shorthands, If rejoin, loop and error branches, ids, issue codes and JSON Pointer paths, several scripts per file, `parseImport` of scripts, `decompile` (and when it returns null) |
 | [core/layout.test.ts](../../tests/core/layout.test.ts) | Auto-layout: chains in one row, If and loop port order, joins, several starts, cycles, no overlaps on a random DAG |
 | [browser/hybridScheduler.test.ts](../../tests/browser/hybridScheduler.test.ts) | Timers ≥ 30 s (alarms), < 30 s (in-memory + keep-alive), clearing, worker restart, end to end with the engine. Uses local `FakeClock`, `FakeAlarms`, `MemoryTimerStore`. See [Scheduling and Timers](Scheduling-and-Timers.md) |
@@ -282,6 +283,7 @@ Scenarios by spec:
 | Repeat, Filter | none | Data Table → Filter → Repeat: `each` three times, then `done` |
 | Notify | none | The run passes and `chrome.notifications.getAll()` in the worker lists the notification |
 | Editor UX (`editor-ux`) | editor UI; `docs/manual-test/playground.html` via `scripts/playground.mjs` on port 7357 | In-editor toasts and confirm/input dialogs (no native ones), the All workflows switch and Turn all on with a problem workflow, `bf:state` cleanup on delete, recorder start-URL check, real-input setting only on page actions, undo per workflow, paste at the mouse, the Try it card and the playground template passing |
+| Import checking (`import-check`) | editor UI | Importing a broken file (unknown type, mistyped config key) opens the issues dialog with each code, JSON path and did-you-mean and imports nothing; a file with only warnings imports and its toast's Details lists `page.no-tab`; Escape closes the dialog |
 
 The Playwright export step writes `.output-e2e/playwright/exported.spec.ts` plus a config and runs it with
 `LOGINPASSWORD` set, so `@playwright/test` is a dev dependency only for this.

@@ -299,6 +299,19 @@ export interface BlockDefinition<C extends object = BlockConfig> {
   permissions?: ('debugger' | 'userScripts')[];
 
   /**
+   * Config keys that are not settings any more but are still read when present (old saved
+   * workflows), so strict validation (check.ts) does not call them unknown. E.g. Open Tab's `newTab`.
+   */
+  legacyKeys?: string[];
+
+  /**
+   * Rules that depend on several settings ("Element is required for this check"). Receives the
+   * config with defaults applied, not rendered. Used by import checking (check.ts, with a JSON path
+   * to `config/<key>`) and by the editor (validate.ts), so both report the same problems.
+   */
+  validate?(config: C): ConfigProblem[];
+
+  /**
    * Called when the workflow starts, for blocks that nothing else feeds ("root" blocks).
    * Long-running sources (timers, watchers) schedule themselves here. If a root block has
    * no `start`, its `run` is called once with an empty payload instead.
@@ -320,6 +333,14 @@ export interface BlockDefinition<C extends object = BlockConfig> {
 
   /** Called when a timer this block scheduled via ctx.timers.set fires. */
   onTimer?(ctx: BlockContext<C>, name: string, data: Payload | undefined): Promise<void> | void;
+}
+
+/** One problem found by `BlockDefinition.validate`: the setting it is about, a stable code, a sentence. */
+export interface ConfigProblem {
+  key: string;
+  /** An Issue code, usually `config.required` or `config.value`. */
+  code: string;
+  message: string;
 }
 
 /** What `run` returns: a payload (sent out of the first output), a routed payload, or nothing (stop). */

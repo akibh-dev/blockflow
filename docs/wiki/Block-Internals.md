@@ -30,6 +30,8 @@ side effects. The registry erases `C` (`AnyBlockDefinition`).
 | `ports?: string[]` | no | engine, editor handles, validation | Named outputs; default `['out']`. The engine appends `error` when `step.onError === 'port'` (`nodePorts()` in `ports.ts`). |
 | `timeoutSeconds?` | no | `stepTimeoutSeconds()` | Default step timeout for this block type; the engine default is 60 (`DEFAULT_TIMEOUT_SECONDS`). A node's `step.timeoutSeconds` overrides it. |
 | `permissions?` | no | `PermissionNote.tsx` | Optional browser permissions (`'debugger'`, `'userScripts'`) the editor offers to grant. |
+| `validate?(config)` | no | `check.ts` (import), `validate.ts` (editor) | Rules over several settings that `required` cannot express. Receives the config with defaults applied (not rendered) and returns `ConfigProblem[]` (`{ key, code, message }`, code usually `config.required`, or `config.value` / `config.url.invalid`). Import reports each at `.../config/<key>` and refuses the file; the editor shows the message on the block. Must not throw. In: Assert (element subjects need `locator`, `attribute` needs `name`), Wait For (element modes → `locator`, text modes → `text`, `url`/`response` → `url`), Upload File (`url` or `content` by `source`), Download (`dataset` or `value` by `from`), Read Element (`name` for attribute/has-class), Navigate (`url` for goto, valid when not templated), Schedule (`at` is HH:MM for `day`), Extract List / Extract Table (`html` in HTML mode, `validateSource`). |
+| `legacyKeys?` | no | `check.ts` | Config keys that are no longer settings but that `run` still reads from old workflows (Open Tab: `newTab`), so import does not call them unknown (`config.key.unknown`). Renamed keys go in `RENAMED_KEYS` (migrate.ts) instead. |
 | `start?(ctx)` | no | root blocks when a workflow is switched on | Schedule yourself here (timers), or just log (event-driven triggers). |
 | `trigger?(ctx)` | no | Run button / Run Workflow on a root | What a start block sends "right now". Return `null` to send nothing. |
 | `run?(ctx, input)` | no | every step | The normal path. Returns `RunOutput`. |
@@ -256,7 +258,12 @@ All data blocks use the 60 s default timeout and `out`.
 
 - **Renaming is breaking.** `type`, config keys and select option values are stored in users' workflows
   and exports. Add a new key with a default instead, and read old shapes in `run` (see Open Tab's
-  `newTab`).
+  `newTab`, listed in its `legacyKeys` so import accepts it), or rename through `RENAMED_KEYS` in
+  migrate.ts.
+- **Import rejects unknown config keys** (`config.key.unknown`). A key a block reads but does not declare
+  as a field must be in `legacyKeys`, or files using it will be refused.
+- **Rules between settings belong in `validate`**, not only in `run`: then import and the editor report
+  them before the run, with a path. Keep the `run` check too (it guards templated values).
 - **`defaultConfig` is merged shallowly.** A saved `rows` value replaces the default list entirely.
 - **Templated output is a string.** `{{count}}` renders to `"3"`. Compare numbers with If/Assert (which
   coerce) or compute with Transform.

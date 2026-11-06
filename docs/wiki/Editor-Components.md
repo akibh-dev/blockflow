@@ -333,9 +333,11 @@ call them (no context needed); `<DialogHost />` in `App.tsx` renders them.
 
 | Export | Does |
 | --- | --- |
-| `toast(message, kind = 'info')` | A note in the bottom right corner (`.bf-toast`, `role="status"`), newlines kept. `info` 5 s, `success` 4 s, `error` 9 s, or the × button. At most 5 at a time. |
+| `toast(message, kind = 'info', action?)` | A note in the bottom right corner (`.bf-toast`, `role="status"`), newlines kept. `info` 5 s, `success` 4 s, `error` 9 s (twice as long with an action), or the × button. At most 5 at a time. `action: { label, run }` adds a button (`.bf-toast-action`) that closes the toast and calls `run`, e.g. **Details** after an import with warnings. |
 | `confirmDialog({ title?, message, confirmLabel?, danger? })` | Modal (`.bf-modal`, `role="dialog"`); resolves `true` on the confirm button or Enter, `false` on Cancel, Escape or a click on the backdrop. `danger` makes the button red. |
 | `promptDialog({ title?, message, defaultValue?, placeholder?, confirmLabel?, validate? })` | Modal with one input (focused and selected); resolves the trimmed text, or `null` on cancel. `validate(value)` returns an error shown under the input (the dialog stays open) or `null`. |
+| `issuesDialog({ title?, message, issues })` | Wide modal (`.bf-modal-wide`) listing `Issue`s from [check.ts](../../src/core/check.ts) (`.bf-issues`, one `.bf-issue.<level>` row each: level, `.bf-issue-code`, `.bf-issue-path` (the JSON Pointer), message, `.bf-issue-hint`). Buttons: **Copy** (the list as text via `issuesText`, for pasting into an AI chat) and **Close** (also Enter, Escape, backdrop). Resolves when closed. Used by import and "New from template". |
+| `issuesText(issues)` | One line per issue: `<level> <code> at <path>: <message> <hint>`. |
 
 Several dialogs queue: the oldest is shown. While one is open the canvas shortcuts are ignored.
 

@@ -46,6 +46,8 @@ const STATES: Partial<Record<AssertSubject, { kind: ReadKind; wanted: string }>>
 
 /** Read kind for the comparing subjects (url/title/value are not read through the agent). */
 const READS: Partial<Record<AssertSubject, ReadKind>> = { text: 'text', input: 'value', attribute: 'attribute', count: 'count' };
+/** Subjects that do not look at an element (everything else needs `locator`). */
+const NO_ELEMENT: AssertSubject[] = ['value', 'url', 'title'];
 const RETRY_EVERY_MS = 250;
 /** One look at the page; the retries do the waiting. */
 const READ_MS = 300;
@@ -131,11 +133,19 @@ export const assertBlock: BlockDefinition<AssertConfig> = {
     tabField,
   ],
   summary: (config) => truncate(describe(config), 40),
+  validate: (config) => [
+    ...(!NO_ELEMENT.includes(config.subject) && !String(config.locator ?? '').trim()
+      ? [{ key: 'locator', code: 'config.required', message: `Element is required to check "${config.subject}"` }]
+      : []),
+    ...(config.subject === 'attribute' && !String(config.name ?? '').trim()
+      ? [{ key: 'name', code: 'config.required', message: 'Attribute name is required for "attribute of an element"' }]
+      : []),
+  ],
   outputs: [{ key: 'actual', description: 'What was found.' }],
 
   async run(ctx, input) {
     const { subject, locator } = ctx.config;
-    if (subject !== 'value' && subject !== 'url' && subject !== 'title' && !locator.trim()) {
+    if (!NO_ELEMENT.includes(subject) && !locator.trim()) {
       throw new Error('Element is required for this check');
     }
     if (subject === 'attribute' && !ctx.config.name.trim()) throw new Error('Attribute name is required');

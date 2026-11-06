@@ -58,7 +58,10 @@ describe('export / import', () => {
   });
 
   it('rejects junk with a readable error', () => {
-    expect(parseImport('nope', [])).toEqual({ ok: false, error: 'This file is not valid JSON.' });
+    const junk = parseImport('nope', []);
+    expect(junk.ok).toBe(false);
+    expect(!junk.ok && junk.error).toMatch(/^This file is not valid JSON: /);
+    expect(junk.issues.map((issue) => issue.code)).toEqual(['json.invalid']);
     expect(parseImport('{"a":1}', []).ok).toBe(false);
     expect(parseImport('{"nodes":[{"id":1}],"edges":[]}', []).ok).toBe(false);
     expect(parseImport('{"workflows":[]}', []).ok).toBe(false);
@@ -69,11 +72,14 @@ describe('export / import', () => {
     wf.edges.push({ id: 'x', source: 'a', target: 'ghost' });
     expect(parseImport(JSON.stringify(wf), [])).toEqual({
       ok: false,
-      error: `A connection in "${wf.name}" points at "ghost", which is not a block id.`,
+      error: 'A connection\'s target "ghost" is not a block id.',
+      issues: [{ level: 'error', code: 'edge.endpoint.missing', path: '/edges/1/target', message: 'A connection\'s target "ghost" is not a block id.', hint: 'Block ids: a, b.' }],
     });
     const twice = sample();
     twice.nodes.push({ ...twice.nodes[0]!, config: {} });
-    expect(parseImport(JSON.stringify(twice), [])).toEqual({ ok: false, error: `Two blocks in "${twice.name}" have the id "a".` });
+    const refused = parseImport(JSON.stringify(twice), []);
+    expect(!refused.ok && refused.error).toBe('Two blocks have the id "a".');
+    expect(refused.issues.map((issue) => [issue.code, issue.path])).toEqual([['node.id.duplicate', '/nodes/2/id']]);
     expect(parseImport(JSON.stringify({ ...sample(), edges: [{ source: 'a' }] }), []).ok).toBe(false);
   });
 

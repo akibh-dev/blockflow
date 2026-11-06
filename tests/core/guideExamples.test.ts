@@ -16,6 +16,9 @@ describe('docs/guide/examples', () => {
     it(file, () => {
       const result = parseImport(readFileSync(path.join(dir, file), 'utf8'), []);
       expect(result.ok, result.ok ? '' : result.error).toBe(true);
+      // Strict checking (check.ts): no errors, and no warnings either, so examples teach clean files.
+      // (secret.unknown needs the user's secret list, which is not passed here.)
+      expect(result.issues.map((issue) => `${issue.level} ${issue.code} ${issue.path}: ${issue.message}`)).toEqual([]);
       if (!result.ok) return;
       // Ports and step settings survive the import (If false, error outputs, retries…).
       const raw = JSON.parse(readFileSync(path.join(dir, file), 'utf8'));
@@ -63,6 +66,8 @@ describe('docs/guide/examples as scripts', () => {
       });
       const result = parseImport(text, []);
       expect(result.ok, result.ok ? '' : result.error).toBe(true);
+      // The same strict check as graph files, paths in the script: no warnings either.
+      expect(result.issues.map((issue) => `${issue.level} ${issue.code} ${issue.path}: ${issue.message}`)).toEqual([]);
       if (!result.ok) return;
       for (const workflow of result.workflows) {
         const errors = validateWorkflow(workflow, registry).filter((issue) => issue.level === 'error');
@@ -70,4 +75,18 @@ describe('docs/guide/examples as scripts', () => {
       }
     });
   }
+});
+
+describe('docs/guide/README.md', () => {
+  // Every ```json block that is a whole file (a workflow, an export or a script) must check clean too.
+  const readme = readFileSync(path.resolve(__dirname, '../../docs/guide/README.md'), 'utf8');
+  const blocks = [...readme.matchAll(/```json\n([\s\S]*?)```/g)].map((match) => match[1] ?? '').filter((text) => /^\s*\{\s*"(format|name|workflows)"/.test(text));
+  it('has at least one complete example', () => expect(blocks.length).toBeGreaterThan(0));
+  blocks.forEach((text, index) => {
+    it(`example ${index + 1} checks clean`, () => {
+      const result = parseImport(text, []);
+      expect(result.ok, result.ok ? '' : result.error).toBe(true);
+      expect(result.issues).toEqual([]);
+    });
+  });
 });

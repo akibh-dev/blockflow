@@ -173,6 +173,16 @@ An ordinary React app (React Flow for the canvas). The interesting file is `flow
 between the saved `Workflow` and React Flow's nodes/edges. Everything else is UI. If you know React you
 can already read this directory.
 
+Importing a file is the one place where outside data enters the extension, so it is checked like an API
+request body: think of `zod`'s `safeParse` returning issues with a `path`. `src/core/check.ts` walks the raw
+JSON and returns `Issue`s (`src/core/issues.ts`) with a stable `code`, a JSON Pointer `path` into the file
+and a "Did you mean …?" `hint` (`src/core/suggest.ts`, an edit distance). `parseImport` in `library.ts`
+refuses the file on any error, and the editor lists the issues in a dialog (`issuesDialog` in
+`components/Dialogs.tsx`). The extension-specific twist: the same rules must run in the editor, the
+importer and (later) a script compiler, all without the DOM, so they live in `src/core` and blocks
+declare their own cross-field rules in `validate(config)`. Try it: import a copy of
+`docs/guide/examples/login-test.blockflow.json` with `"locator"` misspelled and read the dialog.
+
 ## Project exercises (pick any, in rising difficulty)
 
 1. **Delay-free logger block**: already built (`log.ts`). Read it, then write a **Counter** block that

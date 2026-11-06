@@ -38,7 +38,11 @@
       ],
       "properties": {
         "schemaVersion": {
-          "const": 1
+          "enum": [
+            1,
+            2
+          ],
+          "description": "Leave it out or use 2. Files with 1 are migrated on import."
         },
         "id": {
           "type": "string",
@@ -90,6 +94,7 @@
                         "type": "array",
                         "items": {
                           "type": "object",
+                          "additionalProperties": false,
                           "properties": {
                             "name": {
                               "type": "string",
@@ -103,7 +108,8 @@
                         }
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -150,7 +156,8 @@
                         "type": "boolean"
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -216,7 +223,8 @@
                         "maximum": 1440
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -267,7 +275,8 @@
                     },
                     "required": [
                       "url"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -321,7 +330,8 @@
                     },
                     "required": [
                       "title"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -383,7 +393,8 @@
                     "required": [
                       "locator",
                       "url"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -452,7 +463,8 @@
                     },
                     "required": [
                       "url"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -515,7 +527,8 @@
                         ]
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -571,7 +584,8 @@
                     },
                     "required": [
                       "name"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -613,7 +627,8 @@
                         "type": "string"
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -674,7 +689,8 @@
                     },
                     "required": [
                       "locator"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -733,7 +749,8 @@
                     },
                     "required": [
                       "locator"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -775,6 +792,7 @@
                         "type": "array",
                         "items": {
                           "type": "object",
+                          "additionalProperties": false,
                           "properties": {
                             "locator": {
                               "type": "string",
@@ -798,7 +816,8 @@
                     },
                     "required": [
                       "fields"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -851,7 +870,8 @@
                     "required": [
                       "locator",
                       "value"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -906,7 +926,8 @@
                     },
                     "required": [
                       "locator"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -958,7 +979,8 @@
                     },
                     "required": [
                       "key"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1029,7 +1051,8 @@
                     },
                     "required": [
                       "locator"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1094,7 +1117,8 @@
                         "type": "string"
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1148,7 +1172,8 @@
                         "type": "string"
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1222,7 +1247,8 @@
                         "type": "string"
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1274,7 +1300,8 @@
                     },
                     "required": [
                       "code"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1345,7 +1372,8 @@
                     },
                     "required": [
                       "locator"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1391,6 +1419,7 @@
                         "type": "array",
                         "items": {
                           "type": "object",
+                          "additionalProperties": false,
                           "properties": {
                             "name": {
                               "type": "string",
@@ -1438,7 +1467,8 @@
                     },
                     "required": [
                       "locator"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1505,7 +1535,8 @@
                     },
                     "required": [
                       "locator"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1558,7 +1589,8 @@
                     },
                     "required": [
                       "locator"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1613,7 +1645,8 @@
                         "type": "string"
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1717,7 +1750,8 @@
                         "type": "string"
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1761,7 +1795,8 @@
                     },
                     "required": [
                       "message"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1810,7 +1845,8 @@
                         "type": "string"
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1876,7 +1912,8 @@
                         "type": "string"
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1924,7 +1961,8 @@
                     },
                     "required": [
                       "list"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -1968,7 +2006,8 @@
                         "maximum": 1000
                       }
                     },
-                    "required": []
+                    "required": [],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -2012,7 +2051,8 @@
                     },
                     "required": [
                       "workflow"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -2060,7 +2100,8 @@
                     },
                     "required": [
                       "name"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -2102,6 +2143,7 @@
                         "type": "array",
                         "items": {
                           "type": "object",
+                          "additionalProperties": false,
                           "properties": {
                             "name": {
                               "type": "string",
@@ -2117,7 +2159,8 @@
                     },
                     "required": [
                       "values"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -2193,7 +2236,8 @@
                     },
                     "required": [
                       "list"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -2241,7 +2285,8 @@
                     },
                     "required": [
                       "text"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -2297,7 +2342,8 @@
                     "required": [
                       "dataset",
                       "value"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -2364,7 +2410,8 @@
                     },
                     "required": [
                       "filename"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -2412,7 +2459,8 @@
                     },
                     "required": [
                       "title"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -2478,7 +2526,8 @@
                     },
                     "required": [
                       "url"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -2531,7 +2580,8 @@
                     },
                     "required": [
                       "message"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "step": {
                     "$ref": "#/$defs/step"
@@ -2572,10 +2622,11 @@
     },
     "step": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "timeoutSeconds": {
           "type": "number",
-          "minimum": 1
+          "exclusiveMinimum": 0
         },
         "retries": {
           "type": "integer",
@@ -2601,6 +2652,9 @@
             "always",
             "never"
           ]
+        },
+        "realInput": {
+          "type": "boolean"
         }
       }
     }

@@ -34,6 +34,7 @@ export const openUrlBlock: BlockDefinition<OpenUrlConfig> = {
   accent: '#3b82f6',
   defaultConfig: { url: '', where: 'new', tab: DEFAULT_TAB, active: true, waitUntil: 'load' },
   timeoutSeconds: 45,
+  legacyKeys: ['newTab'],
   fields: [
     {
       key: 'url',

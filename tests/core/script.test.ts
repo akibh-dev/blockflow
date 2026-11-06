@@ -175,9 +175,8 @@ describe('isScriptFile / parseImport', () => {
     const result = parseImport(JSON.stringify({ format: 'blockflow-script', version: 1, steps: [{ clik: 'x' }] }), []);
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain('/steps/0/clik');
-    expect(result.error).toContain('Did you mean "click"?');
-    expect(result.issues?.[0]?.code).toBe('node.type.unknown');
+    expect(result.error).toContain('Unknown block "clik"');
+    expect(result.issues[0]).toMatchObject({ code: 'node.type.unknown', path: '/steps/0/clik', hint: expect.stringContaining('Did you mean "click"?') });
   });
 
   it('Run Workflow can name another script of the file by id or name', () => {
@@ -260,5 +259,49 @@ describe('didYouMean', () => {
     expect(didYouMean('clcik', ['click', 'check'])).toBe('click');
     expect(didYouMean('xyz', ['click'])).toBeUndefined();
     expect(didYouMean('for_each', ['for-each'])).toBe('for-each');
+  });
+});
+
+describe('strict check of scripts (check.ts through parseImport)', () => {
+  const script = (steps: unknown[]) => JSON.stringify({ format: 'blockflow-script', version: 1, name: 'S', steps });
+  const issuesOf = (text: string) => {
+    const result = parseImport(text, []);
+    return result.issues.map((issue) => `${issue.level} ${issue.code} ${issue.path}`);
+  };
+
+  it('points config problems at the step\'s block key', () => {
+    expect(issuesOf(script([{ open: 'https://a.test' }, { click: { locater: 'text=Go' } }]))).toContain('error config.key.unknown /steps/1/click/locater');
+  });
+
+  it('points a bad shorthand value at the shorthand itself', () => {
+    expect(issuesOf(script([{ open: 'not a url' }]))).toContain('error config.url.invalid /steps/0/open');
+  });
+
+  it('points step settings and nested branches at the right step', () => {
+    const issues = issuesOf(
+      script([
+        { open: 'https://a.test' },
+        { if: { left: '1', operator: 'equals', right: '1' }, true: [{ click: 'text=A', step: { retrys: 2 } }] },
+      ]),
+    );
+    expect(issues).toContain('error step.key.unknown /steps/1/true/0/step/retrys');
+  });
+
+  it('uses /scripts/N paths in a file with several scripts, and knows called scripts get their tabs from the caller', () => {
+    const text = JSON.stringify({
+      format: 'blockflow-script',
+      version: 1,
+      scripts: [
+        { id: 'main', name: 'Main', steps: [{ open: 'https://a.test' }, { 'run-workflow': 'login' }] },
+        { id: 'login', name: 'Login', steps: [{ click: 'text=Sign in' }, { fill: { locator: 'label=Email', valeu: 'x' } }] },
+      ],
+    });
+    const issues = issuesOf(text);
+    expect(issues).toContain('error config.key.unknown /scripts/1/steps/1/fill/valeu');
+    expect(issues.filter((issue) => issue.includes('page.no-tab'))).toEqual([]);
+  });
+
+  it('warns about a page step with no tab, at that step', () => {
+    expect(issuesOf(script([{ click: 'text=Go' }]))).toContain('warning page.no-tab /steps/0');
   });
 });

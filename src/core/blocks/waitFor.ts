@@ -1,7 +1,7 @@
 import { requireSessionTab } from '../session';
 import { PAGE_ACCENT, PAGE_TIMEOUT_SECONDS, inPage, locatorField, pageWaitMs, tabField } from './pageCommon';
 import type { WaitState } from '../page';
-import type { BlockDefinition } from '../types';
+import type { BlockDefinition, ConfigProblem } from '../types';
 
 /** Agent wait states plus the modes handled by the host's tab APIs (url, load, networkidle, response). */
 export type WaitMode = WaitState | 'url' | 'load' | 'networkidle' | 'response';
@@ -72,6 +72,19 @@ export const waitForBlock: BlockDefinition<WaitForConfig> = {
     if (config.mode === 'text' || config.mode === 'no-text') return `${config.mode === 'text' ? '' : 'no '}text "${config.text}"`;
     if (config.mode === 'load' || config.mode === 'networkidle') return config.mode === 'load' ? 'page loaded' : 'network quiet';
     return `${config.mode}: ${config.locator || 'pick an element'}`;
+  },
+  validate: (config) => {
+    const problems: ConfigProblem[] = [];
+    if (NEEDS_ELEMENT.includes(config.mode) && !String(config.locator ?? '').trim()) {
+      problems.push({ key: 'locator', code: 'config.required', message: `Element is required for mode "${config.mode}"` });
+    }
+    if ((config.mode === 'text' || config.mode === 'no-text') && !String(config.text ?? '').trim()) {
+      problems.push({ key: 'text', code: 'config.required', message: `Text is required for mode "${config.mode}"` });
+    }
+    if ((config.mode === 'url' || config.mode === 'response') && !String(config.url ?? '').trim()) {
+      problems.push({ key: 'url', code: 'config.required', message: `URL pattern is required for mode "${config.mode}"` });
+    }
+    return problems;
   },
   outputs: [
     { key: 'url', description: "The tab's URL when the wait ended." },
