@@ -295,8 +295,8 @@ needed.
   2026-10-23), run `BF_BROWSER=/path/to/chromium npm run e2e`; Playwright's Chromium in
   `~/.cache/ms-playwright` is used automatically when nothing else is found.
 - Page actions use synthetic events (`isTrusted: false`) unless the step's **Use real mouse and keyboard**
-  is on (Chromium only, not inside cross-origin iframes). Closed shadow roots, drag and drop and file drop
-  zones are not supported. Run Script needs Chrome 135+ with user scripts allowed. Full list: the usage
+  is on (Chromium only, not inside cross-origin iframes). Closed shadow roots are not supported.
+  Run Script needs Chrome 135+ with user scripts allowed. Full list: the usage
   guide's [Limits](docs/guide/README.md#17-limits-what-a-browser-extension-cannot-do-or-blockflow-does-not-do-yet).
 - No "Resume" for an interrupted run yet, and If has one condition (several joined with and/or come later).
 

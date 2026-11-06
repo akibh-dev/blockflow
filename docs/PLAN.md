@@ -76,12 +76,12 @@ Nothing is proposed for removal at the feature level.
 | Locators by role/text/label/testid, chaining, nth, frames | `getBy*`, `locator()` | ✅ | — |
 | Locator filters: `has`, `hasText`, `hasNot`, `visible`, `or`/`and` | ✅ | ✅ `>> has-text=`, `has-not-text=`, `has=`, `has-not=`, `visible`, `\|\|` (no `and`) | **M2** done |
 | Role options `pressed`, `expanded`, `selected`, `disabled` | ✅ | ✅ also `pressed`, `expanded`, `selected`, `disabled` | **M2** done |
-| Click options: modifiers (Ctrl/Shift), position, middle button, click count | ✅ | 🟡 click/double/right/hover, force | **M2** |
-| `focus`, `blur`, `clear`, `dispatchEvent`, `scrollIntoView` | ✅ | ❌ (scroll to element exists) | **M2**: one "Element action" block or op per action |
-| Drag and drop | `dragTo` | ❌ | **M2**: synthetic HTML5 DnD in the agent, plus CDP mouse path with `realInput` |
+| Click options: modifiers (Ctrl/Shift), position, middle button, click count | ✅ | ✅ Click `button`, `modifiers`, `position`, `clickCount` | **M2** ✅ |
+| `focus`, `blur`, `clear`, `dispatchEvent`, `scrollIntoView` | ✅ | ✅ Element Action block | **M2** ✅ |
+| Drag and drop | `dragTo` | ✅ Drag block (synthetic HTML5 + pointer, CDP with `realInput`) | **M2** ✅ |
 | Keyboard shortcuts / chords, `insertText` | ✅ | ✅ chords in both input modes, `ControlOrMeta`, Press Key `mode: "text"` | **M2** done |
-| File upload | `setInputFiles` | ✅ text or URL | Add a "from dataset/previous download" source (M2) |
-| File chooser via drop zone | 🟡 | ❌ | **M2**: synthetic `drop` with a `DataTransfer` |
+| File upload | `setInputFiles` | ✅ text, URL or base64 data | **M2** ✅ (`source: data`) |
+| File chooser via drop zone | 🟡 | ✅ Upload File `target: dropzone` | **M2** ✅ |
 | Downloads: wait for, save, read name | `waitForEvent('download')` | ❌ (only our own Download block) | **M2**: Wait for Download (`downloads` API) giving `filename`, `url`, `size` |
 | Dialogs | ✅ | ✅ | — |
 | Popups / new pages | ✅ | ✅ | — |

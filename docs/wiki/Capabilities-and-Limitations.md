@@ -18,11 +18,13 @@ and Brave, using the optional `debugger` permission.
 | Closed shadow roots | ⛔ | the page hides them from everyone |
 | Locator filters (`has`, `has-text`, `visible`, or) | ❌ | planned |
 | Click, double, right, hover, fill, type key by key, select, check, press keys | ✅ | page blocks |
-| Click with modifiers or at a position | ❌ | planned |
+| Click with modifiers, any button, at a position, n clicks | ✅ | Click (`button`, `modifiers`, `position`, `clickCount`; real input too) |
+| Focus, blur, clear, scroll into view, dispatch an event | ✅ | Element Action |
 | Trusted (`isTrusted`) input | 🟡 | `realInput` step setting, Chromium only (also inside iframes) |
 | Record a task as blocks (also in iframes, web components and popups it opens) | ✅ | ● Record; continues an existing workflow after the selected block |
-| File upload through `<input type=file>` | ✅ | Upload File |
-| File drop zones, drag and drop | ❌ | planned |
+| File upload through `<input type=file>` | ✅ | Upload File: text, a URL, or base64 data (HTTP Request `responseType: base64`) |
+| File drop zones | ✅ | Upload File `target: dropzone` (synthetic drop with a DataTransfer) |
+| Drag and drop | ✅ | Drag: HTML5 (draggable) and pointer-event drags (sliders, sortables); with real input through CDP drag interception (Chromium) |
 | `alert` / `confirm` / `prompt` | ✅ | Dialogs |
 | Run your own JavaScript in the page | 🟡 | Run Script: Chrome 135+ with user scripts allowed |
 

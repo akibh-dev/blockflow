@@ -155,6 +155,9 @@ list), whereas templates always produce strings. See [Core Modules](Core-Modules
 | `WAIT_UNTIL_OPTIONS` | `openUrl.ts` | "Continue when" options of Open Tab, Navigate, Wait for Popup. |
 | `currentTabPayload(ctx)` | `pageVisited.ts` | `trigger` of Page Visited and Context Menu: the active web tab becomes `main`. |
 | `textToBase64(text)` | `uploadFile.ts` | UTF-8 safe base64 for Upload File's text source. |
+| `decodeFileData(text)` | `uploadFile.ts` | Upload File's `data` source: base64 (whitespace and URL-safe characters allowed) or a `data:` URL (base64 or percent-encoded) → `{base64, mime?}`; `config.invalid` otherwise. |
+| `parseModifiers`, `parsePosition`, `modifierProblems`, `positionProblems`, `modifiersOf`, `positionOf` | `pageCommon.ts` | Click and Drag: `"Control+Shift"` → `['Control', 'Shift']` (Ctrl, Cmd, Command, Option accepted), `"10,5"` → `{x, y}`; `validate` problems (`config.value`) and run-time values. |
+| `clickOptions(config)` | `click.ts` | The mouse fields of a `click` request, only those that differ from the defaults (old configs send the same request as before M2). Also used by the Playwright exporter. |
 
 ### `index.ts`
 
@@ -194,13 +197,15 @@ block's default step timeout (60 = engine default). Page ops are the `AgentReque
 
 | Block (`type`) | File | Page ops / host | Timeout | Implementation notes |
 | --- | --- | --- | --- | --- |
-| Click (`click`) | [click.ts](../../src/core/blocks/click.ts) | `click` | 30 | Logs "the page navigated" when the driver answers `navigated`. Pass-through. |
+| Click (`click`) | [click.ts](../../src/core/blocks/click.ts) | `click` | 30 | Logs "the page navigated" when the driver answers `navigated`. Pass-through. `action` is the quick choice and `button`, `modifiers`, `position`, `clickCount` refine it: `right` forces the right button (`validate` refuses `button: middle` with it), `double` means at least 2 presses, `hover` ignores button and count. |
+| Element Action (`element-action`) | [elementAction.ts](../../src/core/blocks/elementAction.ts) | `focus`, `blur`, `clear`, `scroll` (`to: element`), `dispatch` | 30 | `detail` is templated JSON (`parseDetail`, `config.invalid` when it does not parse; `validate` checks it when it has no `{{`). Dispatch adds `defaultPrevented`; the rest pass through. |
+| Drag (`drag`) | [drag.ts](../../src/core/blocks/drag.ts) | `drag` | 30 | `from` is sent as the request's `locator` (so errors and frames work as for other ops). Offers `realInput`. Adds `dragMode`; warns when an HTML5 target did not accept the drop. |
 | Fill (`fill`) | [fill.ts](../../src/core/blocks/fill.ts) | `fill` | 30 | Pass-through. |
 | Fill Form (`fill-form`) | [fillForm.ts](../../src/core/blocks/fillForm.ts) | `set-field` per row, then `click` | 30 | Rows with empty locator or value are skipped; a row's error is prefixed with its locator. All rows share one step timeout, but each `inPage` call gets the full `pageWaitMs`. |
 | Select Option (`select-option`) | [selectOption.ts](../../src/core/blocks/selectOption.ts) | `select` | 30 | `value` split on `|`. Adds `selected`. |
 | Check (`check`) | [check.ts](../../src/core/blocks/check.ts) | `check` | 30 | No-op when already in the wanted state (`result.changed`). |
 | Press Key (`press-key`) | [pressKey.ts](../../src/core/blocks/pressKey.ts) | `press`, or `insert-text` with `mode: "text"` | 30 | `locator` omitted from the request when blank. `mode` defaults to `key` (configs from before v0.4 have none); `text` is templated. |
-| Upload File (`upload-file`) | [uploadFile.ts](../../src/core/blocks/uploadFile.ts) | `upload`; `http.download` for URLs | 30 | Text source encoded with `textToBase64`. Adds `uploaded`. |
+| Upload File (`upload-file`) | [uploadFile.ts](../../src/core/blocks/uploadFile.ts) | `upload` (`dropzone: true` for `target: dropzone`); `http.download` for URLs | 30 | Text source encoded with `textToBase64`; `source: data` through `decodeFileData` (a data URL's MIME wins over `mime`; default name `upload.bin`). Adds `uploaded`. |
 | Scroll (`scroll`) | [scroll.ts](../../src/core/blocks/scroll.ts) | `scroll`; `host.sleep` | 120 | `to: 'end'` is block-only: repeats `scroll bottom` until `result.height` is unchanged twice or `maxScrolls`. Adds `scrolls`. |
 | Dialogs (`dialogs`) | [dialogs.ts](../../src/core/blocks/dialogs.ts) | `page.dialogs` (not the agent) | 15 | Installs handlers in the page's MAIN world; lasts until the page navigates. Adds `dialogs`, `lastDialog`. |
 | Wait For (`wait-for`) | [waitFor.ts](../../src/core/blocks/waitFor.ts) | `wait`; `tabs.waitForUrl`, `tabs.waitForResponse` (look-back 10 s), `tabs.waitForLoad`, `tabs.info` | 30 | `WaitMode` = agent `WaitState` + `url`/`load`/`networkidle`/`response` (host-side). Adds `url` (or `response`). |
@@ -253,7 +258,7 @@ All data blocks use the 60 s default timeout and `out`.
 | Block (`type`) | File | Host | Implementation notes |
 | --- | --- | --- | --- |
 | Notify (`notify`) | [notify.ts](../../src/core/blocks/notify.ts) | `notify` | Adds `notified: true`. |
-| HTTP Request (`http-request`) | [httpRequest.ts](../../src/core/blocks/httpRequest.ts) | `http.fetch` | Headers parsed from `Name: value` lines; body sent for every method but GET when non-empty. Non-2xx with `failOnError` returns `null` (the path ends, the step passes). Adds `url`, `status`, `ok`, `body`, and `data` when the body parses as JSON. |
+| HTTP Request (`http-request`) | [httpRequest.ts](../../src/core/blocks/httpRequest.ts) | `http.fetch` | Headers parsed from `Name: value` lines; body sent for every method but GET when non-empty. Non-2xx with `failOnError` returns `null` (the path ends, the step passes). Adds `url`, `status`, `ok`, `body`, and `data` when the body parses as JSON. `responseType: base64` asks the host for the body as base64 and adds `body64` and `mime` instead (`body` is empty, no `data`). |
 | Log (`log`) | [log.ts](../../src/core/blocks/log.ts) | none | Pass-through. |
 
 ## Gotchas

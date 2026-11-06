@@ -663,7 +663,7 @@
                   },
                   "config": {
                     "type": "object",
-                    "description": "Click (or double-click, right-click, hover) an element. Waits until it can be clicked.",
+                    "description": "Click (or double-click, right-click, hover) an element, with any button, modifier keys and position. Waits until it can be clicked.",
                     "properties": {
                       "locator": {
                         "description": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick.",
@@ -677,6 +677,28 @@
                           "right",
                           "hover"
                         ]
+                      },
+                      "button": {
+                        "description": "For \"click\". Right-click always uses the right button.",
+                        "enum": [
+                          "left",
+                          "middle",
+                          "right"
+                        ]
+                      },
+                      "modifiers": {
+                        "description": "Modifier keys held during the click: Alt, Control, Meta, Shift (joined with + or commas). Empty = none.",
+                        "type": "string"
+                      },
+                      "position": {
+                        "description": "Where to click: x,y in pixels from the element’s top-left corner. Empty = its center.",
+                        "type": "string"
+                      },
+                      "clickCount": {
+                        "description": "Presses in a row (3 = triple click, selects a paragraph). Double-click means at least 2.",
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 10
                       },
                       "force": {
                         "description": "Click even if the element looks hidden, disabled or covered. Only for stubborn pages.",
@@ -1009,6 +1031,139 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "drag"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Drag an element onto another one: sortable lists, kanban cards, sliders, drop targets.",
+                    "properties": {
+                      "from": {
+                        "description": "The element to pick up (a card, a list item, a slider handle).",
+                        "type": "string"
+                      },
+                      "to": {
+                        "description": "The element to drop it on (another item, a column, a spot on the slider track).",
+                        "type": "string"
+                      },
+                      "fromPosition": {
+                        "description": "x,y in pixels from the top-left corner of \"Drag this\". Empty = its center.",
+                        "type": "string"
+                      },
+                      "toPosition": {
+                        "description": "x,y in pixels from the top-left corner of \"Drop on\". Empty = its center.",
+                        "type": "string"
+                      },
+                      "modifiers": {
+                        "description": "Modifier keys held during the drag: Alt, Control, Meta, Shift.",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "from",
+                      "to"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "element-action"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Focus, blur, clear, scroll into view, or dispatch an event (click, input, a custom event) on an element.",
+                    "properties": {
+                      "locator": {
+                        "description": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick.",
+                        "type": "string"
+                      },
+                      "action": {
+                        "description": "Action",
+                        "enum": [
+                          "focus",
+                          "blur",
+                          "clear",
+                          "scroll-into-view",
+                          "dispatch-event"
+                        ]
+                      },
+                      "eventType": {
+                        "description": "For \"dispatch an event\". Bubbles, cancelable and composed.",
+                        "type": "string"
+                      },
+                      "detail": {
+                        "description": "For \"dispatch an event\". Built-in types (click, keydown, input, focus, drag…): the event’s properties. Other types are a CustomEvent and this is its event.detail.",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "locator"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "upload-file"
                   },
                   "position": {
@@ -1024,17 +1179,25 @@
                   },
                   "config": {
                     "type": "object",
-                    "description": "Choose a file for a file input, without the file dialog: text you write, or a file from a URL.",
+                    "description": "Choose a file for a file input or drop it on a drop zone, without the file dialog: text you write, a file from a URL, or base64 data.",
                     "properties": {
                       "locator": {
-                        "description": "The <input type=\"file\"> (hidden ones work too), or its label.",
+                        "description": "The <input type=\"file\"> (hidden ones work too) or its label; with \"drop zone\", the area files are dropped on.",
                         "type": "string"
+                      },
+                      "target": {
+                        "description": "Put it",
+                        "enum": [
+                          "input",
+                          "dropzone"
+                        ]
                       },
                       "source": {
                         "description": "File",
                         "enum": [
                           "text",
-                          "url"
+                          "url",
+                          "data"
                         ]
                       },
                       "content": {
@@ -1045,12 +1208,16 @@
                         "description": "For \"download\".",
                         "type": "string"
                       },
+                      "data": {
+                        "description": "For \"base64 data\": base64 or a data: URL, usually {{body64}} from HTTP Request with \"Response as: base64\".",
+                        "type": "string"
+                      },
                       "filename": {
                         "description": "Empty with a URL = the name in the URL.",
                         "type": "string"
                       },
                       "mime": {
-                        "description": "For \"text\". With a URL the server says.",
+                        "description": "For \"text\" and \"base64 data\" ({{mime}} after HTTP Request; a data: URL brings its own). With a URL the server says.",
                         "type": "string"
                       },
                       "tab": {
@@ -2720,6 +2887,13 @@
                       "failOnError": {
                         "description": "Stop the flow on HTTP errors (4xx, 5xx)",
                         "type": "boolean"
+                      },
+                      "responseType": {
+                        "description": "Response as",
+                        "enum": [
+                          "text",
+                          "base64"
+                        ]
                       }
                     },
                     "required": [

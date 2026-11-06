@@ -448,14 +448,20 @@ export interface HttpRequestOptions {
   method: string;
   headers: Record<string, string>;
   body?: string;
+  /** `base64`: answer the body as `base64` (binary files) instead of text. */
+  responseType?: 'text' | 'base64';
 }
 
 /** Response of `Host.http.fetch`. */
 export interface HttpResult {
   status: number;
   ok: boolean;
-  /** Response body as text, cut to a safe size. */
+  /** Response body as text, cut to a safe size ('' with `responseType: 'base64'`). */
   body: string;
+  /** With `responseType: 'base64'`: the whole body, base64. */
+  base64?: string;
+  /** The response's MIME type (Content-Type without parameters), when the server sent one. */
+  mime?: string;
 }
 
 /** A desktop notification. */

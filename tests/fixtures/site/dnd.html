@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Fixture: drag and drop</title>
+<style>
+  #list { list-style: none; padding: 0; width: 200px; }
+  #list li { padding: 8px; margin: 4px 0; background: #eef; border: 1px solid #99c; cursor: grab; }
+  #list li.over { background: #ccf; }
+  #track { position: relative; width: 200px; height: 20px; background: #ddd; margin: 30px 0; touch-action: none; }
+  #handle { position: absolute; left: 0; top: 0; width: 20px; height: 20px; margin-left: -10px; background: #339; border-radius: 50%; touch-action: none; }
+</style></head>
+<body>
+  <!-- An HTML5 sortable list: drop an item on another and it moves after it. -->
+  <ul id="list">
+    <li draggable="true" id="item-a">Apple</li>
+    <li draggable="true" id="item-b">Banana</li>
+    <li draggable="true" id="item-c">Cherry</li>
+  </ul>
+  <p id="order">Apple,Banana,Cherry</p>
+  <p id="dnd-log"></p>
+
+  <!-- A pointer-events slider (pointer capture on the handle, no HTML5 drag): 0 to 100. -->
+  <div id="track" aria-label="Volume"><div id="handle" role="slider" aria-label="Volume handle"></div></div>
+  <p id="value">0</p>
+  <p id="slider-trusted"></p>
+  <script>
+    const list = document.getElementById('list');
+    let dragged = null;
+    const order = () => { document.getElementById('order').textContent = [...list.children].map((li) => li.textContent).join(','); };
+    const note = (text) => { document.getElementById('dnd-log').textContent += `${text} `; };
+    for (const li of list.children) {
+      li.addEventListener('dragstart', (event) => {
+        dragged = li;
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', li.id);
+        note(`start:${event.isTrusted}`);
+      });
+      li.addEventListener('dragover', (event) => { event.preventDefault(); li.classList.add('over'); });
+      li.addEventListener('dragleave', () => li.classList.remove('over'));
+      li.addEventListener('drop', (event) => {
+        event.preventDefault();
+        li.classList.remove('over');
+        const id = event.dataTransfer.getData('text/plain');
+        const moving = document.getElementById(id);
+        if (moving && moving !== li) li.after(moving);
+        note(`drop:${id}`);
+        order();
+      });
+      li.addEventListener('dragend', () => { note('end'); dragged = null; });
+    }
+
+    const track = document.getElementById('track');
+    const handle = document.getElementById('handle');
+    const setFrom = (event) => {
+      const rect = track.getBoundingClientRect();
+      const value = Math.round(Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)) * 100);
+      handle.style.left = `${value}%`;
+      document.getElementById('value').textContent = String(value);
+    };
+    let sliding = false;
+    handle.addEventListener('pointerdown', (event) => {
+      sliding = true;
+      try { handle.setPointerCapture(event.pointerId); } catch {}
+      document.getElementById('slider-trusted').textContent = String(event.isTrusted);
+    });
+    handle.addEventListener('pointermove', (event) => { if (sliding) setFrom(event); });
+    handle.addEventListener('pointerup', (event) => { if (sliding) setFrom(event); sliding = false; });
+    handle.addEventListener('pointercancel', () => { sliding = false; });
+  </script>
+</body></html>

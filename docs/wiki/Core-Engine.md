@@ -77,7 +77,7 @@ Implemented by `src/browser/host.ts` ([Browser Host](Browser-Host.md)) and by
 | Member | Signature | Used by |
 | --- | --- | --- |
 | `sleep` | `(ms) => Promise<void>` | Step timeouts, retry backoff, screenshot race. |
-| `http.fetch` | `(HttpRequestOptions) => Promise<HttpResult>` | HTTP Request. Body is cut to a safe size. |
+| `http.fetch` | `(HttpRequestOptions) => Promise<HttpResult>` | HTTP Request. Body is cut to a safe size; `responseType: 'base64'` answers the whole body as `base64` (+ `mime`). |
 | `http.download` | `(url) => Promise<{ base64, mime, name }>` | Upload File from a URL. |
 | `notify` | `({ title, message }) => Promise<void>` | Notify. |
 | `tabs.open` | `(OpenTabOptions) => Promise<{ tabId }>` | Open Tab. Options: `url`, `newTab`, `active`, `reuseTabId?`, `newWindow?`, `waitUntil?` (default `none`), `timeoutMs?`. |

@@ -270,6 +270,11 @@ Scenarios by spec:
 | Phase E | `login.html`, `welcome.html`, `table.html` | Recorder → blocks and replay, Pick on page with alternatives, undo/redo/copy/paste, templates, `{{` autocomplete, Page Visited trigger |
 | **harder-pages** | | |
 | Phase F | `upload.html`, `popup.html`, `dialogs.html`, `/frames.html` + `frame-inner.html`, `api.html`, `trusted.html`, `login.html` | Upload File, Wait for Popup (`window.open`, `target=_blank`), Dialogs, same- and cross-origin iframes, Wait For response, real (trusted) input via debugger, background-tab screenshot, Run Script (passes or explains Chrome 135+), Playwright export run with `npx playwright test` |
+| **m2-actions** | | |
+| Click options | `clicks.html` | `button` middle (auxclick), `modifiers`, `position` (measured from the padding box, as Playwright), `clickCount` 3 (detail 1–3, dblclick), right-click; synthetic and real input (`isTrusted`, Chrome's own right-click order) |
+| Element Action | `clicks.html` | focus, clear (`change` with the empty value), blur, a CustomEvent with templated JSON `detail`, a built-in `click` with its init, scroll into view |
+| Drag | `dnd.html` | An HTML5 sortable list reorders and a pointer-capture slider moves to 75, synthetic (`dragMode` html5 / pointer) and with real input (CDP drag interception; trusted `dragstart` and `pointerdown`) |
+| Drop zone, upload from data | `upload.html` | Upload File `target: dropzone` (text, and a `data:` URL), HTTP Request `responseType: base64` → Upload File `source: data` with `{{body64}}` and `{{mime}}` |
 | **scripts** | | |
 | M1.2 | `table.html` + editor UI | Importing a `.script.json` through the Import button: blocks laid out (If rejoin), the run passes; Export as script enabled; Tidy up after a drag puts the blocks back on the grid, and Undo reverts it |
 | **blocks-coverage** | | |

@@ -1,4 +1,7 @@
+import { clickOptions } from './blocks/click';
+import { modifiersOf, parsePosition } from './blocks/pageCommon';
 import { nestedLocator, parseLocatorSteps, parseRoleSelector, roleState, splitAlternatives, unquoteValue, visibleFilter } from './locatorSyntax';
+import type { ClickConfig } from './blocks/click';
 import { runtimeSource } from './playwrightRuntime';
 import { edgePort, nodePorts } from './ports';
 import type { BlockRegistry } from './registry';
@@ -385,7 +388,51 @@ class Writer {
         break;
       case 'click': {
         const action = c.action === 'double' ? 'dblclick' : c.action === 'hover' ? 'hover' : 'click';
-        this.line(`await ${loc()}.${action}(${this.opt([c.action === 'right' ? "button: 'right'" : '', c.force ? 'force: true' : ''].filter(Boolean))});`);
+        const mouse = clickOptions({ ...c, action: c.action === 'right' ? 'click' : (c.action as ClickConfig['action']), button: c.action === 'right' ? 'right' : (c.button as ClickConfig['button']) });
+        const count = action === 'dblclick' ? 0 : (mouse.clickCount ?? 0);
+        this.line(
+          `await ${loc()}.${action}(${this.opt(
+            [
+              action !== 'hover' && mouse.button ? `button: '${mouse.button}'` : '',
+              mouse.modifiers ? `modifiers: ${JSON.stringify(mouse.modifiers)}` : '',
+              mouse.position ? `position: { x: ${mouse.position.x}, y: ${mouse.position.y} }` : '',
+              count > 1 ? `clickCount: ${count}` : '',
+              c.force ? 'force: true' : '',
+            ].filter(Boolean),
+          )});`,
+        );
+        break;
+      }
+      case 'element-action':
+        switch (c.action) {
+          case 'blur':
+            this.line(`await ${loc()}.blur(${this.opt()});`);
+            break;
+          case 'clear':
+            this.line(`await ${loc()}.clear(${this.opt()});`);
+            break;
+          case 'scroll-into-view':
+            this.line(`await ${loc()}.scrollIntoViewIfNeeded(${this.opt()});`);
+            break;
+          case 'dispatch-event': {
+            const detail = String(c.detail ?? '').trim() ? `JSON.parse(${template(c.detail)})` : 'undefined';
+            this.line(`data = { ...data, defaultPrevented: await dispatchEvent(${loc()}, ${js(String(c.eventType ?? '').trim())}, ${detail}) };`);
+            break;
+          }
+          default:
+            this.line(`await ${loc()}.focus(${this.opt()});`);
+        }
+        break;
+      case 'drag': {
+        const from = parsePosition(c.fromPosition);
+        const to = parsePosition(c.toPosition);
+        this.line(
+          `await ${loc('from')}.dragTo(${loc('to')}${this.optArg(
+            [from ? `sourcePosition: { x: ${from.x}, y: ${from.y} }` : '', to ? `targetPosition: { x: ${to.x}, y: ${to.y} }` : ''].filter(Boolean),
+          )});`,
+        );
+        if (modifiersOf(c.modifiers)) this.line('// BlockFlow: the drag held modifier keys; dragTo cannot, use page.keyboard.down/up around it.');
+        this.line("data = { ...data, dragMode: 'pointer' };");
         break;
       }
       case 'fill':
@@ -474,7 +521,9 @@ class Writer {
         break;
       case 'http-request':
         this.line(`{ const response = await request.fetch(${template(c.url)}, { method: ${js(c.method || 'GET')}${c.body ? `, data: ${template(c.body)}` : ''}${this.timeoutMs !== undefined ? `, timeout: ${this.timeoutMs}` : ''} });`);
-        this.line('  data = { ...data, status: response.status(), ok: response.ok(), body: await response.text() }; try { data.data = JSON.parse(data.body); } catch {} }');
+        if (c.responseType === 'base64') {
+          this.line("  data = { ...data, status: response.status(), ok: response.ok(), body: '', body64: (await response.body()).toString('base64'), mime: (response.headers()['content-type'] ?? '').split(';')[0]!.trim() }; }");
+        } else this.line('  data = { ...data, status: response.status(), ok: response.ok(), body: await response.text() }; try { data.data = JSON.parse(data.body); } catch {} }');
         break;
       case 'run-workflow': {
         const called = this.options.lookup?.(String(c.workflow));
@@ -499,8 +548,11 @@ class Writer {
         const file =
           c.source === 'url'
             ? `await fileFromUrl(request, ${template(c.url)}, ${template(c.filename)})`
-            : `{ name: ${template(String(c.filename ?? '').trim() || 'upload.txt')}, mimeType: ${js(String(c.mime ?? '').trim() || 'text/plain')}, buffer: Buffer.from(${template(c.content)}) }`;
-        this.line(`{ const file = ${file}; await ${loc()}.setInputFiles(file${this.optArg()}); data = { ...data, uploaded: file.name }; }`);
+            : c.source === 'data'
+              ? `fileFromData(${template(c.data)}, ${template(String(c.filename ?? '').trim() || 'upload.bin')}, ${template(String(c.mime ?? '').trim() || 'application/octet-stream')})`
+              : `{ name: ${template(String(c.filename ?? '').trim() || 'upload.txt')}, mimeType: ${template(String(c.mime ?? '').trim() || 'text/plain')}, buffer: Buffer.from(${template(c.content)}) }`;
+        const put = c.target === 'dropzone' ? `await dropFiles(${loc()}, file)` : `await ${loc()}.setInputFiles(file${this.optArg()})`;
+        this.line(`{ const file = ${file}; ${put}; data = { ...data, uploaded: file.name }; }`);
         break;
       }
       case 'wait-for-popup': {
@@ -830,6 +882,44 @@ async function fileFromUrl(request: APIRequestContext, url: string, name: string
   const fallback = decodeURIComponent(new URL(url).pathname.split('/').pop() || 'download');
   const mimeType = (response.headers()['content-type'] ?? 'application/octet-stream').split(';')[0]!.trim();
   return { name: name.trim() || fallback, mimeType, buffer: await response.body() };
+}
+
+/** Upload File from base64 data (or a data: URL), as BlockFlow's source "data". */
+function fileFromData(text: string, name: string, mimeType: string) {
+  const dataUrl = /^data:([^;,]*)((?:;[^;,]*)*),/i.exec(text.trim());
+  if (dataUrl && !/;base64/i.test(dataUrl[2] ?? '')) {
+    return { name, mimeType: dataUrl[1] || 'text/plain', buffer: Buffer.from(decodeURIComponent(text.trim().slice(dataUrl[0].length))) };
+  }
+  const base64 = dataUrl ? text.trim().slice(dataUrl[0].length) : text;
+  return { name, mimeType: dataUrl?.[1] || mimeType, buffer: Buffer.from(base64.replace(/\\s+/g, ''), 'base64') };
+}
+
+/** Upload File with target "dropzone": dragenter, dragover and drop with a DataTransfer carrying the file. */
+async function dropFiles(zone: Locator, file: { name: string; mimeType: string; buffer: Buffer }) {
+  await zone.evaluate(
+    (element: any, [name, type, base64]: string[]) => {
+      const binary = atob(base64!);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], name!, { type }));
+      for (const type of ['dragenter', 'dragover', 'drop']) {
+        element.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, composed: true, dataTransfer: transfer }));
+      }
+    },
+    [file.name, file.mimeType, file.buffer.toString('base64')],
+  );
+}
+
+/** Element Action "dispatch an event": Playwright's dispatchEvent for built-in types, a CustomEvent (with detail) otherwise. */
+async function dispatchEvent(target: Locator, type: string, detail?: unknown): Promise<boolean> {
+  if (/^(click|dblclick|auxclick|contextmenu|mouse|pointer|key|focus|blur|drag|drop|wheel|input|beforeinput|touch)/.test(type)) {
+    await target.dispatchEvent(type, detail && typeof detail === 'object' ? detail : {});
+    return false;
+  }
+  return target.evaluate(
+    (element: any, [type, detail]: any[]) => !element.dispatchEvent(new CustomEvent(type, { bubbles: true, cancelable: true, composed: true, detail: detail ?? null })),
+    [type, detail],
+  );
 }
 
 /** Sets any form field from text, like BlockFlow's Fill Form. */

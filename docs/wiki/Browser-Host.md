@@ -31,7 +31,7 @@ workflow timing goes through the scheduler.
 | `pageDriver.ts` | Sends requests to the page agent | `act`, `actInTab` | host, pageReader, picking |
 | `pageReader.ts` | Watch Element / Read Element with a URL | `readElement` | host |
 | `htmlParse.ts` | Agent on an HTML string | `actOnHtml`, `runOnHtml` | host, offscreen document |
-| `cdp.ts` | Real input and background screenshots via `debugger` | `withDebugger`, `mouseClick`, `pressKey`, `insertText`, `typeInto`, `captureWithDebugger`, `hasDebugger` | pageDriver, host |
+| `cdp.ts` | Real input and background screenshots via `debugger` | `withDebugger`, `mouseClick`, `mouseDrag`, `modifierMask`, `pressKey`, `insertText`, `typeInto`, `captureWithDebugger`, `hasDebugger` | pageDriver, host |
 | `popups.ts` | Tabs opened by pages | `recordPopup`, `waitForPopup` | background, host |
 | `prompts.ts` | Manual Step | `askUser`, `answerPrompt`, `promptRunId`, `clearStalePrompts`, `PendingPrompt` | host, background, editor |
 | `picking.ts` | Background side of the element picker and the editor's 📸 Snapshot page | `startPicking`, `finishPicking`, `cancelPicking`, `relayPickerSync`, `snapshotForEditor` | background |
@@ -46,7 +46,7 @@ workflow timing goes through the scheduler.
 | `Host` member | Implementation | APIs / permissions |
 | --- | --- | --- |
 | `sleep(ms)` | `tabs.ts` `sleep` (`setTimeout`) | none |
-| `http.fetch(opts)` | `fetch(url, {method, headers, body})`; returns `{status, ok, body}` with body cut to 200 000 chars | host permissions (`<all_urls>`) bypass CORS |
+| `http.fetch(opts)` | `fetch(url, {method, headers, body})`; returns `{status, ok, body, mime?}` with body cut to 200 000 chars. With `responseType: 'base64'`: `body: ''` and the whole body as `base64` (32 KB chunks, up to 20 MB) | host permissions (`<all_urls>`) bypass CORS |
 | `http.download(url)` | `fetch` → base64 in 32 KB chunks; `mime` from `content-type`, `name` from the URL path | same |
 | `notify({title, message})` | `notifications.create` basic, icon `/icon/128.png` | `notifications` |
 | `tabs.open(opts)` | `openTab`: reuse `reuseTabId` if it exists → else navigate the active tab when `newTab` is false → else `windows.create` (`newWindow`) or `tabs.create`. Then `addOwnTab`, `watchNetwork`, and if `waitUntil !== 'none'` sleep 100 ms and `waitForLoad`. | `tabs`, `webRequest` |
@@ -125,7 +125,7 @@ actInTab(tabId, request: AgentRequest, timeoutMs): Promise<Record<string, unknow
 | `error` | throw a `CodedError` with its message and `code` (default `step.failed`), the locator, `url` and `matches` (strict-mode violations, bad locators…) |
 | `pending` | remember `reason`, `code` and `url`, ask again immediately |
 | `frame` (`src`, `rest`, `offset?`) | `webNavigation.getAllFrames`, pick the frame whose URL equals `src` (or prefixes it), children of the current frame first, then continue with `locator: rest` in that `frameId`; `offset` is added up and added to a `locate` answer's `x`, `y` |
-| `vanished` | for actions (`click`, `fill`, `set-field`, `select`, `check`, `press`) return `{navigated: true}` (never repeat: it might submit twice); otherwise retry |
+| `vanished` | for actions (`click`, `fill`, `set-field`, `select`, `check`, `press`, `drag`, and `focus`, `blur`, `clear`, `dispatch`: the `ONCE` set) return `{navigated: true}` (never repeat: it might submit twice); otherwise retry |
 | executeScript threw | tab gone → "The tab was closed" (`tab.closed`); restricted page (`chrome://`, web store, missing host permission) → "The browser does not let extensions work on this page" (`page.restricted`, or `permission.missing` when the message is about a permission); else retry ("the page was busy loading") |
 
 4. Past the deadline: `CodedError` `Timed out after Ns: <last reason>`, with the last pending answer's code
@@ -135,8 +135,9 @@ actInTab(tabId, request: AgentRequest, timeoutMs): Promise<Record<string, unknow
 
 `actWithRealInput` (when `options.realInput` and the op is an action): asks the agent to `locate` the
 element (same auto-wait, returns `x`, `y` in the tab's viewport, frame offsets included, and `kind`), then drives it with `cdp.ts`:
-click/hover/right/double via `mouseClick`, fill via `typeInto`, check reads the state first and only clicks
-if it differs, press clicks then `pressKey`. `select` and non-text `set-field` fall back to the agent. A
+click/hover/right/double via `mouseClick` (with the request's `button`, `modifiers`, `clickCount`; `position`
+is passed to `locate`), fill via `typeInto`, check reads the state first and only clicks if it differs, press
+clicks then `pressKey`, drag locates the target too (`purpose: 'drop'`, `toPosition`) and calls `mouseDrag`. `select` and non-text `set-field` fall back to the agent. A
 `press` without a locator sends the key to whatever has focus.
 
 ## pageReader.ts
@@ -166,7 +167,8 @@ Firefox's build declares neither `debugger` nor `userScripts`.
 | --- | --- |
 | `hasDebugger()` | `permissions.contains({permissions: ['debugger']})`, false on error. |
 | `withDebugger(tabId, fn)` | Attach (protocol `1.3`; "already attached" is tolerated), run `fn(send)`, always detach. Attaching per action keeps Chrome's "started debugging this browser" bar short. |
-| `mouseClick(send, x, y, {button, clicks, hoverOnly})` | `Input.dispatchMouseEvent` move, then press/release per click. |
+| `mouseClick(send, x, y, {button, clicks, hoverOnly, modifiers})` | `Input.dispatchMouseEvent` move, then press/release per click (`clickCount` counts up, `buttons` set). `button`: left, middle, right; `modifiers` (Playwright names) become the CDP bit mask (`modifierMask`). |
+| `mouseDrag(tabId, from, to, {modifiers})` | A real drag, the way Playwright does it: move to `from`, press, `Input.setInterceptDrags({enabled: true})`, then 5 moves with the left button held. After each early move it waits up to 150 ms for `Input.dragIntercepted` (listened to with `debugger.onEvent` while attached): when the page started a native HTML5 drag, the rest is `Input.dispatchDragEvent` dragEnter/dragOver, then `drop` at `to` (Chrome sends dragend; no mouse release). Without one, it is a plain pointer drag ending in `mouseReleased`. Returns `'html5'` or `'pointer'`. |
 | `pressKey(send, combo)` | `"Control+a"`, `"Shift+Tab"`, `"Enter"`, `"Control+Shift+K"`, `"ControlOrMeta+A"` (Meta on a Mac), single characters. Modifier bits alt 1, ctrl 2, meta 4, shift 8. The modifier keys get their own `rawKeyDown` first and `keyUp` last (each with the bits held so far). Shift uppercases a letter. Sends `text` only without non-shift modifiers. |
 | `insertText(send, text)` | `Input.insertText` (Press Key `mode: "text"`; with a locator the driver clicks the element first). |
 | `typeInto(send, x, y, text)` | Click, Ctrl+A (`commands: ['selectAll']`), then `Input.insertText` (or Backspace for empty). |
@@ -268,6 +270,7 @@ Shapes and lifecycles: [Storage Keys](Storage-Keys.md).
 | Manual Step notification | Continue / Fail buttons | click = Continue | not verified |
 | Real input, background-tab screenshots (`debugger`) | optional permission | not available | not available |
 | Run Script (`userScripts.execute`) | Chrome 135+, optional permission + toggle | not available | not available |
+| Drag, drop zones (synthetic) | `new DataTransfer()` + `DragEvent` | same; CustomEvent `detail` objects go through `cloneInto` | not verified |
 | Host access | granted at install | must be granted in `about:addons` (README) | not verified |
 | `storage.session`, `webNavigation.onCreatedNavigationTarget` | yes | yes | not verified |
 

@@ -419,7 +419,7 @@ Chrome 135+) covers some of them.
 | --- | --- |
 | `locator.click()` / `dblclick()` / `click({ button: 'right' })` / `hover()` | **Click** `click`, `action`: `click` / `double` / `right` / `hover` |
 | `click({ force: true })` | **Click** `force: true` |
-| `click({ modifiers })`, `click({ position })`, middle button | no equivalent yet |
+| `click({ button, modifiers, position, clickCount })` | **Click** `button` (`left`/`middle`/`right`), `modifiers` (`"Control+Shift"`), `position` (`"x,y"`), `clickCount` |
 | `locator.fill(value)` | **Fill** `fill` |
 | `locator.pressSequentially(text)`, `keyboard.type` | **Fill** `mode: "type"` |
 | several `fill`s and a submit click | **Fill Form** `fill-form` (`fields`, `submit`) |
@@ -427,11 +427,13 @@ Chrome 135+) covers some of them.
 | `check()` / `uncheck()` / `setChecked()` | **Check** `check`, `state` |
 | `locator.press('Enter')`, `keyboard.press('Control+Shift+K')`, `'ControlOrMeta+A'` | **Press Key** `press-key` (`locator` optional) |
 | `keyboard.insertText(text)` | **Press Key** `mode: "text"`, `text` |
-| `setInputFiles` | **Upload File** `upload-file` (one file, from text or a URL) |
+| `setInputFiles` | **Upload File** `upload-file` (one file, from text, a URL or base64 `data`) |
+| a `drop` event with a DataTransfer (drop zones) | **Upload File** `target: "dropzone"` |
 | `page.on('dialog', d => d.accept())` | **Dialogs** `dialogs`, placed **before** the click that opens the dialog |
 | `scrollIntoViewIfNeeded()`, `mouse.wheel` | **Scroll** `scroll` (`to`: `element`, `end`, `bottom`, `top`) |
 | `page.evaluate(fn)` | **Run Script** `run-script` (Chrome 135+, needs the userScripts permission) |
-| `dragTo`, `focus`, `blur`, `clear`, `dispatchEvent` | no equivalent yet |
+| `locator.dragTo(target, { sourcePosition, targetPosition })` | **Drag** `drag` (`from`, `to`, `fromPosition`, `toPosition`) |
+| `focus()`, `blur()`, `clear()`, `scrollIntoViewIfNeeded()`, `dispatchEvent(type, init)` | **Element Action** `element-action`, `action`: `focus`, `blur`, `clear`, `scroll-into-view`, `dispatch-event` (`eventType`, `detail`) |
 | `isTrusted` input (Playwright's input is always trusted) | step setting `"realInput": true` (Chromium only) |
 
 ### Waiting
@@ -516,7 +518,12 @@ What it does:
   `context.newPage()`.
 - Dialogs → one `page.on('dialog')` handler per page that answers with the latest Dialogs choice and
   records what was shown (`read` returns `dialogs` / `lastDialog`). Upload File → `setInputFiles` with a
-  `Buffer` (text) or a file downloaded with `request.get` (URL). Wait for Popup → a page the site opened in
+  `Buffer` (text), a file downloaded with `request.get` (URL) or `fileFromData` (base64 / `data:` URL); with
+  `target: "dropzone"` → `dropFiles(zone, file)` (dragenter, dragover, drop with a DataTransfer in the page).
+  Click options → the same `click`/`dblclick`/`hover` options. Drag → `dragTo` (held modifiers become a
+  comment). Element Action → `focus`/`blur`/`clear`/`scrollIntoViewIfNeeded`, and `dispatchEvent(locator,
+  type, detail)`: Playwright's `dispatchEvent` for built-in types, a `CustomEvent` with `detail` otherwise.
+  HTTP Request `responseType: "base64"` → `body64` from `response.body()`. Wait for Popup → a page the site opened in
   the last 15 s, or `context.waitForEvent('page')`. Run Script → `page.evaluate(async (data) => { …your
   code… }, data)`. A Timer after another block → `page.waitForTimeout(ms)`.
 - Step settings: `timeoutSeconds` → `{ timeout }` on the action or expect; `retries` → `retry(n, …)` around

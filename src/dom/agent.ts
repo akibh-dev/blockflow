@@ -3,7 +3,7 @@ import { FrameBoundaryError, LocatorError, describeElement, resolveLocator, text
 import { bestLocator } from './bestLocator';
 import { takeSnapshot } from './snapshot';
 import { SNAPSHOT_MAX_LINES } from '../core/page';
-import type { AgentCall, AgentRequest, AgentResponse, FormFieldRow } from '../core/page';
+import type { AgentCall, AgentRequest, AgentResponse, FormFieldRow, Modifier, Point, UploadFile } from '../core/page';
 import type { ErrorCode } from '../core/errors';
 
 /**
@@ -46,6 +46,9 @@ class Fatal extends Error {
     super(message);
   }
 }
+
+/** What a click request says about the mouse. */
+type ClickOptions = Pick<Extract<AgentRequest, { op: 'click' }>, 'action' | 'button' | 'modifiers' | 'position' | 'clickCount'>;
 
 /** The `result` of a `done` answer. Must stay structured-cloneable: it goes back through `executeScript`. */
 type Done = Record<string, unknown>;
@@ -242,11 +245,22 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     metaKey: boolean;
   }
 
+  /** Modifier keys held during a mouse action, as event init flags. */
+  type ModifierFlags = Pick<MouseEventInit, 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'>;
+
+  function modifierFlags(modifiers: readonly Modifier[] = []): ModifierFlags {
+    return { altKey: modifiers.includes('Alt'), ctrlKey: modifiers.includes('Control'), metaKey: modifiers.includes('Meta'), shiftKey: modifiers.includes('Shift') };
+  }
+
+  /** `MouseEvent.buttons` bit of a `MouseEvent.button` (0 left -> 1, 2 right -> 2, 1 middle -> 4). */
+  const buttonBit = (button: number) => 1 << (button === 2 ? 1 : button === 1 ? 2 : 0);
+
   /**
    * Dispatches one synthetic pointer/mouse event (composed, so it crosses shadow boundaries).
    * Pointer events are skipped where `PointerEvent` does not exist. Returns false if it was cancelled.
+   * `buttons` defaults to the pressed button on *down events and none otherwise.
    */
-  function mouse(target: Element, type: string, x: number, y: number, button: number, detail: number): boolean {
+  function mouse(target: Element, type: string, x: number, y: number, button: number, detail: number, flags: ModifierFlags = {}, buttons?: number): boolean {
     const init: MouseEventInit = {
       bubbles: type !== 'mouseenter' && type !== 'mouseleave',
       cancelable: true,
@@ -254,8 +268,9 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       clientX: x,
       clientY: y,
       button,
-      buttons: type.endsWith('down') ? 1 << (button === 2 ? 1 : button === 1 ? 2 : 0) : 0,
+      buttons: buttons ?? (type.endsWith('down') ? buttonBit(button) : 0),
       detail,
+      ...flags,
     };
     const PointerCtor = (win as unknown as { PointerEvent?: typeof PointerEvent }).PointerEvent;
     if (type.startsWith('pointer') && PointerCtor) {
@@ -272,28 +287,41 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     if (typeof focusable.focus === 'function') focusable.focus();
   }
 
+  /** A point of the element in its document's viewport: `position` from its top-left corner, or its center. */
+  function pointIn(element: Element, position?: Point): { x: number; y: number } {
+    if (!position) return center(element);
+    // From the padding box's corner (inside the border), as Playwright's `position`.
+    const rect = element.getBoundingClientRect();
+    return { x: rect.left + element.clientLeft + position.x, y: rect.top + element.clientTop + position.y };
+  }
+
   /**
    * The full synthetic sequence: hover events, then per press pointerdown, mousedown (+ focus unless
-   * cancelled), pointerup, mouseup, click (or contextmenu); `dblclick` after two presses.
+   * cancelled), pointerup, mouseup, click (left), auxclick (middle) or contextmenu (right); `dblclick`
+   * after the second left press. `action: 'double'` is two presses, `'right'` the right button.
    */
-  function click(element: Element, action: 'click' | 'double' | 'right' | 'hover'): void {
-    const { x, y } = hasLayout() ? center(element) : { x: 0, y: 0 };
-    const button = action === 'right' ? 2 : 0;
+  function click(element: Element, request: ClickOptions): void {
+    const { action } = request;
+    const { x, y } = hasLayout() || request.position ? pointIn(element, request.position) : { x: 0, y: 0 };
+    const flags = modifierFlags(request.modifiers);
+    const which = action === 'right' ? 'right' : (request.button ?? 'left');
+    const button = which === 'right' ? 2 : which === 'middle' ? 1 : 0;
     for (const type of ['pointerover', 'pointerenter', 'mouseover', 'mouseenter', 'pointermove', 'mousemove']) {
-      mouse(element, type, x, y, 0, 0);
+      mouse(element, type, x, y, 0, 0, flags);
     }
     if (action === 'hover') return;
-    const presses = action === 'double' ? 2 : 1;
+    const presses = Math.max(action === 'double' ? 2 : 1, Math.floor(request.clickCount ?? 1));
     for (let press = 1; press <= presses; press += 1) {
-      mouse(element, 'pointerdown', x, y, button, press);
-      if (mouse(element, 'mousedown', x, y, button, press)) focus(element);
-      mouse(element, 'pointerup', x, y, button, press);
-      mouse(element, 'mouseup', x, y, button, press);
-      if (action === 'right') mouse(element, 'contextmenu', x, y, button, press);
+      mouse(element, 'pointerdown', x, y, button, press, flags);
+      if (mouse(element, 'mousedown', x, y, button, press, flags)) focus(element);
+      mouse(element, 'pointerup', x, y, button, press, flags);
+      mouse(element, 'mouseup', x, y, button, press, flags);
+      if (button === 2) mouse(element, 'contextmenu', x, y, button, press, flags);
+      else if (button === 1) mouse(element, 'auxclick', x, y, button, press, flags);
       // A dispatched click still runs the element's default action: follow a link, toggle a checkbox, submit a form.
-      else mouse(element, 'click', x, y, button, press);
+      else mouse(element, 'click', x, y, button, press, flags);
+      if (press === 2 && button === 0) mouse(element, 'dblclick', x, y, button, 2, flags);
     }
-    if (action === 'double') mouse(element, 'dblclick', x, y, button, 2);
   }
 
   function inputEvent(element: Element, data: string | null, inputType = 'insertText'): void {
@@ -416,7 +444,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     if (before === null) throw new Fatal(`${describeElement(element)} is not a checkbox, radio or switch`, 'element.wrong-type');
     if (before === checked) return { changed: false, checked };
     if (!checked && (element as HTMLInputElement).type === 'radio') throw new Fatal('A radio button cannot be unchecked; check another one instead', 'element.wrong-type');
-    click(element, 'click');
+    click(element, { action: 'click' });
     if (checkedState(element) !== checked) throw new Fatal(`Clicking ${describeElement(element)} did not ${checked ? 'check' : 'uncheck'} it`);
     return { changed: true, checked };
   }
@@ -823,30 +851,241 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return { height: scroller.scrollHeight, y: win.scrollY };
   }
 
+  /** The files of an upload request as `File`s of this window. */
+  function toFiles(files: UploadFile[]): File[] {
+    return files.map((file) => {
+      const binary = win.atob(file.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      return new win.File([bytes], file.name, { type: file.type });
+    });
+  }
+
   /**
    * Puts files on an `<input type=file>` through a DataTransfer. The locator may point at the input,
    * a label for it, or an element containing it. No visibility check: the input is often hidden.
    */
-  function upload(locator: string, files: { name: string; type: string; base64: string }[]): Done {
+  function upload(locator: string, files: UploadFile[]): Done {
     const found = one(locator);
     const input = (found.localName === 'input' ? found : (found as HTMLLabelElement).control ?? found.querySelector('input[type="file"]')) as HTMLInputElement | null;
     if (!input || input.localName !== 'input' || input.type !== 'file') {
-      throw new Fatal(`${describeElement(found)} is not a file input. Point at the <input type="file"> (it may be hidden).`, 'element.wrong-type');
+      throw new Fatal(`${describeElement(found)} is not a file input. Point at the <input type="file"> (it may be hidden), or set target to "dropzone" for a drop area.`, 'element.wrong-type');
     }
     if (!isEnabled(input)) throw new Pending(`waiting for ${describeElement(input)} to be enabled`, 'element.disabled');
     if (files.length > 1 && !input.multiple) throw new Fatal(`${describeElement(input)} takes one file, got ${files.length}`, 'element.wrong-type');
     if (typeof win.DataTransfer !== 'function') throw new Fatal('This page cannot receive files (no DataTransfer)');
     const transfer = new win.DataTransfer();
-    for (const file of files) {
-      const binary = win.atob(file.base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-      transfer.items.add(new win.File([bytes], file.name, { type: file.type }));
-    }
+    for (const file of toFiles(files)) transfer.items.add(file);
     input.files = transfer.files;
     inputEvent(input, null, 'insertReplacementText');
     changeEvent(input);
     return { files: files.map((file) => file.name) };
+  }
+
+  // --- drag and drop --------------------------------------------------------
+
+  /**
+   * A DataTransfer for synthetic drag events: the page's own class where it can be constructed (Chrome,
+   * Firefox), else a small stand-in with the same methods (jsdom, old engines). `files` are on it from the start.
+   */
+  function dataTransfer(files: File[] = []): DataTransfer {
+    if (typeof win.DataTransfer === 'function') {
+      try {
+        const transfer = new win.DataTransfer();
+        for (const file of files) transfer.items.add(file);
+        return transfer;
+      } catch {
+        // Fall through to the stand-in.
+      }
+    }
+    const data = new Map<string, string>();
+    const items = files.map((file) => ({ kind: 'file', type: file.type, getAsFile: () => file, getAsString: () => {} }));
+    const stand = {
+      dropEffect: 'none',
+      effectAllowed: 'all',
+      files: Object.assign([...files], { item: (index: number) => files[index] ?? null }),
+      items: Object.assign(items, { add: () => null, remove: () => {}, clear: () => {} }),
+      get types() {
+        return [...data.keys(), ...(files.length > 0 ? ['Files'] : [])];
+      },
+      setData: (format: string, value: string) => void data.set(format.toLowerCase(), String(value)),
+      getData: (format: string) => data.get(format.toLowerCase()) ?? '',
+      clearData: (format?: string) => (format ? void data.delete(format.toLowerCase()) : data.clear()),
+      setDragImage: () => {},
+    };
+    return stand as unknown as DataTransfer;
+  }
+
+  /** Dispatches one drag event carrying `transfer`; returns false when the page cancelled it. */
+  function dragEvent(target: Element, type: string, point: { x: number; y: number }, transfer: DataTransfer, flags: ModifierFlags = {}): boolean {
+    const init: DragEventInit = {
+      bubbles: true,
+      cancelable: type !== 'dragleave' && type !== 'dragend',
+      composed: true,
+      clientX: point.x,
+      clientY: point.y,
+      buttons: type === 'drop' || type === 'dragend' ? 0 : 1,
+      ...flags,
+      dataTransfer: transfer,
+    };
+    const DragCtor = (win as unknown as { DragEvent?: typeof DragEvent }).DragEvent;
+    let event: Event | undefined;
+    if (DragCtor) {
+      try {
+        event = new DragCtor(type, init);
+      } catch {
+        event = undefined;
+      }
+    }
+    if (!event || (event as DragEvent).dataTransfer !== transfer) {
+      event = new win.MouseEvent(type, init);
+      Object.defineProperty(event, 'dataTransfer', { value: transfer });
+    }
+    return target.dispatchEvent(event);
+  }
+
+  /** What a pointer at (x, y) would hit (deep, through open shadow roots), or `fallback` without layout. */
+  function hitAt(owner: Document, point: { x: number; y: number }, fallback: Element): Element {
+    if (!hasLayout() || typeof owner.elementFromPoint !== 'function') return fallback;
+    let hit = owner.elementFromPoint(point.x, point.y);
+    while (hit?.shadowRoot) {
+      const inner = hit.shadowRoot.elementFromPoint(point.x, point.y);
+      if (!inner || inner === hit) break;
+      hit = inner;
+    }
+    return hit ?? fallback;
+  }
+
+  /** The element an HTML5 drag starts from: a `draggable="true"` ancestor, or a link/image (draggable by default). */
+  function draggableOf(element: Element): Element | null {
+    const marked = element.closest('[draggable]');
+    if (marked && marked.getAttribute('draggable') !== 'false') return marked;
+    if (marked) return null;
+    return element.closest('a[href], img');
+  }
+
+  /** How many pointer moves a synthetic drag makes between source and target. */
+  const DRAG_STEPS = 5;
+
+  /**
+   * Drags `source` onto `target` with synthetic events (see the `drag` op in page.ts). In the pointer
+   * path, pointer events go to the source, as they would to an element that captured the pointer (what
+   * pointer-based drag code does; synthetic events cannot capture for real), and mouse events go to the
+   * element under the point, as a real mouse's do. Code listening on the document gets both either way.
+   */
+  function drag(source: Element, target: Element, request: Extract<AgentRequest, { op: 'drag' }>): Done {
+    const flags = modifierFlags(request.modifiers);
+    const from = pointIn(source, request.fromPosition);
+    const to = pointIn(target, request.toPosition);
+    const owner = source.ownerDocument;
+    for (const type of ['pointerover', 'pointerenter', 'mouseover', 'mouseenter', 'pointermove', 'mousemove']) mouse(source, type, from.x, from.y, 0, 0, flags);
+    mouse(source, 'pointerdown', from.x, from.y, 0, 1, flags);
+    mouse(source, 'mousedown', from.x, from.y, 0, 1, flags);
+    const draggable = draggableOf(source);
+    if (draggable) {
+      const transfer = dataTransfer();
+      if (dragEvent(draggable, 'dragstart', from, transfer, flags)) {
+        // From here the browser runs the drag: the pointer is cancelled and no mouse up follows.
+        mouse(source, 'pointercancel', from.x, from.y, 0, 0, flags, 0);
+        dragEvent(draggable, 'drag', from, transfer, flags);
+        const over = hitAt(target.ownerDocument, to, target);
+        dragEvent(over, 'dragenter', to, transfer, flags);
+        dragEvent(draggable, 'drag', to, transfer, flags);
+        // Cancelling dragover is how a page says "you may drop here".
+        const accepted = !dragEvent(over, 'dragover', to, transfer, flags);
+        if (accepted) {
+          if (transfer.dropEffect === 'none') {
+            const allowed = transfer.effectAllowed;
+            try {
+              transfer.dropEffect = /copy/i.test(allowed) && !/move|all/i.test(allowed) ? 'copy' : allowed === 'link' ? 'link' : 'move';
+            } catch {
+              // Read-only in some engines.
+            }
+          }
+          dragEvent(over, 'drop', to, transfer, flags);
+        } else dragEvent(over, 'dragleave', to, transfer, flags);
+        dragEvent(draggable, 'dragend', to, transfer, flags);
+        return { dragged: describeElement(source), to: describeElement(target), mode: 'html5', dropped: accepted };
+      }
+    }
+    // Pointer-based drag (sliders, sortables, canvases): moves with the button held, then release over the target.
+    for (let step = 1; step <= DRAG_STEPS; step += 1) {
+      const point = { x: from.x + ((to.x - from.x) * step) / DRAG_STEPS, y: from.y + ((to.y - from.y) * step) / DRAG_STEPS };
+      mouse(source, 'pointermove', point.x, point.y, 0, 0, flags, 1);
+      mouse(hitAt(owner, point, step === DRAG_STEPS ? target : source), 'mousemove', point.x, point.y, 0, 0, flags, 1);
+    }
+    mouse(source, 'pointerup', to.x, to.y, 0, 1, flags, 0);
+    mouse(hitAt(owner, to, target), 'mouseup', to.x, to.y, 0, 1, flags, 0);
+    return { dragged: describeElement(source), to: describeElement(target), mode: 'pointer', dropped: true };
+  }
+
+  /**
+   * Drops files on a drop zone: dragenter, dragover and (when the page accepts it by cancelling
+   * dragover) drop, all with one DataTransfer carrying the files.
+   */
+  function dropFiles(locator: string, files: UploadFile[]): Done {
+    const zone = one(locator);
+    ready(zone, {});
+    const transfer = dataTransfer(toFiles(files));
+    const point = pointIn(zone);
+    dragEvent(zone, 'dragenter', point, transfer);
+    if (dragEvent(zone, 'dragover', point, transfer)) {
+      dragEvent(zone, 'dragleave', point, transfer);
+      throw new Pending(`waiting for ${describeElement(zone)} to accept dropped files (nothing cancels its dragover event)`, 'element.wrong-type');
+    }
+    dragEvent(zone, 'drop', point, transfer);
+    return { files: files.map((file) => file.name), dropped: true };
+  }
+
+  // --- element actions ------------------------------------------------------
+
+  /** Event classes `dispatch` uses per type, like Playwright's `dispatchEvent`. Any other type is a CustomEvent. */
+  const EVENT_CLASSES: [RegExp, string][] = [
+    [/^(click|dblclick|auxclick|contextmenu|mouse(down|up|move|over|out|enter|leave))$/, 'MouseEvent'],
+    [/^pointer/, 'PointerEvent'],
+    [/^(keydown|keyup|keypress)$/, 'KeyboardEvent'],
+    [/^(focus|blur|focusin|focusout)$/, 'FocusEvent'],
+    [/^(drag|dragstart|dragend|dragenter|dragleave|dragover|drop)$/, 'DragEvent'],
+    [/^wheel$/, 'WheelEvent'],
+    [/^(input|beforeinput)$/, 'InputEvent'],
+    [/^touch/, 'TouchEvent'],
+  ];
+
+  function dispatch(element: Element, eventType: string, detail: unknown): Done {
+    const type = eventType.trim();
+    if (!type) throw new Fatal('Dispatch event needs an event type', 'config.invalid');
+    const base = { bubbles: true, cancelable: true, composed: true };
+    const className = EVENT_CLASSES.find(([pattern]) => pattern.test(type))?.[1];
+    const Ctor = className ? (win as unknown as Record<string, (new (type: string, init: object) => Event) | undefined>)[className] : undefined;
+    let event: Event;
+    if (className && Ctor) {
+      const init = detail && typeof detail === 'object' && !Array.isArray(detail) ? (detail as Record<string, unknown>) : {};
+      const transfer = className === 'DragEvent' ? dataTransfer() : undefined;
+      try {
+        event = new Ctor(type, { ...base, ...(transfer ? { dataTransfer: transfer } : {}), ...init });
+      } catch {
+        event = new win.Event(type, { ...base, ...init });
+      }
+    } else if (className) {
+      // The page's window lacks the class (jsdom has no DragEvent, PointerEvent...): a plain Event of that type.
+      event = new win.Event(type, base);
+    } else {
+      // Firefox content scripts must clone objects into the page, or the page cannot read them.
+      const cloneInto = (globalThis as { cloneInto?: (value: unknown, scope: object) => unknown }).cloneInto;
+      const shared = detail && typeof detail === 'object' && typeof cloneInto === 'function' ? cloneInto(detail, win) : detail;
+      event = new win.CustomEvent(type, { ...base, detail: shared ?? null });
+    }
+    const allowed = element.dispatchEvent(event);
+    return { dispatched: type, defaultPrevented: !allowed };
+  }
+
+  /** Empties a text field or contenteditable, like `fill('')`. */
+  function clear(element: Element): Done {
+    if (!textKind(element)) {
+      throw new Fatal(`${describeElement(element)} is not a text field or editable element, so it cannot be cleared`, 'element.wrong-type');
+    }
+    fill(element, '', 'fill');
+    return { value: '' };
   }
 
   /**
@@ -857,7 +1096,8 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   function locate(request: Extract<AgentRequest, { op: 'locate' }>): Done {
     const element = one(request.locator);
     const kind = element.localName === 'select' ? 'select' : checkedState(element) !== null ? 'check' : textKind(element) ? 'text' : 'other';
-    ready(element, { enabled: true, editable: request.purpose === 'fill' || (request.purpose === 'set-field' && kind === 'text'), hit: true });
+    if (request.purpose === 'drop') ready(element, {});
+    else ready(element, { enabled: true, editable: request.purpose === 'fill' || (request.purpose === 'set-field' && kind === 'text'), hit: true });
     // Same-origin frames around it must be on screen too.
     for (let owner = element.ownerDocument; owner !== doc; ) {
       const frame = owner.defaultView?.frameElement;
@@ -865,7 +1105,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       frameOffset(frame);
       owner = frame.ownerDocument;
     }
-    const { x, y } = center(element);
+    const { x, y } = pointIn(element, request.position);
     const origin = documentOrigin(element.ownerDocument);
     return { x: x + origin.x, y: y + origin.y, kind };
   }
@@ -916,7 +1156,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       case 'click': {
         const element = one(request.locator);
         if (!request.force) ready(element, { enabled: request.action !== 'hover', hit: true });
-        click(element, request.action);
+        click(element, request);
         return { clicked: describeElement(element), url: win.location.href };
       }
       case 'fill': {
@@ -977,7 +1217,33 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       case 'scroll':
         return scroll(request);
       case 'upload':
-        return upload(request.locator, request.files);
+        return request.dropzone ? dropFiles(request.locator, request.files) : upload(request.locator, request.files);
+      case 'focus': {
+        const element = one(request.locator);
+        ready(element, {});
+        focus(element);
+        return { focused: describeElement(element) };
+      }
+      case 'blur': {
+        const element = one(request.locator);
+        const active = element.ownerDocument.activeElement;
+        if (active && (active === element || element.contains(active))) (active as HTMLElement).blur?.();
+        return { blurred: describeElement(element) };
+      }
+      case 'clear': {
+        const element = one(request.locator);
+        ready(element, { enabled: true, editable: true });
+        return clear(element);
+      }
+      case 'dispatch':
+        return dispatch(one(request.locator), request.eventType, request.detail);
+      case 'drag': {
+        const source = one(request.locator);
+        const target = one(request.to);
+        ready(source, { hit: true });
+        ready(target, {});
+        return drag(source, target, request);
+      }
       case 'locate':
         return locate(request);
       case 'snapshot':

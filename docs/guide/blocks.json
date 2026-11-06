@@ -542,7 +542,7 @@
       "type": "click",
       "label": "Click",
       "category": "page",
-      "description": "Click (or double-click, right-click, hover) an element. Waits until it can be clicked.",
+      "description": "Click (or double-click, right-click, hover) an element, with any button, modifier keys and position. Waits until it can be clicked.",
       "canStart": true,
       "canTakeInput": true,
       "ports": [
@@ -554,7 +554,11 @@
         "tab": "main",
         "locator": "",
         "action": "click",
-        "force": false
+        "force": false,
+        "button": "left",
+        "modifiers": "",
+        "position": "",
+        "clickCount": 1
       },
       "fields": [
         {
@@ -575,6 +579,37 @@
             "right",
             "hover"
           ]
+        },
+        {
+          "key": "button",
+          "label": "Mouse button",
+          "kind": "select",
+          "options": [
+            "left",
+            "middle",
+            "right"
+          ],
+          "help": "For \"click\". Right-click always uses the right button."
+        },
+        {
+          "key": "modifiers",
+          "label": "Keys held",
+          "kind": "text",
+          "help": "Modifier keys held during the click: Alt, Control, Meta, Shift (joined with + or commas). Empty = none."
+        },
+        {
+          "key": "position",
+          "label": "Position",
+          "kind": "text",
+          "help": "Where to click: x,y in pixels from the element’s top-left corner. Empty = its center."
+        },
+        {
+          "key": "clickCount",
+          "label": "Click count",
+          "kind": "number",
+          "min": 1,
+          "max": 10,
+          "help": "Presses in a row (3 = triple click, selects a paragraph). Double-click means at least 2."
         },
         {
           "key": "force",
@@ -871,10 +906,153 @@
       ]
     },
     {
+      "type": "drag",
+      "label": "Drag",
+      "category": "page",
+      "description": "Drag an element onto another one: sortable lists, kanban cards, sliders, drop targets.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "realInput": true,
+      "defaultConfig": {
+        "tab": "main",
+        "from": "",
+        "to": "",
+        "fromPosition": "",
+        "toPosition": "",
+        "modifiers": ""
+      },
+      "fields": [
+        {
+          "key": "from",
+          "label": "Drag this",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "The element to pick up (a card, a list item, a slider handle)."
+        },
+        {
+          "key": "to",
+          "label": "Drop on",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "The element to drop it on (another item, a column, a spot on the slider track)."
+        },
+        {
+          "key": "fromPosition",
+          "label": "Grab at",
+          "kind": "text",
+          "help": "x,y in pixels from the top-left corner of \"Drag this\". Empty = its center."
+        },
+        {
+          "key": "toPosition",
+          "label": "Drop at",
+          "kind": "text",
+          "help": "x,y in pixels from the top-left corner of \"Drop on\". Empty = its center."
+        },
+        {
+          "key": "modifiers",
+          "label": "Keys held",
+          "kind": "text",
+          "help": "Modifier keys held during the drag: Alt, Control, Meta, Shift."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on."
+        },
+        {
+          "key": "dragMode",
+          "description": "\"html5\" (drag events) or \"pointer\" (pointer/mouse moves): how the page took the drag."
+        }
+      ]
+    },
+    {
+      "type": "element-action",
+      "label": "Element Action",
+      "category": "page",
+      "description": "Focus, blur, clear, scroll into view, or dispatch an event (click, input, a custom event) on an element.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "locator": "",
+        "action": "focus",
+        "eventType": "",
+        "detail": ""
+      },
+      "fields": [
+        {
+          "key": "locator",
+          "label": "Element",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick."
+        },
+        {
+          "key": "action",
+          "label": "Action",
+          "kind": "select",
+          "options": [
+            "focus",
+            "blur",
+            "clear",
+            "scroll-into-view",
+            "dispatch-event"
+          ]
+        },
+        {
+          "key": "eventType",
+          "label": "Event type",
+          "kind": "text",
+          "help": "For \"dispatch an event\". Bubbles, cancelable and composed."
+        },
+        {
+          "key": "detail",
+          "label": "Detail (JSON)",
+          "kind": "text",
+          "templated": true,
+          "help": "For \"dispatch an event\". Built-in types (click, keydown, input, focus, drag…): the event’s properties. Other types are a CustomEvent and this is its event.detail."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on."
+        },
+        {
+          "key": "defaultPrevented",
+          "description": "For \"dispatch an event\": true when the page cancelled the event."
+        }
+      ]
+    },
+    {
       "type": "upload-file",
       "label": "Upload File",
       "category": "page",
-      "description": "Choose a file for a file input, without the file dialog: text you write, or a file from a URL.",
+      "description": "Choose a file for a file input or drop it on a drop zone, without the file dialog: text you write, a file from a URL, or base64 data.",
       "canStart": true,
       "canTakeInput": true,
       "ports": [
@@ -887,17 +1065,28 @@
         "source": "text",
         "content": "",
         "url": "",
+        "data": "",
         "filename": "upload.txt",
-        "mime": "text/plain"
+        "mime": "text/plain",
+        "target": "input"
       },
       "fields": [
         {
           "key": "locator",
-          "label": "File input",
+          "label": "File input or drop zone",
           "kind": "locator",
           "required": true,
           "templated": true,
-          "help": "The <input type=\"file\"> (hidden ones work too), or its label."
+          "help": "The <input type=\"file\"> (hidden ones work too) or its label; with \"drop zone\", the area files are dropped on."
+        },
+        {
+          "key": "target",
+          "label": "Put it",
+          "kind": "select",
+          "options": [
+            "input",
+            "dropzone"
+          ]
         },
         {
           "key": "source",
@@ -905,7 +1094,8 @@
           "kind": "select",
           "options": [
             "text",
-            "url"
+            "url",
+            "data"
           ]
         },
         {
@@ -923,6 +1113,13 @@
           "help": "For \"download\"."
         },
         {
+          "key": "data",
+          "label": "Data",
+          "kind": "text",
+          "templated": true,
+          "help": "For \"base64 data\": base64 or a data: URL, usually {{body64}} from HTTP Request with \"Response as: base64\"."
+        },
+        {
           "key": "filename",
           "label": "File name",
           "kind": "text",
@@ -933,7 +1130,8 @@
           "key": "mime",
           "label": "Type",
           "kind": "text",
-          "help": "For \"text\". With a URL the server says."
+          "templated": true,
+          "help": "For \"text\" and \"base64 data\" ({{mime}} after HTTP Request; a data: URL brings its own). With a URL the server says."
         },
         {
           "key": "tab",
@@ -2488,7 +2686,8 @@
         "method": "GET",
         "headers": "",
         "body": "",
-        "failOnError": true
+        "failOnError": true,
+        "responseType": "text"
       },
       "fields": [
         {
@@ -2528,6 +2727,15 @@
           "key": "failOnError",
           "label": "Stop the flow on HTTP errors (4xx, 5xx)",
           "kind": "boolean"
+        },
+        {
+          "key": "responseType",
+          "label": "Response as",
+          "kind": "select",
+          "options": [
+            "text",
+            "base64"
+          ]
         }
       ],
       "outputs": [
@@ -2550,6 +2758,14 @@
         {
           "key": "data",
           "description": "Parsed JSON, when the body is JSON."
+        },
+        {
+          "key": "body64",
+          "description": "With \"Response as: base64\": the body, base64 (empty `body`). Upload File takes it as source \"data\"."
+        },
+        {
+          "key": "mime",
+          "description": "With \"Response as: base64\": the response's Content-Type without parameters (Upload File \"Type\": {{mime}})."
         }
       ]
     },
