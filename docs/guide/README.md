@@ -11,8 +11,9 @@ how to use BlockFlow** without reading the source code. Read it top to bottom on
 | --- | --- |
 | [`blocks.md`](blocks.md) | Every block: type id, settings (`config` keys), defaults, outputs. **Generated from the code.** |
 | [`blocks.json`](blocks.json) | The same, machine-readable. |
-| [`workflow.schema.json`](workflow.schema.json) | JSON Schema of an import file, with every block's config. |
-| [`examples/`](examples) | Importable workflow files. A test checks they import without errors. |
+| [`script.schema.json`](script.schema.json) | JSON Schema of a script file (the format to write): every block, alias, shorthand and branch key. |
+| [`workflow.schema.json`](workflow.schema.json) | JSON Schema of a graph file (what the editor exports), with every block's config. |
+| [`examples/`](examples) | Importable workflows, each as a script (`*.script.json`) and a graph (`*.blockflow.json`). A test checks both import without errors, to the same graph. |
 
 If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and `docs/ARCHITECTURE.md`.
 
@@ -20,8 +21,9 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
 
 ## Rules for AI tools generating workflows (read first)
 
-1. Output a JSON file in the **export format** (section 2). Users import it with **Import** in the
-   sidebar or the All workflows page. Imported workflows always arrive **off**, with new ids.
+1. Output a JSON file in the **script format** (next section). Users import it with **Import** in the
+   sidebar or the All workflows page. Imported workflows always arrive **off**, with new ids. (The graph
+   format of section 2 also imports; write it only when a script cannot express the workflow.)
 2. Block `type` values and `config` keys must come from [`blocks.md`](blocks.md). Unknown keys are
    ignored; unknown types are an error. Missing keys take the block's default.
 3. Every page block (Click, Fill, Fill Form, Select Option, Check, Press Key, Upload File, Scroll,
@@ -29,9 +31,9 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
    Table / Page Info / Paginate from a tab, Navigate, Wait for Popup, Close Tab) needs an **Open Tab**
    (`type: "open-url"`) **earlier on the same path**, with the same `tab` name (default `"main"`).
    (Page Visited and Context Menu start blocks also provide `main`.)
-4. Connect blocks with `edges`. A block with no incoming edge is a **start block**. Use
-   `sourcePort` only for blocks with several outputs: `"true"`/`"false"` on If, `"error"` when the
-   source has `step.onError: "port"`.
+4. Steps run in list order. Branches are lists under `true`/`false` (If), `each` (For Each, Repeat,
+   Paginate) and `onError` (any block). The step after an If runs after either branch; the step after a
+   loop runs once, when it is done. The first step is the **start block**.
 5. Prefer readable locators: `role=button[name="Sign in"]`, `label=Email`, `text=Welcome`,
    `testid=…`; fall back to CSS. A locator that matches two elements makes actions fail (strict).
 6. Put passwords and tokens in **secrets** (`{{secret.name}}`), never in the workflow. Tell the user
@@ -42,6 +44,53 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
 8. For tests, check results with **Assert**; for monitoring, with **If** + **Notify**.
 9. Values in templates are **strings**. Compare numbers with the numeric operators (`greater`,
    `less`…), which parse `1,250` and `$9.99`.
+
+---
+
+## Script format (write this)
+
+A workflow as a list of steps. Import compiles it into blocks and connections and lays them out.
+
+```json
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Login test",
+  "steps": [
+    { "open": "https://example.com/login" },
+    { "fill-form": {
+        "fields": [
+          { "locator": "label=Email", "value": "me@example.com" },
+          { "locator": "label=Password", "value": "{{secret.loginPassword}}" }
+        ],
+        "submit": "role=button[name=\"Sign in\"]" } },
+    { "id": "landed", "wait-for": { "mode": "url", "url": "/dashboard" }, "step": { "timeoutSeconds": 15 },
+      "onError": [ { "notify": { "title": "Login test failed", "message": "{{error}}" } } ] },
+    { "id": "greets", "assert": { "locator": "role=heading[level=1]", "expected": "Welcome" } }
+  ]
+}
+```
+
+- **A step** is `{ "<block>": settings }`: exactly one block key, a `type` from [`blocks.md`](blocks.md)
+  or an alias, whose value is the block's `config` (missing keys take the default). Optional: `id` (unique;
+  default `s<N>` for the Nth step from the top of the file), `step` (step settings, section 7) and branch
+  lists.
+- **Order and branches**: a step connects to the next one from `out` (loops: from `done`). Lists under
+  `each` (For Each, Repeat, Paginate: the loop body) and `onError` (any block: runs when it fails, and sets
+  `step.onError: "port"`) end where they end. **If rejoins**: the step after an If runs after the last
+  step of `true` or of `false`; a missing branch goes straight to it.
+- **Aliases**: `open` = `open-url`, `goto` = `navigate`, `press` = `press-key`, `select` = `select-option`.
+- **A bare value** instead of settings: `open-url`/`navigate` → `url`; `click`/`check`/`wait-for` →
+  `locator`; `press-key` → `key`; `log`/`notify` → `message`; `run-script` → `code`; `run-workflow` →
+  `workflow`; `for-each` → `list`; `repeat` → `times`. E.g. `{ "click": "text=Save" }`, `{ "repeat": 3,
+  "each": [ … ] }`.
+- **Several scripts**: `{ "format": "blockflow-script", "version": 1, "scripts": [ { "id": "login",
+  "name": "Log in", "steps": [ … ] }, … ] }`; Run Workflow names another script of the file by `id` or `name`.
+- Mistakes are refused at import with the step's JSON Pointer and a code, e.g. `/steps/1/clik: Unknown
+  block "clik". Did you mean "click"?` (`node.type.unknown`). All codes:
+  [Workflows as Scripts](../wiki/Workflows-as-Scripts.md#script-problems).
+
+The editor's **Export as script** turns a workflow back into this format when it is a tree of steps.
 
 ---
 
@@ -65,6 +114,8 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
   The mapping travels in the data as `$session` (do not set it by hand).
 
 ## 2. Workflow file format
+
+The graph format: what the editor saves and exports. Scripts (above) compile to it.
 
 ```json
 {
@@ -103,6 +154,7 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
   them; Run Workflow references between workflows in the same file are kept working. A file whose
   edges name a missing node id, or that repeats a node id, is refused with a message naming the id.
 - `position`: canvas coordinates; about 260 px apart left to right reads well. Branches: ±140 px in y.
+  Leave `position` out of every node and import lays the workflow out.
 - `step` (optional, per node): see section 7.
 - A single workflow object (without the `format` wrapper) also imports.
 - Validation the editor applies: required settings present, URLs valid (templates allowed), every
@@ -354,6 +406,9 @@ profile's extension storage.
 - `Timer → HTTP Request → Assert {{status}} equals 200 (onError: port) → Notify`: uptime check.
 
 ## 16. Examples
+
+Each example is in both formats: `<name>.script.json` (the script, start here) and `<name>.blockflow.json`
+(the graph, also the editor's templates). A test checks that both import to the same graph.
 
 | File | Shows |
 | --- | --- |

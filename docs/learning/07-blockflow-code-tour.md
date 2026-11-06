@@ -162,6 +162,10 @@ capture-phase listener per event type on `window`, deciding what each event mean
 - Frames: `FrameBoundaryError` in `src/dom/locator.ts` and how `pageDriver.ts` continues in another frame
   is the extension version of the same-origin policy you know from `postMessage` and iframes.
 - `src/core/playwright.ts` writes code from data: a small compiler. `npm run e2e` runs its output.
+- `src/core/script.ts` is a compiler in the other direction: a list of steps (`{ "click": "text=Save" }`)
+  becomes nodes and edges, and `decompile` turns a tree-shaped graph back into steps, checking itself by
+  compiling the result again. `src/core/layout.ts` then places the blocks (layered layout, the same idea
+  as Graphviz's `dot`). Plain functions over JSON, like a reducer: no extension APIs at all.
 
 ## 13. The editor: `src/entrypoints/editor/`
 

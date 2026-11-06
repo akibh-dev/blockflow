@@ -1,5 +1,8 @@
 import { uid } from './id';
+import type { Issue } from './issues';
+import { layoutWorkflow } from './layout';
 import { migrateNode } from './migrate';
+import { compileScriptFile, isScriptFile } from './script';
 import type { EdgeDef, NodeDef, StepSettings, Workflow } from './types';
 
 /**
@@ -65,7 +68,7 @@ export function exportWorkflows(workflows: Workflow[]): string {
 }
 
 /** Outcome of `parseImport`. */
-export type ImportResult = { ok: true; workflows: Workflow[] } | { ok: false; error: string };
+export type ImportResult = { ok: true; workflows: Workflow[]; issues?: Issue[] } | { ok: false; error: string; issues?: Issue[] };
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -101,6 +104,8 @@ export function parseImport(text: string, existing: Workflow[]): ImportResult {
   } catch {
     return { ok: false, error: 'This file is not valid JSON.' };
   }
+  // The script format (a list of steps) has its own reader: parseScriptImport below.
+  if (isScriptFile(data)) return parseScriptImport(data, existing);
 
   const rawList: unknown[] = isObject(data) && Array.isArray(data.workflows) ? data.workflows : [data];
   const taken = existing.map((workflow) => workflow.name);
@@ -136,7 +141,8 @@ export function parseImport(text: string, existing: Workflow[]): ImportResult {
     const name = uniqueName(typeof raw.name === 'string' ? raw.name : 'Imported workflow', taken);
     taken.push(name);
     const copy = cloneWorkflowFromParts(name, nodes as NodeDef[], edges);
-    imported.push(copy);
+    // A file written without positions (by hand, by an LLM) is laid out (layout.ts).
+    imported.push(raw.nodes.some((node) => isObject(node) && isObject(node.position)) ? copy : layoutWorkflow(copy));
   }
   if (imported.length === 0) return { ok: false, error: 'No workflows found in this file.' };
 
@@ -161,4 +167,39 @@ export function parseImport(text: string, existing: Workflow[]): ImportResult {
 /** `cloneWorkflow` over loose parts (fresh ids, disabled). */
 function cloneWorkflowFromParts(name: string, nodes: NodeDef[], edges: EdgeDef[]): Workflow {
   return cloneWorkflow({ schemaVersion: 2, id: '', name, enabled: false, nodes, edges }, name);
+}
+
+/**
+ * Import of a script file (script.ts): compiled, laid out, then given fresh ids and switched off like
+ * any import. Run Workflow blocks may name another script of the same file by its `id` or `name`.
+ * Script problems come back as `issues` with JSON Pointers into the file.
+ */
+function parseScriptImport(data: unknown, existing: Workflow[]): ImportResult {
+  const { scripts, issues } = compileScriptFile(data);
+  const errors = issues.filter((issue) => issue.level === 'error');
+  if (errors.length > 0) {
+    const lines = errors.slice(0, 3).map((issue) => `${issue.path || '/'}: ${issue.message}${issue.hint ? ` ${issue.hint}` : ''}`);
+    const more = errors.length > 3 ? ` (and ${errors.length - 3} more)` : '';
+    return { ok: false, error: `${lines.join(' ')}${more}`, issues };
+  }
+  const taken = existing.map((workflow) => workflow.name);
+  const newIds = new Map<string, string>();
+  const imported = scripts.map((script) => {
+    const compiled = script.workflow as Workflow;
+    const name = uniqueName(compiled.name, taken);
+    taken.push(name);
+    const copy = cloneWorkflow(compiled, name);
+    if (script.scriptId) newIds.set(script.scriptId, copy.id);
+    if (!newIds.has(compiled.name)) newIds.set(compiled.name, copy.id);
+    return copy;
+  });
+  for (const workflow of imported) {
+    for (const node of workflow.nodes) {
+      const called = node.config.workflow;
+      if (node.type === 'run-workflow' && typeof called === 'string' && newIds.has(called)) {
+        node.config = { ...node.config, workflow: newIds.get(called) };
+      }
+    }
+  }
+  return { ok: true, workflows: imported, issues };
 }

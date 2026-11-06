@@ -1,0 +1,57 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Data-driven login test",
+  "steps": [
+    {
+      "id": "data",
+      "data-table": {
+        "text": "email,password,expect\nadmin@example.com,USE_SECRET,Dashboard\nnobody@example.com,wrong,Wrong email or password"
+      }
+    },
+    {
+      "id": "each",
+      "for-each": {
+        "list": "rows",
+        "as": "row"
+      },
+      "each": [
+        {
+          "id": "open",
+          "open": {
+            "url": "https://example.com/login",
+            "where": "window"
+          }
+        },
+        {
+          "id": "form",
+          "fill-form": {
+            "fields": [
+              {
+                "locator": "label=Email",
+                "value": "{{row.email}}"
+              },
+              {
+                "locator": "label=Password",
+                "value": "{{ row.password == 'USE_SECRET' ? secret.adminPassword : row.password }}"
+              }
+            ],
+            "submit": "role=button[name=\"Sign in\"]"
+          }
+        },
+        {
+          "id": "see",
+          "assert": {
+            "locator": "body",
+            "expected": "{{row.expect}}",
+            "soft": true
+          }
+        },
+        {
+          "id": "close",
+          "close-tab": {}
+        }
+      ]
+    }
+  ]
+}

@@ -15,7 +15,7 @@ Everything saves automatically, a moment after each change. There is no Save but
 
 | Area | What is there |
 | --- | --- |
-| **Header** | The open workflow's name (click to rename), its **On/Off** switch, **● Record**, **↶ ↷** (undo, redo), **▶ Run** / **■ Stop**, the last run's result, a red **N problems** count, and the page tabs: **Canvas**, **All workflows (N)**, **Reports**, **Data**, **Secrets** |
+| **Header** | The open workflow's name (click to rename), its **On/Off** switch, **● Record**, **↶ ↷** (undo, redo), **Tidy up**, **Export as script**, **▶ Run** / **■ Stop**, the last run's result, a red **N problems** count, and the page tabs: **Canvas**, **All workflows (N)**, **Reports**, **Data**, **Secrets** |
 | **Sidebar** (left) | The workflow list and the block palette. Stays visible on every page |
 | **Canvas** (middle) | The blocks of the open workflow |
 | **Settings panel** (right) | The settings of the selected block. Canvas page only |
@@ -26,7 +26,7 @@ Everything saves automatically, a moment after each change. There is no Save but
 At the top of the sidebar, under **Workflows**:
 
 - **+ New ▾**: **Blank workflow**, or one from a template (see [Templates](#templates)).
-- **Import**: one or more `.blockflow.json` files.
+- **Import**: one or more files: scripts (`.script.json`) or graphs (`.blockflow.json`).
 - A **Search…** box appears once you have more than four workflows.
 - Each row: the **dot** switches the workflow On (green) or Off (grey); click the name to open it; double-click to
   rename. On hover: ✎ rename, ⧉ duplicate, ⬇ export to a file, 🎭 download as a Playwright test, 🗑 delete
@@ -166,6 +166,10 @@ Shortcuts work on the Canvas page, when you are not typing in a field. Cmd works
 | Delete / Backspace | Delete the selection |
 | Enter / Esc / ↑ ↓ | In the element picker: use / cancel / broader, narrower |
 
+**Tidy up** (header) lays the open workflow out in columns, left to right in the order data flows, with
+If's `true` above `false` and loop bodies above what comes after the loop. It is one undo step, so Ctrl+Z puts
+the blocks back where they were.
+
 Undo covers blocks, connections, positions and settings (quick changes in a row count as one step), up to 100
 steps. Each workflow has its own history, kept while you switch between workflows (until the editor tab is
 reloaded or closed).
@@ -220,9 +224,15 @@ unencrypted in the browser profile.
 
 - **Export** (⬇ in the sidebar, or All workflows → Export / Export all / Export selected) downloads a
   `.blockflow.json` file. Several workflows go in one file. Secrets are never included.
-- **Import** (sidebar or All workflows) reads one or more files, adds the workflows **Off** with new ids
-  (Run Workflow links within a file keep working), opens the first one and switches to All workflows.
-  A bad file is reported and skipped.
+- **Export as script** (header) downloads the open workflow as `<name>.script.json`, a list of steps that
+  is easier to read, diff and edit by hand or with an LLM. It is greyed out when the workflow cannot be
+  written as steps (more than one start block, an output connected to several blocks, joins other than
+  after an If); the button's tooltip says so.
+- **Import** (sidebar or All workflows) reads one or more files, scripts or graphs, adds the workflows
+  **Off** with new ids (Run Workflow links within a file keep working), opens the first one and switches to
+  All workflows. Scripts, and graph files without positions, are laid out automatically.
+  A bad file is reported and skipped; for a script the message names the step (`/steps/1/clik: Unknown
+  block "clik". Did you mean "click"?`).
 - The file format is documented for people and AI tools: [Workflows as Scripts](Workflows-as-Scripts.md),
   [usage guide §2](../guide/README.md#2-workflow-file-format).
 

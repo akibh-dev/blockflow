@@ -1,0 +1,38 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Dark mode on akibh.dev",
+  "steps": [
+    {
+      "id": "every",
+      "timer": {
+        "seconds": 120
+      }
+    },
+    {
+      "id": "theme",
+      "read-element": {
+        "url": "https://akibh.dev",
+        "locator": "html",
+        "read": "has-class",
+        "name": "dark"
+      }
+    },
+    {
+      "id": "flipped",
+      "if": {
+        "left": "{{changed}}",
+        "operator": "true"
+      },
+      "true": [
+        {
+          "id": "tell",
+          "notify": {
+            "title": "akibh.dev",
+            "message": "Dark mode is now {{value}}"
+          }
+        }
+      ]
+    }
+  ]
+}

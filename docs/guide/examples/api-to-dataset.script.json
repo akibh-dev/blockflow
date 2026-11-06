@@ -1,0 +1,63 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Daily API snapshot",
+  "steps": [
+    {
+      "id": "every",
+      "timer": {
+        "seconds": 86400
+      }
+    },
+    {
+      "id": "call",
+      "http-request": {
+        "url": "https://api.example.com/v1/orders?status=open",
+        "headers": "Authorization: Bearer {{secret.apiToken}}"
+      }
+    },
+    {
+      "id": "shape",
+      "transform": {
+        "values": [
+          {
+            "name": "open",
+            "expression": "len(data.orders)"
+          },
+          {
+            "name": "value",
+            "expression": "round(sum(pluck(data.orders, 'total')), 2)"
+          },
+          {
+            "name": "row",
+            "expression": "[today(), len(data.orders)]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "save",
+      "save-dataset": {
+        "dataset": "open-orders",
+        "value": "row"
+      }
+    },
+    {
+      "id": "big",
+      "if": {
+        "left": "{{open}}",
+        "operator": "greater",
+        "right": "100"
+      },
+      "true": [
+        {
+          "id": "tell",
+          "notify": {
+            "title": "Open orders",
+            "message": "{{open}} open orders worth {{value}}"
+          }
+        }
+      ]
+    }
+  ]
+}

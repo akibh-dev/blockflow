@@ -67,7 +67,7 @@ Opening a workflow (sidebar, table, a run in Reports) switches back to `canvas`.
 | `secrets` | `Record<string,string>` | `useStorageValue(bf:secrets)`, only for `{{` suggestions. |
 
 Refs (read inside stable callbacks without re-creating them): `latest` (= `workflows`), `activeIdRef`,
-`nodesRef`, `histories` (undo stacks by workflow id), `mouse` / `lastPasteAt` (for paste at the mouse). A
+`nodesRef`, `edgesRef`, `histories` (undo stacks by workflow id), `mouse` / `lastPasteAt` (for paste at the mouse). A
 module-level `clipboard` holds copied blocks, so they survive switching workflows (not page reloads).
 
 ### The edit loop
@@ -101,6 +101,10 @@ saved model) onto the active workflow's `past`, unless its last push was less th
 ago (one drag = one step). At most `HISTORY_LIMIT = 100` steps. `undo`/`redo` move snapshots between the
 stacks and call `showGraph`, which sets `restoring = true` so that change is not recorded again. Switching
 workflows keeps every history (in memory only, not across reloads); deleting a workflow drops its entry.
+
+**Tidy up** (`tidyUp`, header button) runs `layoutWorkflow(fromFlow(base, nodesRef.current, edgesRef.current),
+registry)` ([layout](Core-Modules.md#layout)) and sets the new positions with `setNodes`, then `fitView` on
+the next frame. Being an ordinary canvas change, it goes through the effect above and is one undo step.
 
 ### Keyboard shortcuts
 
@@ -153,6 +157,7 @@ object to both the Sidebar and WorkflowsPage. All work by id and read `latest.cu
 | `onDuplicate` | `duplicateWorkflow` (core/library: new ids, "… copy", off), open it. |
 | `onExport(ids)` | `exportWorkflows` → `downloadText(fileNameFor(...))`. One file per click; exported workflows are always `enabled: false`. |
 | `onExportPlaywright(id)` | `workflowToPlaywright(workflow, { registry, lookup })` → `<name>.spec.ts`. `lookup` resolves Run Workflow targets. |
+| Export as script (header, not a `WorkflowActions` entry) | `activeScript = useMemo(decompile(active, registry))` ([script](Core-Modules.md#script)); the button is disabled with an explaining tooltip when it is `null`. `exportScript` → `downloadText(<name>.script.json, JSON)`. |
 | `onDelete` | `confirmDialog` (in-editor), then `deleteNow`. Deleting the last one leaves a new empty workflow; deleting the open one opens the first remaining. The background then clears its timers and `bf:state:<id>::*` ([Background Worker](Background-Worker.md)). |
 | `onImport(files)` | `readFiles` → `parseImport` per file (ids/names made unique against everything, including earlier files of the same import), error toast on failure, then add, open the first, switch to `manage`. |
 

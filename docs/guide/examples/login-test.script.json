@@ -1,0 +1,56 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Login test",
+  "steps": [
+    {
+      "id": "open",
+      "open": {
+        "url": "https://example.com/login",
+        "where": "window"
+      }
+    },
+    {
+      "id": "form",
+      "fill-form": {
+        "fields": [
+          {
+            "locator": "label=Email",
+            "value": "me@example.com"
+          },
+          {
+            "locator": "label=Password",
+            "value": "{{secret.loginPassword}}"
+          }
+        ],
+        "submit": "role=button[name=\"Sign in\"]"
+      }
+    },
+    {
+      "id": "landed",
+      "wait-for": {
+        "mode": "url",
+        "url": "/dashboard"
+      },
+      "step": {
+        "timeoutSeconds": 15
+      },
+      "onError": [
+        {
+          "id": "broken",
+          "notify": {
+            "title": "Login test failed",
+            "message": "{{error}}"
+          }
+        }
+      ]
+    },
+    {
+      "id": "greets",
+      "assert": {
+        "locator": "role=heading[level=1]",
+        "expected": "Welcome"
+      }
+    }
+  ]
+}

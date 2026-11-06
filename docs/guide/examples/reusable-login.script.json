@@ -1,0 +1,71 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "scripts": [
+    {
+      "id": "reusable-login",
+      "name": "Log in (reusable)",
+      "steps": [
+        {
+          "id": "form",
+          "fill-form": {
+            "fields": [
+              {
+                "locator": "label=Email",
+                "value": "{{email}}"
+              },
+              {
+                "locator": "label=Password",
+                "value": "{{secret.loginPassword}}"
+              }
+            ],
+            "submit": "role=button[name=\"Sign in\"]"
+          }
+        },
+        {
+          "id": "in",
+          "wait-for": {
+            "mode": "url",
+            "url": "/dashboard"
+          }
+        }
+      ]
+    },
+    {
+      "id": "checkout-test",
+      "name": "Checkout test",
+      "steps": [
+        {
+          "id": "open",
+          "open": {
+            "url": "https://shop.example.com/login",
+            "where": "window"
+          }
+        },
+        {
+          "id": "who",
+          "set-variable": {
+            "name": "email",
+            "value": "buyer@example.com"
+          }
+        },
+        {
+          "id": "login",
+          "run-workflow": "reusable-login"
+        },
+        {
+          "id": "add",
+          "click": "role=button[name=\"Add to cart\"] >> nth=0"
+        },
+        {
+          "id": "cart",
+          "assert": {
+            "locator": "testid=cart-count",
+            "operator": "equals",
+            "expected": "1"
+          }
+        }
+      ]
+    }
+  ]
+}
