@@ -14,6 +14,9 @@ describe('docs/guide/examples', () => {
     it(file, () => {
       const result = parseImport(readFileSync(path.join(dir, file), 'utf8'), []);
       expect(result.ok, result.ok ? '' : result.error).toBe(true);
+      // Strict checking (check.ts): no errors, and no warnings either, so examples teach clean files.
+      // (secret.unknown needs the user's secret list, which is not passed here.)
+      expect(result.issues.map((issue) => `${issue.level} ${issue.code} ${issue.path}: ${issue.message}`)).toEqual([]);
       if (!result.ok) return;
       // Ports and step settings survive the import (If false, error outputs, retries…).
       const raw = JSON.parse(readFileSync(path.join(dir, file), 'utf8'));
@@ -29,4 +32,18 @@ describe('docs/guide/examples', () => {
       }
     });
   }
+});
+
+describe('docs/guide/README.md', () => {
+  // Every ```json block that is a whole file (has "nodes" or "workflows") must check clean too.
+  const readme = readFileSync(path.resolve(__dirname, '../../docs/guide/README.md'), 'utf8');
+  const blocks = [...readme.matchAll(/```json\n([\s\S]*?)```/g)].map((match) => match[1] ?? '').filter((text) => /^\s*\{\s*"(format|name|workflows)"/.test(text));
+  it('has at least one complete example', () => expect(blocks.length).toBeGreaterThan(0));
+  blocks.forEach((text, index) => {
+    it(`example ${index + 1} checks clean`, () => {
+      const result = parseImport(text, []);
+      expect(result.ok, result.ok ? '' : result.error).toBe(true);
+      expect(result.issues).toEqual([]);
+    });
+  });
 });

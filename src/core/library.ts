@@ -1,12 +1,15 @@
+import { createDefaultRegistry } from './blocks';
+import { EXPORT_FORMAT, checkFile, parseJson } from './check';
 import { uid } from './id';
+import { hasErrors } from './issues';
 import { migrateNode } from './migrate';
+import type { Issue } from './issues';
+import type { BlockRegistry } from './registry';
 import type { EdgeDef, NodeDef, StepSettings, Workflow } from './types';
 
 /**
  * Managing a collection of workflows: copy, export, import. Pure functions, no browser APIs.
  */
-
-const EXPORT_FORMAT = 'blockflow-workflows';
 
 /** "Foo" → "Foo", or "Foo 2", "Foo 3"… when the name is taken. */
 export function uniqueName(wanted: string, taken: string[]): string {
@@ -64,20 +67,40 @@ export function exportWorkflows(workflows: Workflow[]): string {
   );
 }
 
-/** Outcome of `parseImport`. */
-export type ImportResult = { ok: true; workflows: Workflow[] } | { ok: false; error: string };
+/**
+ * Outcome of `parseImport`. `issues` (check.ts) come with both: on success only warnings and info
+ * (the editor shows them in a banner), on failure at least one error. `error` sums up the errors.
+ */
+export type ImportResult = { ok: true; workflows: Workflow[]; issues: Issue[] } | { ok: false; error: string; issues: Issue[] };
+
+/** What `parseImport` may know besides the existing workflows. */
+export interface ImportOptions {
+  /** Block types to check against. Default: every built-in block. */
+  registry?: BlockRegistry;
+  /** Names of the user's secrets; when given, unknown `{{secret.x}}` names are warnings. */
+  secrets?: Iterable<string>;
+}
+
+/** The built-in registry, made on first import. */
+let builtIn: BlockRegistry | undefined;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** A node from untrusted JSON, or null when it has no string id/type. */
-function readNode(raw: unknown): NodeDef | null {
-  if (!isObject(raw) || typeof raw.id !== 'string' || typeof raw.type !== 'string') return null;
+/** A refused import: the first error as `error`, with a count of the others. */
+function refuse(issues: Issue[]): ImportResult {
+  const errors = issues.filter((issue) => issue.level === 'error');
+  const more = errors.length > 1 ? ` (and ${errors.length - 1} more problem${errors.length === 2 ? '' : 's'})` : '';
+  return { ok: false, error: `${errors[0]?.message ?? 'This file cannot be imported.'}${more}`, issues };
+}
+
+/** A node of a checked file (checkFile verified the shape). */
+function readNode(raw: Record<string, unknown>): NodeDef {
   const position = isObject(raw.position) ? raw.position : {};
   const node: NodeDef = {
-    id: raw.id,
-    type: raw.type,
+    id: raw.id as string,
+    type: raw.type as string,
     position: {
       x: typeof position.x === 'number' ? position.x : 0,
       y: typeof position.y === 'number' ? position.y : 0,
@@ -86,76 +109,59 @@ function readNode(raw: unknown): NodeDef | null {
   };
   if (isObject(raw.step)) node.step = raw.step as StepSettings;
   // The author's id, kept through the fresh-id clone (see NodeDef.origin).
-  node.origin = raw.id;
+  node.origin = raw.id as string;
   return node;
 }
 
 /**
- * Reads an export file (or a single bare workflow). Imported workflows get new ids and are
- * switched off, so importing can never start something by surprise or overwrite a workflow.
+ * Reads an export file (or a single bare workflow). The file is checked first (check.ts): any error
+ * refuses the whole file. Imported workflows get new ids and are switched off, so importing can never
+ * start something by surprise or overwrite a workflow.
  */
-export function parseImport(text: string, existing: Workflow[]): ImportResult {
-  let data: unknown;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    return { ok: false, error: 'This file is not valid JSON.' };
-  }
+export function parseImport(text: string, existing: Workflow[], options: ImportOptions = {}): ImportResult {
+  const parsed = parseJson(text);
+  if (!parsed.ok) return refuse(parsed.issues);
+  const data = parsed.data;
 
-  const rawList: unknown[] = isObject(data) && Array.isArray(data.workflows) ? data.workflows : [data];
+  builtIn ??= createDefaultRegistry();
+  const issues = checkFile(data, options.registry ?? builtIn, {
+    workflowIds: existing.map((workflow) => workflow.id),
+    ...(options.secrets ? { secrets: options.secrets } : {}),
+  });
+  if (hasErrors(issues)) return refuse(issues);
+
+  const rawList = (isObject(data) && Array.isArray(data.workflows) ? data.workflows : [data]) as Record<string, unknown>[];
   const taken = existing.map((workflow) => workflow.name);
   const imported: Workflow[] = [];
 
   for (const raw of rawList) {
-    if (!isObject(raw) || !Array.isArray(raw.nodes) || !Array.isArray(raw.edges)) {
-      return { ok: false, error: 'This file does not look like a BlockFlow workflow.' };
-    }
     // Old key names (v1 files, or a script written from older docs) are accepted and moved (migrate.ts).
-    const nodes = raw.nodes.map(readNode).map((node) => node && migrateNode(node));
-    if (nodes.some((node) => node === null)) {
-      return { ok: false, error: 'A block in this file is malformed.' };
-    }
-    const label = typeof raw.name === 'string' ? `"${raw.name}"` : 'a workflow';
-    const ids = new Set<string>();
-    for (const node of nodes as NodeDef[]) {
-      if (ids.has(node.id)) return { ok: false, error: `Two blocks in ${label} have the id "${node.id}".` };
-      ids.add(node.id);
-    }
-    const edges: EdgeDef[] = [];
-    for (const edge of raw.edges as unknown[]) {
-      if (!isObject(edge) || typeof edge.source !== 'string' || typeof edge.target !== 'string') {
-        return { ok: false, error: `A connection in ${label} is malformed (it needs "source" and "target").` };
-      }
-      for (const end of [edge.source, edge.target]) {
-        if (!ids.has(end)) return { ok: false, error: `A connection in ${label} points at "${end}", which is not a block id.` };
-      }
-      const copy: EdgeDef = { id: uid(), source: edge.source, target: edge.target };
+    const nodes = (raw.nodes as Record<string, unknown>[]).map((node) => migrateNode(readNode(node)));
+    const edges = (raw.edges as Record<string, unknown>[]).map((edge) => {
+      const copy: EdgeDef = { id: uid(), source: edge.source as string, target: edge.target as string };
       if (typeof edge.sourcePort === 'string' && edge.sourcePort) copy.sourcePort = edge.sourcePort;
-      edges.push(copy);
-    }
+      return copy;
+    });
     const name = uniqueName(typeof raw.name === 'string' ? raw.name : 'Imported workflow', taken);
     taken.push(name);
-    const copy = cloneWorkflowFromParts(name, nodes as NodeDef[], edges);
-    imported.push(copy);
+    imported.push(cloneWorkflowFromParts(name, nodes, edges));
   }
-  if (imported.length === 0) return { ok: false, error: 'No workflows found in this file.' };
 
   // Run Workflow blocks point at workflows by id; imported ones got new ids.
   const newIds = new Map<string, string>();
   rawList.forEach((raw, index) => {
-    const id = isObject(raw) && typeof raw.id === 'string' ? raw.id : undefined;
     const target = imported[index];
-    if (id && target) newIds.set(id, target.id);
+    if (typeof raw.id === 'string' && target) newIds.set(raw.id, target.id);
   });
   for (const workflow of imported) {
     for (const node of workflow.nodes) {
       const called = node.config.workflow;
-      if (node.type === 'run-workflow' && typeof called === 'string' && newIds.has(called)) {
-        node.config = { ...node.config, workflow: newIds.get(called) };
+      if (node.type === 'run-workflow' && typeof called === 'string' && newIds.has(called.trim())) {
+        node.config = { ...node.config, workflow: newIds.get(called.trim()) };
       }
     }
   }
-  return { ok: true, workflows: imported };
+  return { ok: true, workflows: imported, issues };
 }
 
 /** `cloneWorkflow` over loose parts (fresh ids, disabled). */

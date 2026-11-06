@@ -133,13 +133,15 @@ function schema() {
             else if (field.kind === 'rows') {
               Object.assign(base, {
                 type: 'array',
-                items: { type: 'object', properties: Object.fromEntries(field.columns.map((column) => [column.key, { type: 'string', description: column.label }])) },
+                items: { type: 'object', additionalProperties: false, properties: Object.fromEntries(field.columns.map((column) => [column.key, { type: 'string', description: column.label }])) },
               });
             } else base.type = 'string';
             return [field.key, base];
           }),
         ),
         required: def.fields.filter((field) => field.required).map((field) => field.key),
+        // Unknown keys are refused on import (check.ts, config.key.unknown), so editors flag them too.
+        additionalProperties: false,
       },
       step: { $ref: '#/$defs/step' },
     },
@@ -166,7 +168,7 @@ function schema() {
         type: 'object',
         required: ['name', 'nodes', 'edges'],
         properties: {
-          schemaVersion: { const: 1 },
+          schemaVersion: { enum: [1, 2], description: 'Leave it out or use 2. Files with 1 are migrated on import.' },
           id: { type: 'string', description: 'Replaced on import.' },
           name: { type: 'string' },
           enabled: { type: 'boolean', description: 'Ignored on import: imported workflows are always off.' },
@@ -188,13 +190,15 @@ function schema() {
       },
       step: {
         type: 'object',
+        additionalProperties: false,
         properties: {
-          timeoutSeconds: { type: 'number', minimum: 1 },
+          timeoutSeconds: { type: 'number', exclusiveMinimum: 0 },
           retries: { type: 'integer', minimum: 0, maximum: 5 },
           onError: { enum: ['stop', 'continue', 'port'] },
           disabled: { type: 'boolean' },
           note: { type: 'string' },
           screenshot: { enum: ['error', 'always', 'never'] },
+          realInput: { type: 'boolean' },
         },
       },
     },

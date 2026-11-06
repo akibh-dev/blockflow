@@ -102,6 +102,13 @@ Things worth noticing:
 - **`defaultConfig`** must have a value for every field key. Old workflows saved before you add a field get
   the default.
 - **`summary`** gets the raw saved config (templates unrendered) and must never throw.
+- **Rules between settings** ("`separator` is required when `mode` is `custom`") go in an optional
+  `validate(config)` that returns `{ key, code, message }[]` (code `config.required` or `config.value`).
+  Import checking (`check.ts`) reports them with the JSON path of the key and refuses the file; the
+  editor shows the message on the block. See Wait For or Assert, and
+  [Block Internals](Block-Internals.md#the-definition-contract).
+- **Import is strict**: a config key that is not a field is `config.key.unknown`. If `run` still reads an
+  old key, list it in `legacyKeys`.
 - **Return `{ ...input, … }`** so `$session` (the run's tabs) and everything upstream keep flowing.
 
 ### 2. Register it
@@ -275,6 +282,8 @@ and a `defaultConfig` with `tab: 'main'`. `inPage` finds the tab with `requireSe
 - [ ] unique, final `type` (stored in saved workflows; never rename later)
 - [ ] every field key has a value in `defaultConfig`; `templated` only on string fields meant for `{{…}}`
 - [ ] `run` returns `{ ...input, … }`, `routeTo(…)`, or `null` deliberately; errors are user-readable
+- [ ] rules between settings in `validate(config)` (plus a fixture in `tests/core/check.test.ts`); old keys
+  `run` still reads in `legacyKeys`
 - [ ] timing via `ctx.timers` / `ctx.host.sleep`, memory via `ctx.state`, all values JSON
 - [ ] registered in `index.ts`: import, `export { … }`, `BLOCK_GROUPS`
 - [ ] tests with `harness()` / `FakeHost` (and a jsdom agent test for a new op)

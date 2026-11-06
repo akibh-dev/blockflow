@@ -84,6 +84,10 @@ export const readElementBlock: BlockDefinition<ReadElementConfig> = {
     { key: 'reload', label: 'Reload page before reading', kind: 'boolean' },
   ],
   summary: (config) => `${config.read}: ${config.locator || 'pick an element'}`,
+  validate: (config) =>
+    NEEDS_NAME.includes(config.read) && !String(config.name ?? '').trim()
+      ? [{ key: 'name', code: 'config.required', message: `Attribute / class name is required to read "${config.read}"` }]
+      : [],
   outputs: [
     { key: 'value', description: 'What was read ("true"/"false" for class and exists).' },
     { key: 'previous', description: 'The value from the last run (empty on the first run).' },

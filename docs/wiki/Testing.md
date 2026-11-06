@@ -67,7 +67,8 @@ against real Chromium.
 | [core/config.test.ts](../../tests/core/config.test.ts) | `withDefaults`, `resolveConfig`, `validateConfig` |
 | [core/validate.test.ts](../../tests/core/validate.test.ts) | `validateWorkflow` |
 | [core/workflow.test.ts](../../tests/core/workflow.test.ts) | `diffWorkflows`, `behaviourSignature`, `createWorkflow`, sample workflows, timer keys, `uid` |
-| [core/library.test.ts](../../tests/core/library.test.ts) | `uniqueName`, clone / duplicate, export / import |
+| [core/library.test.ts](../../tests/core/library.test.ts) | `uniqueName`, clone / duplicate, export / import (refusals carry `issues`) |
+| [core/check.test.ts](../../tests/core/check.test.ts) | `checkFile`: one fixture per issue code (level and JSON path), did-you-mean hints, the blocks' `validate` hooks (import and editor), `parseImport` with errors / warnings, `editDistance` / `closest` |
 | [core/expression.test.ts](../../tests/core/expression.test.ts) | Expression language and templates with expressions |
 | [core/template.test.ts](../../tests/core/template.test.ts) | `render`, `hasTemplate`, `getPath` |
 | [core/csv.test.ts](../../tests/core/csv.test.ts) | CSV parse / write |
@@ -75,7 +76,7 @@ against real Chromium.
 | [core/report.test.ts](../../tests/core/report.test.ts) | JUnit / HTML report generation from run records |
 | [core/recordingSchedule.test.ts](../../tests/core/recordingSchedule.test.ts) | Schedule parsing, recorded actions → blocks |
 | [core/playwright.test.ts](../../tests/core/playwright.test.ts) | Locators and whole workflows → Playwright test source |
-| [core/guideExamples.test.ts](../../tests/core/guideExamples.test.ts) | Every `docs/guide/examples/*.blockflow.json` imports with `parseImport` and has no validation errors (one test per file) |
+| [core/guideExamples.test.ts](../../tests/core/guideExamples.test.ts) | Every `docs/guide/examples/*.blockflow.json`, and every complete JSON example in `docs/guide/README.md`, imports with `parseImport` with no issues at all (strict check) and no editor validation errors |
 | [browser/hybridScheduler.test.ts](../../tests/browser/hybridScheduler.test.ts) | Timers ≥ 30 s (alarms), < 30 s (in-memory + keep-alive), clearing, worker restart, end to end with the engine. Uses local `FakeClock`, `FakeAlarms`, `MemoryTimerStore`. See [Scheduling and Timers](Scheduling-and-Timers.md) |
 | [dom/agent.test.ts](../../tests/dom/agent.test.ts) | Page agent ops: click, fill/type, select/check/press, read/wait/detect-form, scraping, frames, upload and locate. See [Page Agent](Page-Agent.md) |
 | [dom/locator.test.ts](../../tests/dom/locator.test.ts) | `parseLocator`, `resolveLocator`, ARIA name/role, `locatorCandidates`. See [Locators](Locators.md) |
@@ -276,6 +277,7 @@ Scenarios by spec:
 | Repeat, Filter | none | Data Table → Filter → Repeat: `each` three times, then `done` |
 | Notify | none | The run passes and `chrome.notifications.getAll()` in the worker lists the notification |
 | Editor UX (`editor-ux`) | editor UI; `docs/manual-test/playground.html` via `scripts/playground.mjs` on port 7357 | In-editor toasts and confirm/input dialogs (no native ones), the All workflows switch and Turn all on with a problem workflow, `bf:state` cleanup on delete, recorder start-URL check, real-input setting only on page actions, undo per workflow, paste at the mouse, the Try it card and the playground template passing |
+| Import checking (`import-check`) | editor UI | Importing a broken file (unknown type, mistyped config key) opens the issues dialog with each code, JSON path and did-you-mean and imports nothing; a file with only warnings imports and its toast's Details lists `page.no-tab`; Escape closes the dialog |
 
 The Playwright export step writes `.output-e2e/playwright/exported.spec.ts` plus a config and runs it with
 `LOGINPASSWORD` set, so `@playwright/test` is a dev dependency only for this.

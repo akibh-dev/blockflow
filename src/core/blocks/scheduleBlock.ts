@@ -52,6 +52,10 @@ export const scheduleBlock: BlockDefinition<ScheduleConfig> = {
   ],
   summary: (config) =>
     config.every === 'day' ? `${config.days || 'every day'} at ${config.at}` : config.every === 'hour' ? `hourly at :${String(config.minute).padStart(2, '0')}` : `every ${config.minutes} min`,
+  validate: (config) =>
+    config.every === 'day' && !parseTime(String(config.at ?? ''))
+      ? [{ key: 'at', code: 'config.value', message: `"${String(config.at ?? '')}" is not a time like 09:30` }]
+      : [],
   outputs: [
     { key: 'firedAt', description: 'When it fired.' },
     { key: 'scheduledFor', description: 'The time it was planned for.' },

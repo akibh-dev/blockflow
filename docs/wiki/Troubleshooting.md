@@ -209,15 +209,23 @@ them either.
 
 ## Importing a file fails
 
-See [Workflows as Scripts: how errors show up](Workflows-as-Scripts.md#how-errors-show-up) for every
-import and validation message. The common ones:
+A file with any error is refused as a whole, and a **Cannot import <file>** dialog lists every problem:
+level, code, the JSON path in your file, the message and a hint (often "Did you mean …?"). **Copy** copies
+the list as text, e.g. to paste back to the AI tool that wrote the file. A file with only warnings imports;
+the toast's **Details** shows them. Every code is explained in the guide's
+[Repair table](../guide/README.md#repair-what-import-errors-mean); more in
+[Workflows as Scripts: how errors show up](Workflows-as-Scripts.md#how-errors-show-up). The common ones:
 
-- `Import failed: This file is not valid JSON.`: a trailing comma or a comment. JSON allows neither.
-- `Unknown block type "x"`: the type is not in the [block reference](../guide/blocks.md) (`openUrl` should be
-  `open-url`, `navigate-to` does not exist…).
-- `<Setting> is required`: a required config key is missing or empty.
-- `A connection in "…" points at "x", which is not a block id.` / `Two blocks in "…" have the id "x".`: fix the
-  edge's `source`/`target`, or give each node its own `id`.
+- `json.invalid`: a trailing comma or a comment. JSON allows neither. The message gives the position.
+- `node.type.unknown`: the type is not in the [block reference](../guide/blocks.md) (`openUrl` should be
+  `open-url`, `navigate-to` does not exist…). The hint suggests the closest type.
+- `config.key.unknown`: a typo (`locater`) or a key from another block. The hint names the right key or
+  lists the valid ones.
+- `config.required`: a required config key is missing or empty (or one another setting needs, like
+  `locator` for an Assert on an element).
+- `edge.endpoint.missing` / `node.id.duplicate`: fix the edge's `source`/`target`, or give each node its own
+  `id`.
+- `page.no-tab` (warning): a page block with no Open Tab before it on some path. Add one, or fix `tab`.
 
 ## Other messages
 

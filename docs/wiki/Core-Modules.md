@@ -1,6 +1,7 @@
 # Core Modules
 
-The pure helpers in `src/core` that are not the engine itself: settings validation, the template and
+The pure helpers in `src/core` that are not the engine itself: settings validation, strict file
+checking (issues, codes, did-you-mean), the template and
 expression languages, conditions, CSV, reports, workflow import/export, the Playwright exporter, the
 recorder converter, schedules, URLs, locator syntax and schema migrations. Read the section for the module you are about to
 use or change. All of them are browser-free and unit-tested in Node (`tests/core/`).
@@ -12,7 +13,8 @@ use or change. All of them are browser-free and unit-tested in Node (`tests/core
 [playwright.ts](../../src/core/playwright.ts), [playwrightRuntime.ts](../../src/core/playwrightRuntime.ts), [recording.ts](../../src/core/recording.ts),
 [schedule.ts](../../src/core/schedule.ts), [url.ts](../../src/core/url.ts),
 [urlPattern.ts](../../src/core/urlPattern.ts), [locatorSyntax.ts](../../src/core/locatorSyntax.ts),
-[migrate.ts](../../src/core/migrate.ts)
+[migrate.ts](../../src/core/migrate.ts), [issues.ts](../../src/core/issues.ts),
+[check.ts](../../src/core/check.ts), [suggest.ts](../../src/core/suggest.ts)
 
 ## config
 
@@ -130,12 +132,86 @@ Copy, export and import workflows.
 | `cloneWorkflow(source, name)` | Fresh ids for workflow, nodes and edges; disabled; config deep-copied. |
 | `duplicateWorkflow(source, existing)` | Clone named `"<name> copy"` (made unique). |
 | `exportWorkflows(workflows)` | `{ format: 'blockflow-workflows', version: 1, workflows }` JSON, all `enabled: false`. |
-| `parseImport(text, existing): ImportResult` | Accepts an export file or one bare workflow. Validates shape (duplicate node ids, connections to missing blocks, malformed edges are errors), renames old config keys (`migrateNode`), clones with new ids, disables, uniquifies names, and remaps `run-workflow` `config.workflow` ids to the imported copies. |
+| `parseImport(text, existing, options?): ImportResult` | Accepts an export file or one bare workflow. Parses (`parseJson`), then runs `checkFile` (below) with the existing workflow ids; any error refuses the whole file. Otherwise renames old config keys (`migrateNode`), clones with new ids, disables, uniquifies names, and remaps `run-workflow` `config.workflow` ids to the imported copies. `options`: `registry` (default: the built-in blocks), `secrets` (names, for `secret.unknown`). |
+| `ImportResult` | `{ ok: true, workflows, issues }` (issues are warnings/info only) or `{ ok: false, error, issues }` (`error` = first error's message plus "(and N more problems)"). |
 
 `cloneWorkflow` and `parseImport` keep `node.step` and `edge.sourcePort`, so branches and step settings
 survive duplicate and import (tested in `library.test.ts` and `guideExamples.test.ts`).
 
 Called by: `Editor.tsx` (duplicate, import, export, templates).
+
+## issues
+
+The one shape every file checker reports in: strict checking (`check.ts`), the script compiler and
+migrations. An LLM (or a person) reads `code` and `path` to repair the file.
+
+| Export | Notes |
+| --- | --- |
+| `Issue { level, code, path, message, hint? }` | `level`: `error` (blocks an import), `warning` (imports, with a banner), `info` (a note). `code`: stable, listed in the guide's "Repair" table. `path`: a JSON Pointer into the file as written (`/workflows/0/nodes/3/config/locater`, `''` = the whole file). `hint`: how to fix it, often `Did you mean "locator"?`. |
+| `pointer(...parts)` | RFC 6901 pointer from segments (escapes `~` and `/`). |
+| `hasErrors(issues)` | Any `error`? |
+
+Not to be confused with `validate.ts`'s editor `Issue` (`nodeId`/`edgeId`, no code or path), which the
+canvas uses to mark blocks.
+
+## check
+
+Strict checking of a workflow file before import, on the raw JSON, so paths and ids are the author's.
+
+| Export | Notes |
+| --- | --- |
+| `checkFile(raw, registry, options?): Issue[]` | Every problem, in file order. `options.workflowIds`: saved workflows Run Workflow may call; `options.secrets`: secret names (without it, `secret.unknown` is never reported). |
+| `parseJson(text)` | `{ ok, data }` or `{ ok: false, issues: [json.invalid] }` with the parser's position message. |
+| `locatorProblem(source)` | `{ message, hint? }` or null: unclosed quote/bracket, empty step, an unknown `engine=` prefix (did-you-mean against `ENGINES`), non-numeric `nth=`. Templated locators are not checked. |
+| `EXPORT_FORMAT` | `'blockflow-workflows'`. |
+
+What it checks, by level (codes in the guide's [Repair table](../guide/README.md#repair-what-import-errors-mean)):
+
+- **error**: `file.shape` (not an object, `workflows`/`nodes`/`edges` not lists, node without string
+  `id`/`type`, `config`/`step` not objects, schema newer than this build), `node.id.duplicate`,
+  `node.type.unknown`, `config.key.unknown` (also unknown columns in `rows` settings), `config.type`,
+  `config.required`, `config.enum`, `config.value` (number out of range, and `validate` hooks such as a bad
+  Schedule time), `config.locator.invalid`, `config.url.invalid`, `config.template.invalid`,
+  `edge.endpoint.missing`, `edge.port.unknown` (including `error` without `onError: "port"`),
+  `edge.target.no-input` (into a block without `run`), `step.key.unknown`, `step.value`, `graph.no-start`
+  (every block has an input), `graph.cycle` for a block wired to itself, `workflow.call.missing` (Run
+  Workflow target not in the file nor saved), and whatever a block's `validate` hook returns.
+- **warning**: `file.key.unknown` (unknown keys on the file, a workflow, a node or an edge; ignored on
+  import), `config.template.unsupported` (`{{…}}` in a setting that does not render it), `edge.duplicate`,
+  `graph.cycle` (a loop back: allowed, the run's step limit stops it), `graph.unreachable`, `page.no-tab`,
+  `secret.unknown`, `graph.no-start` for an empty workflow.
+- **info**: `config.key.renamed` (an old key such as `selector`; it is moved on import).
+
+Design points:
+
+- Legacy keys a block still reads (`BlockDefinition.legacyKeys`, e.g. Open Tab's `newTab`) and renamed keys
+  (`RENAMED_KEYS`) are not unknown. Numeric strings in number settings are accepted (`withDefaults`
+  coerces them). Values that come from defaults are not checked for syntax, only the author's.
+- Templated values (`{{…}}`) are checked for template syntax only; URL and locator syntax wait for run time.
+- `page.no-tab` is a forward "must" analysis over the graph: the tabs certainly open before a block are the
+  intersection over its incoming paths, plus what each block opens (Open Tab: its `tab`; Wait for Popup:
+  its `name`; Page Visited and Context Menu: `main`). An `error` output carries what the failed block had
+  before it. Disabled blocks neither open nor need a tab. Skipped for a workflow that a Run Workflow in the
+  same file calls (it gets the caller's tabs). A warning, because a sub-workflow saved earlier can also
+  receive tabs.
+- Loops are made with Repeat / For Each / Paginate (they `emit` on `each` and await the branch), never with
+  a connection back, so a cycle is a warning (probably a mistake, but the engine tolerates it).
+- Unknown keys get a hint from an alias table first (`settings`→`config`, `from`→`source`,
+  `sourceHandle`→`sourcePort`…), then did-you-mean, else the list of valid keys.
+
+Called by: `parseImport` (so the editor's Import, templates and tests), `tests/core/check.test.ts`.
+
+## suggest
+
+Did-you-mean.
+
+| Export | Notes |
+| --- | --- |
+| `editDistance(a, b)` | Damerau-Levenshtein (optimal string alignment): insert, delete, substitute, swap neighbours. |
+| `closest(word, candidates, maxDistance = 2)` | Case-insensitive best match within the distance (1 for words of 3 letters or fewer), or undefined. |
+| `didYouMean(word, candidates)` | `Did you mean "x"?` or undefined. |
+
+Called by: `check.ts`.
 
 ## migrate
 
@@ -257,6 +333,6 @@ Playwright exporter. No DOM.
 - [Core Engine](Core-Engine.md)
 - [Page Protocol](Page-Protocol.md), [Locators](Locators.md)
 - [Block Internals](Block-Internals.md)
-- [Editor](Editor.md) (import/export, reports, Playwright export UI)
+- [Editor](Editor.md) (import/export and the import issues dialog, reports, Playwright export UI)
 - [Picker and Recorder](Picker-and-Recorder.md)
 - [Testing](Testing.md)

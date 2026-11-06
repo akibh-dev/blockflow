@@ -50,6 +50,14 @@ export const uploadFileBlock: BlockDefinition<UploadFileConfig> = {
     tabField,
   ],
   summary: (config) => `${config.source === 'url' ? config.url || 'from URL' : config.filename} → ${config.locator}`,
+  validate: (config) =>
+    config.source === 'url'
+      ? String(config.url ?? '').trim()
+        ? []
+        : [{ key: 'url', code: 'config.required', message: 'URL is required when the file comes from a URL' }]
+      : String(config.content ?? '') !== ''
+        ? []
+        : [{ key: 'content', code: 'config.required', message: 'Content is required when the file is text you write (or set source to "url")' }],
   outputs: [{ key: 'uploaded', description: 'The file name.' }],
 
   async run(ctx, input) {

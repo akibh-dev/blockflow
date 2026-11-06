@@ -128,8 +128,9 @@ Tips that make the first try more likely to work:
 - Give the model real labels and button texts from the page. Locators it has to guess are the most common
   reason a generated workflow fails.
 - Ask for one workflow at a time, short, ending in Asserts. Add branches once the straight path passes.
-- If the model writes `"locater"`, `"selector"` on a Click, or a type that does not exist, the file will
-  still import but the setting is ignored or the block is flagged. Compare against `blocks.md`.
+- If the model writes `"locater"`, `"selector"` on a Click, or a type that does not exist, import refuses
+  the file and lists each problem with its path and a did-you-mean. Paste that list (the dialog's **Copy**)
+  back to the model; it is written for that.
 
 ## Import and export
 
@@ -144,27 +145,46 @@ references.
 
 **+ New ▾** offers the files in [examples/](../guide/examples) as templates.
 
-Import keeps each block's `step` settings and each connection's `sourcePort`. It refuses a file whose
-connections point at block ids that don't exist, or that uses the same block id twice, and the error names the id.
+Import keeps each block's `step` settings and each connection's `sourcePort`. It checks the whole file
+first and refuses it on any error (below).
 
 ## How errors show up
 
 There are two stages.
 
-**1. Reading the file.** If the file cannot be read at all, nothing is imported and a notice says why:
+**1. Checking the file (import).** Before anything is imported, the whole file is checked against the
+block registry ([check.ts](../../src/core/check.ts), see [Core Modules](Core-Modules.md#check)). Every
+problem is an **issue** with a level, a stable **code**, a **JSON Pointer** into the file as you wrote it,
+a message and usually a hint:
 
-| Notice | Cause |
-| --- | --- |
-| `Import failed: This file is not valid JSON.` | Syntax error: trailing comma, comments, unquoted key. |
-| `Import failed: This file does not look like a BlockFlow workflow.` | A workflow without `nodes` and `edges` arrays. |
-| `Import failed: A block in this file is malformed.` | A node without a string `id` or `type`. |
-| `Import failed: No workflows found in this file.` | `"workflows": []`. |
-| `Import failed: Two blocks in "<name>" have the id "<id>".` | Node ids must be unique within a workflow. |
-| `Import failed: A connection in "<name>" points at "<id>", which is not a block id.` | An edge's `source` or `target` names no node. |
-| `Import failed: A connection in "<name>" is malformed (it needs "source" and "target").` | An edge without string `source`/`target`. |
+```
+error config.key.unknown at /workflows/0/nodes/1/config/locater: Block "go" (click) has no setting "locater". Did you mean "locator"?
+error node.type.unknown at /workflows/0/nodes/0/type: Block "open" has an unknown type "open-tab". Did you mean "open-url"?
+warning page.no-tab at /workflows/0/nodes/3: Block "check" (assert) acts on the tab "main", but not every path to it opens that tab. Put an Open Tab block (type "open-url", tab "main") before it on every path.
+info config.key.renamed at /workflows/0/nodes/2/config/selector: Block "price" (read-element): "selector" is now called "locator". Use "locator".
+```
 
-**2. Checking the workflow.** After import the editor validates the workflow (the same check runs all the
-time while you edit):
+- Any **error** refuses the whole file: nothing is imported, and a dialog (**Cannot import <file>**) lists
+  every issue. **Copy** puts the list on the clipboard in the form above, ready to paste back to the AI
+  tool that wrote the file.
+- **Warnings** and **info** do not block: the file imports and a toast says how many warnings there are;
+  its **Details** button opens the same list.
+
+The codes, what they mean and how to fix each are in the guide's
+[Repair table](../guide/README.md#repair-what-import-errors-mean). The paths point into the file you
+imported (`/workflows/0/...` in an export file, `/nodes/...` for a bare workflow), and the messages use your
+block ids, not the ones import creates.
+
+What the check catches that used to fail only at run time: unknown config keys and step keys (typos were
+silently ignored before), wrong value types (`"retries": "2"`, `"active": "true"`), options that do not
+exist, broken locators (`rol=button`, an unclosed quote), invalid URLs, broken `{{ }}` expressions,
+connections from an output a block does not have, a Run Workflow that calls a workflow that is neither in
+the file nor saved, and the per-block rules (Assert on an element without `locator`, Wait For text without
+`text`, Upload File from a URL without `url`…). A page block with no Open Tab on some path to it is a
+warning (it may be a sub-workflow that gets its tab from the caller).
+
+**2. Checking the workflow (editor).** After import the editor validates the workflow (the same check runs
+all the time while you edit):
 
 - The header shows **N problems**, ▶ Run is disabled ("Fix the problems first") and turning the workflow on
   is refused with the list of reasons.
@@ -178,17 +198,17 @@ time while you edit):
 | `<Setting> has an invalid choice` | Use one of the listed values for that key. |
 | `<Setting> must be a number` / `must be at least …` | Numbers as JSON numbers (`"5"` is also accepted). |
 | `<Setting>: …` (expression error) | A broken `{{ … }}` expression. |
+| `Element is required to check "text"`, `Text is required for mode "text"`… | A setting another setting needs (the block's `validate` rules, the same ones import checks). |
 | `Schedule cannot take input from another block` | Schedule is the one block that only works at the start. Remove its incoming edge. |
 | `Nothing can start this workflow: every block has an input.` | Remove a connection so one block has no input. |
 | `This block can never run: no start block leads to it` (warning) | Connect it, or delete it. |
 | `The "x" output is not in use, so its connection never runs` (warning) | `sourcePort` names an output the block does not have (e.g. `error` without `onError: "port"`). |
 | `This workflow contains a loop. A run stops after 1000 blocks.` (warning) | Usually a mistake; use For Each / Repeat instead. |
 
-Some checks only happen when the block runs, because they depend on other settings or on data: Assert
-without a locator on an element check (`Element is required for this check`), Wait For text mode without
-text, a page block with no Open Tab before it (`No tab named "main" in this run. Put an Open Tab block (tab
-name "main") before this block.`), a bad locator (`Invalid role locator: …`). These appear as a failed step
-in the run. See [Troubleshooting](Troubleshooting.md).
+Some problems only show when the block runs, because they depend on the page or on data: an element that
+is not there, a templated URL that renders empty, a page block whose tab was closed (`No tab named "main"
+in this run. Put an Open Tab block (tab name "main") before this block.`). These appear as a failed step in
+the run. See [Troubleshooting](Troubleshooting.md).
 
 ## Iterating: run, read, fix
 

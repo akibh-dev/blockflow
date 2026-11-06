@@ -44,6 +44,14 @@ export const downloadBlock: BlockDefinition<DownloadConfig> = {
     { key: 'filename', label: 'File name', kind: 'text', required: true, templated: true },
   ],
   summary: (config) => `${config.from === 'dataset' ? config.dataset : config.value} → ${config.filename}`,
+  validate: (config) =>
+    config.from === 'dataset'
+      ? String(config.dataset ?? '').trim()
+        ? []
+        : [{ key: 'dataset', code: 'config.required', message: 'Dataset is required when saving a dataset' }]
+      : String(config.value ?? '').trim()
+        ? []
+        : [{ key: 'value', code: 'config.required', message: 'Value is required when saving a value from the data' }],
   outputs: [{ key: 'file', description: 'The file name used.' }],
 
   async run(ctx, input) {

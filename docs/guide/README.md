@@ -11,8 +11,9 @@ how to use BlockFlow** without reading the source code. Read it top to bottom on
 | --- | --- |
 | [`blocks.md`](blocks.md) | Every block: type id, settings (`config` keys), defaults, outputs. **Generated from the code.** |
 | [`blocks.json`](blocks.json) | The same, machine-readable. |
-| [`workflow.schema.json`](workflow.schema.json) | JSON Schema of an import file, with every block's config. |
-| [`examples/`](examples) | Importable workflow files. A test checks they import without errors. |
+| [`workflow.schema.json`](workflow.schema.json) | JSON Schema of an import file, with every block's config (unknown keys not allowed). |
+| [`examples/`](examples) | Importable workflow files. A test checks they import without errors or warnings. |
+| [Repair](#repair-what-import-errors-mean) | What each import error code means and how to fix it. |
 
 If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and `docs/ARCHITECTURE.md`.
 
@@ -22,8 +23,10 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
 
 1. Output a JSON file in the **export format** (section 2). Users import it with **Import** in the
    sidebar or the All workflows page. Imported workflows always arrive **off**, with new ids.
-2. Block `type` values and `config` keys must come from [`blocks.md`](blocks.md). Unknown keys are
-   ignored; unknown types are an error. Missing keys take the block's default.
+2. Block `type` values and `config` keys must come from [`blocks.md`](blocks.md). Unknown types,
+   unknown config or step keys, wrong value types and options that do not exist are **errors**: the
+   whole file is refused, with a list of problems (code, JSON path, did-you-mean). Missing keys take the
+   block's default. When you get that list back, fix each path it names (see [Repair](#repair-what-import-errors-mean)).
 3. Every page block (Click, Fill, Fill Form, Select Option, Check, Press Key, Upload File, Scroll,
    Dialogs, Wait For, Run Script, Assert on the page, Read Element without a URL, Extract List / Extract
    Table / Page Info / Paginate from a tab, Navigate, Wait for Popup, Close Tab) needs an **Open Tab**
@@ -101,13 +104,18 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
 
 - `id`s: any unique strings within the file (node ids unique within a workflow). Import replaces
   them; Run Workflow references between workflows in the same file are kept working. A file whose
-  edges name a missing node id, or that repeats a node id, is refused with a message naming the id.
+  edges name a missing node id, or that repeats a node id, is refused (`edge.endpoint.missing`,
+  `node.id.duplicate`).
 - `position`: canvas coordinates; about 260 px apart left to right reads well. Branches: ±140 px in y.
 - `step` (optional, per node): see section 7.
 - A single workflow object (without the `format` wrapper) also imports.
-- Validation the editor applies: required settings present, URLs valid (templates allowed), every
-  edge points at existing nodes, no block connected to itself, at least one start block, no block
-  that cannot take input placed after another block. Unreachable blocks and loops are warnings.
+- Import checks the whole file first and refuses it on any **error**; **warnings** import with a
+  notice. Errors: unknown types and keys, wrong types, invalid options, missing required settings
+  (including ones another setting needs, e.g. `locator` for an Assert on an element), invalid URLs and
+  locators, broken `{{ }}`, connections to missing blocks or from outputs a block does not have, a block
+  connected to itself, no start block, Run Workflow calling a workflow not in the file. Warnings:
+  unreachable blocks, loops, a page block without an Open Tab on every path to it, unknown secrets.
+  Every code is in [Repair](#repair-what-import-errors-mean).
 
 ## 3. Data and templates
 
@@ -385,3 +393,41 @@ profile's extension storage.
 - Runs stop after 1000 blocks (loop guard). Run history keeps 40 runs; payloads over 3 KB are stored
   as a preview.
 - Firefox: grant site access in `about:addons` → BlockFlow → Permissions.
+
+## Repair: what import errors mean
+
+Import reports every problem as `<level> <code> at <path>: <message> <hint>`, for example
+`error config.key.unknown at /workflows/0/nodes/1/config/locater: Block "go" (click) has no setting "locater". Did you mean "locator"?`.
+`path` is a JSON Pointer into the file as written: `/workflows/0/nodes/1/config/locater` is the key
+`locater` in the `config` of the second node of the first workflow (`/nodes/1/...` for a bare workflow).
+**Errors** refuse the whole file, **warnings** import with a notice, **info** is a note. The codes are stable.
+
+| Code | Level | Meaning | Fix |
+| --- | --- | --- | --- |
+| `json.invalid` | error | Not JSON. The message gives the parser's position. | Remove trailing commas and comments, quote keys. |
+| `file.shape` | error | Not a workflow file: not an object, `workflows`/`nodes`/`edges` not lists, a node without string `id`/`type`, `config`/`step` not objects, unknown `format`, schema newer than this BlockFlow. | Follow section 2. `edges: []` when there are none. |
+| `file.key.unknown` | warning | A key BlockFlow does not read on the file, a workflow, a node or a connection (ignored). | Use the hinted key (`config`, not `settings`; `source`, not `from`; `sourcePort`, not `sourceHandle`). |
+| `node.id.duplicate` | error | Two nodes in one workflow share an `id`. | Give each node its own id. |
+| `node.type.unknown` | error | `type` is not a block. | Use the hinted type, or one from [`blocks.md`](blocks.md) (Open Tab is `open-url`). |
+| `config.key.unknown` | error | A `config` key (or a column in a list setting like Fill Form's `fields`) the block does not have. | Use the hinted key; the hint lists valid keys when nothing is close. |
+| `config.key.renamed` | info | An old key name (`selector` on Read/Watch Element, `next` on Paginate). It is moved on import. | Use the new name (`locator`). |
+| `config.type` | error | Wrong JSON type: text as a number, `"true"` in quotes, a list setting that is not a list. | Strings in quotes, numbers and `true`/`false` without. |
+| `config.required` | error | A required setting is missing or empty, or a setting another one needs (Assert on an element → `locator`; Wait For `text` mode → `text`; Upload File from a URL → `url`; Download a dataset → `dataset`; Navigate `goto` → `url`; a list row without its first column). | Fill in the setting at the path. |
+| `config.enum` | error | A choice that is not one of the options. | Use the hinted value; the hint lists the options. |
+| `config.value` | error | A value of the right type that is not allowed: a number out of range, a Schedule time that is not `HH:MM`. | See the setting's notes in [`blocks.md`](blocks.md). |
+| `config.locator.invalid` | error | A locator that cannot work: unclosed quote or bracket, an unknown `engine=` (`rol=button`), `nth=` without a number. | Fix the syntax (section 4). Templated locators are checked when the block runs. |
+| `config.url.invalid` | error | Not an http(s) URL (`javascript:`, `file:`, garbage). | A full `https://…` address, or a `{{template}}`. |
+| `config.template.invalid` | error | A broken `{{ … }}`: unbalanced braces or a bad expression. | Fix the expression (section 3). |
+| `config.template.unsupported` | warning | `{{ … }}` in a setting that does not render templates; the braces stay as typed. | Remove the braces. Expression settings (For Each / Filter `list`, Transform, Save to Dataset / Download `value`) take `items`, not `{{items}}`. |
+| `step.key.unknown` | error | A `step` key that does not exist. | `timeoutSeconds`, `retries`, `onError`, `disabled`, `note`, `screenshot`, `realInput` (section 7). |
+| `step.value` | error | A bad `step` value (`retries` above 5, `onError: "ignore"`…). | See section 7. |
+| `edge.endpoint.missing` | error | A connection's `source` or `target` is not a node id in that workflow. | Use the hinted id. |
+| `edge.port.unknown` | error | `sourcePort` names an output the block does not have, or `"error"` on a block without `step.onError: "port"`. | Use the hinted output (`true`/`false` on If, `each`/`done` on loops), or add `"step": {"onError": "port"}`. |
+| `edge.target.no-input` | error | A connection into a block that only starts workflows (Schedule). | Remove the connection. |
+| `edge.duplicate` | warning | The same connection twice. | Remove one. |
+| `graph.no-start` | error | Every block has an incoming connection, so nothing starts the workflow (a warning for a workflow with no blocks). | Remove the connection into the first block. |
+| `graph.cycle` | warning (error for a block connected to itself) | A connection back to an earlier block makes a loop; runs stop after 1000 blocks. | Loop with Repeat, For Each or Paginate (their `each` output) instead. |
+| `graph.unreachable` | warning | A block no start block leads to; it never runs. | Connect it, or remove it. |
+| `page.no-tab` | warning | A page block whose tab (`tab`, default `main`) is not opened on every path to it. | Add an Open Tab (`open-url`) with that `tab` earlier on every path, or fix `tab`. Fine for a workflow called by Run Workflow from one that opened the tab. |
+| `workflow.call.missing` | error | Run Workflow's `workflow` is not the `id` of a workflow in the file or already saved. | Put the called workflow in the same file and use its `id` (not its name). |
+| `secret.unknown` | warning | `{{secret.x}}` names a secret the user has not created. | Create the secret (Secrets tab) before running, or fix the name. |

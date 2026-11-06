@@ -1,7 +1,7 @@
 import { DEFAULT_TAB, requireSessionTab } from '../session';
 import { PAGE_ACCENT, locatorField, pageWaitMs, tabField } from './pageCommon';
 import type { AgentRequest, ExtractField } from '../page';
-import type { BlockContext, BlockDefinition, Payload, Row, TextField } from '../types';
+import type { BlockContext, BlockDefinition, ConfigProblem, Payload, Row, TextField } from '../types';
 
 /** Where Extract List / Extract Table read from: a tab of the run, or HTML in the data. */
 export interface SourceConfig {
@@ -38,6 +38,13 @@ export async function inSource(ctx: BlockContext<SourceConfig>, input: Payload, 
   }
   const tabId = requireSessionTab(input, ctx.config.tab || DEFAULT_TAB);
   return ctx.host.page.act(tabId, request, pageWaitMs(ctx as BlockContext<object>));
+}
+
+/** Extract List / Extract Table `validate`: HTML mode needs the HTML. */
+export function validateSource(config: SourceConfig): ConfigProblem[] {
+  return config.source === 'html' && !String(config.html ?? '').trim()
+    ? [{ key: 'html', code: 'config.required', message: 'HTML is required when reading from HTML in the data (e.g. {{body}})' }]
+    : [];
 }
 
 /** The agent sends columns + rows of values (key order survives that); this makes the objects. */
@@ -87,6 +94,7 @@ export const extractListBlock: BlockDefinition<ExtractListConfig> = {
     tabField,
   ],
   summary: (config) => `${config.locator || 'pick the items'} → {{${config.into || 'items'}}}`,
+  validate: validateSource,
   outputs: [
     { key: 'items', description: 'The list (or the name you chose).' },
     { key: 'count', description: 'How many items.' },

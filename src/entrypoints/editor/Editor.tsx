@@ -20,10 +20,11 @@ import { validateWorkflow } from '../../core/validate';
 import { duplicateWorkflow, exportWorkflows, parseImport, uniqueName } from '../../core/library';
 import { createWorkflow, uid } from '../../core/workflow';
 import type { EdgeDef, LogEntry, StepSettings, Workflow } from '../../core/types';
+import type { Issue } from '../../core/issues';
 import { BlockNode, IssuesContext, RunStatusContext } from './components/BlockNode';
 import type { BlockFlowNode } from './components/BlockNode';
 import { ConfigPanel } from './components/ConfigPanel';
-import { confirmDialog, promptDialog, toast } from './components/Dialogs';
+import { confirmDialog, issuesDialog, promptDialog, toast } from './components/Dialogs';
 import { LogPanel } from './components/LogPanel';
 import { DRAG_MIME, Sidebar } from './components/Sidebar';
 import type { WorkflowActions } from './components/WorkflowActions';
@@ -339,6 +340,8 @@ export function Editor() {
   const [view, setView] = useState<'canvas' | 'manage' | 'reports' | 'data' | 'secrets'>('canvas');
   /** A message for the user, as a toast (errors stay longer). */
   const notice = useCallback((message: string, kind: 'info' | 'error' = 'info') => toast(message, kind), []);
+  /** Secret names, so import can warn about `{{secret.x}}` that does not exist (values are not used). */
+  const [secrets] = useStorageValue<Record<string, string>>(STORAGE_KEYS.secrets, {});
 
   const createNew = useCallback(() => {
     const workflow = createWorkflow(uniqueName(`Workflow ${(latest.current?.length ?? 0) + 1}`, (latest.current ?? []).map((w) => w.name)));
@@ -436,23 +439,40 @@ export function Editor() {
 
   const importFiles = useCallback(
     async (files: FileList | null) => {
+      const names = Array.from(files ?? [], (file) => file.name);
       const texts = await readFiles(files);
       let added: Workflow[] = [];
-      for (const text of texts) {
-        const result = parseImport(text, [...(latest.current ?? []), ...added]);
+      const notes: Issue[] = [];
+      for (const [index, text] of texts.entries()) {
+        const result = parseImport(text, [...(latest.current ?? []), ...added], { secrets: Object.keys(secrets) });
+        // Errors refuse the file: list every problem with its JSON path (check.ts), not just the first.
         if (!result.ok) {
-          notice(`Import failed: ${result.error}`, 'error');
+          void issuesDialog({
+            title: `Cannot import ${names[index] ?? 'this file'}`,
+            message: 'Nothing was imported. Fix these problems in the file and import it again (paths point into the file).',
+            issues: result.issues,
+          });
           continue;
         }
         added = [...added, ...result.workflows];
+        notes.push(...result.issues);
       }
       if (added.length === 0) return;
       setWorkflows((current) => [...(current ?? []), ...added]);
       open(added[0] as Workflow);
       setView('manage');
-      notice(`Imported ${added.length} workflow${added.length === 1 ? '' : 's'}. They are off until you turn them on.`);
+      const imported = `Imported ${added.length} workflow${added.length === 1 ? '' : 's'}. They are off until you turn them on.`;
+      const warnings = notes.filter((issue) => issue.level === 'warning').length;
+      if (notes.length === 0) notice(imported);
+      else {
+        const what = warnings > 0 ? `${warnings} warning${warnings === 1 ? '' : 's'}` : `${notes.length} note${notes.length === 1 ? '' : 's'}`;
+        toast(`${imported}\n${what} to look at.`, 'info', {
+          label: 'Details',
+          run: () => void issuesDialog({ title: 'Imported, with warnings', message: 'The workflows were imported. These may stop them from working as intended:', issues: notes }),
+        });
+      }
     },
-    [notice, open],
+    [notice, open, secrets],
   );
 
   const exportPlaywright = useCallback((id: string) => {
@@ -467,7 +487,7 @@ export function Editor() {
     (text: string) => {
       const result = parseImport(text, latest.current ?? []);
       if (!result.ok) {
-        notice(`Could not use the template: ${result.error}`, 'error');
+        void issuesDialog({ title: 'Could not use the template', message: result.error, issues: result.issues });
         return;
       }
       setWorkflows((current) => [...(current ?? []), ...result.workflows]);
@@ -716,7 +736,6 @@ export function Editor() {
   }, [recording, open]);
 
   const selectedNode = nodes.find((node) => node.selected);
-  const [secrets] = useStorageValue<Record<string, string>>(STORAGE_KEYS.secrets, {});
   const lastStepOfSelected = selectedNode ? [...(inspectedRun?.steps ?? [])].reverse().find((step) => step.nodeId === selectedNode.id) : undefined;
 
   /** For the picker: the URL of the nearest Open Tab before the selected block (none when it is templated). */
