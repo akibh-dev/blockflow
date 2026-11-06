@@ -9,8 +9,28 @@
 
 import type { ErrorCode } from './errors';
 
-/** What a `read` request reads from the element. */
-export type ReadKind = 'text' | 'value' | 'attribute' | 'has-class' | 'exists' | 'count' | 'visible' | 'checked' | 'enabled';
+/**
+ * What a `read` request reads from the element. `class` is the class attribute (whitespace collapsed),
+ * `css` the computed value of the CSS property `name`; `focused`, `editable` and `in-viewport` are
+ * yes/no answers ("false" with no match, like `visible`).
+ */
+export type ReadKind =
+  | 'text'
+  | 'value'
+  | 'attribute'
+  | 'has-class'
+  | 'exists'
+  | 'count'
+  | 'visible'
+  | 'checked'
+  | 'enabled'
+  | 'class'
+  | 'css'
+  | 'focused'
+  | 'editable'
+  | 'in-viewport'
+  | 'accessible-name'
+  | 'accessible-description';
 
 /** Condition a `wait` request waits for. */
 export type WaitState = 'visible' | 'hidden' | 'attached' | 'detached' | 'enabled' | 'text' | 'no-text';
@@ -30,6 +50,11 @@ export type AgentRequest =
   | { op: 'select'; locator: string; values: string[] }
   | { op: 'check'; locator: string; checked: boolean }
   | { op: 'press'; key: string; locator?: string }
+  /**
+   * Type text at the caret as one input (no key events), like Playwright's `keyboard.insertText`:
+   * into `locator` (focused first) or whatever has focus. Replaces the selection.
+   */
+  | { op: 'insert-text'; text: string; locator?: string }
   | { op: 'read'; locator: string; kind: ReadKind; name?: string }
   | { op: 'wait'; state: WaitState; locator?: string; text?: string }
   | { op: 'detect-form'; locator: string }

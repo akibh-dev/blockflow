@@ -1,4 +1,4 @@
-import { parseLocatorSteps } from './locatorSyntax';
+import { nestedLocator, parseLocatorSteps, parseRoleSelector, roleState, splitAlternatives, unquoteValue, visibleFilter } from './locatorSyntax';
 import { runtimeSource } from './playwrightRuntime';
 import { edgePort, nodePorts } from './ports';
 import type { BlockRegistry } from './registry';
@@ -21,9 +21,31 @@ export interface ExportOptions {
 /** A value as a JS string literal. */
 const js = (text: unknown) => JSON.stringify(String(text ?? ''));
 
-/** A BlockFlow locator as a Playwright locator expression on `base` (a page or locator expression). */
+/** A regular expression literal that matches exactly `text` (whole string). */
+const exactRegex = (text: string) => `/^${text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$/`;
+
+/** Text for a `filter({ hasText })`: /regex/ stays, a quoted body must equal the whole text, else substring. */
+function filterText(body: string): string {
+  const regex = /^\/([\s\S]+)\/([dgimsuyv]*)$/.exec(body.trim());
+  if (regex) return `/${regex[1]}/${regex[2]}`;
+  const quoted = /^(["'])([\s\S]*)\1$/.exec(body.trim());
+  return quoted ? exactRegex(unquoteValue(body).replace(/\s+/g, ' ').trim()) : js(body.trim());
+}
+
+/**
+ * A BlockFlow locator as a Playwright locator expression on `base` (a page or locator expression).
+ * `A || B` becomes `A.or(B)`, filters become `.filter({ hasText | hasNotText | has | hasNot | visible })`.
+ */
 export function toPlaywrightLocator(locator: string, base: string): string {
+  const [first, ...others] = splitAlternatives(locator).map((alternative) => chainToPlaywright(alternative, base));
+  return others.reduce((code, other) => `${code}.or(${other})`, first as string);
+}
+
+/** One `||` alternative as a Playwright locator chain. */
+function chainToPlaywright(locator: string, base: string): string {
   let code = base;
+  // `has` locators are built from the page, or from the frame they are in.
+  let root = base;
   for (const { engine, body } of parseLocatorSteps(locator)) {
     const quoted = /^(["'])([\s\S]*)\1$/.exec(body.trim());
     const regex = /^\/([\s\S]+)\/([dgimsuyv]*)$/.exec(body.trim());
@@ -57,25 +79,41 @@ export function toPlaywrightLocator(locator: string, base: string): string {
         break;
       case 'frame':
         code += `.frameLocator(${js(body)})`;
+        root = code;
         break;
       case 'nth': {
         const index = Number(body);
         code += index === -1 ? '.last()' : index === 0 ? '.first()' : `.nth(${index})`;
         break;
       }
+      case 'has-text':
+        code += `.filter({ hasText: ${filterText(body)} })`;
+        break;
+      case 'has-not-text':
+        code += `.filter({ hasNotText: ${filterText(body)} })`;
+        break;
+      case 'has':
+        code += `.filter({ has: ${toPlaywrightLocator(nestedLocator(body), root)} })`;
+        break;
+      case 'has-not':
+        code += `.filter({ hasNot: ${toPlaywrightLocator(nestedLocator(body), root)} })`;
+        break;
+      case 'visible':
+        code += `.filter({ visible: ${visibleFilter(body)} })`;
+        break;
       case 'role': {
-        const match = /^([a-z-]+)\s*([\s\S]*)$/i.exec(body.trim());
-        const role = match?.[1] ?? body;
+        const { role, options: parsed } = parseRoleSelector(body);
         const options: string[] = [];
-        for (const attr of (match?.[2] ?? '').matchAll(/\[\s*([a-z-]+)\s*(?:=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/(?:[^/\\]|\\.)+\/[a-z]*|[^\]]*?))?\s*\]/gi)) {
-          const key = (attr[1] as string).toLowerCase();
-          const value = attr[2];
-          if (key === 'name' && value) {
+        for (const option of parsed) {
+          const { key, value } = option;
+          if (key === 'name') {
+            if (!value) continue;
             const named = /^\/([\s\S]+)\/([dgimsuyv]*)$/.exec(value);
-            options.push(`name: ${named ? `/${named[1]}/${named[2]}` : js(value.replace(/^(["'])([\s\S]*)\1$/, '$2'))}`);
+            options.push(`name: ${named ? `/${named[1]}/${named[2]}` : js(unquoteValue(value))}`);
           } else if (key === 'exact') options.push('exact: true');
-          else if (key === 'checked') options.push(`checked: ${value === undefined || !/false/.test(value)}`);
-          else if (key === 'level') options.push(`level: ${Number(String(value).replace(/["']/g, ''))}`);
+          else if (key === 'level') options.push(`level: ${Number(unquoteValue(value ?? ''))}`);
+          else if (key === 'include-hidden') options.push('includeHidden: true');
+          else options.push(`${key}: ${roleState(option)}`);
         }
         code += `.getByRole(${js(role)}${options.length ? `, { ${options.join(', ')} }` : ''})`;
         break;
@@ -319,6 +357,11 @@ class Writer {
         this.line(`await ${loc()}.setChecked(${c.state !== 'uncheck'}${this.optArg()});`);
         break;
       case 'press-key':
+        if (c.mode === 'text') {
+          if (c.locator) this.line(`await ${loc()}.focus(${this.opt()});`);
+          this.line(`await ${tab(c)}.keyboard.insertText(${template(c.text)});`);
+          break;
+        }
         this.line(c.locator ? `await ${loc()}.press(${js(c.key)}${this.optArg()});` : `await ${tab(c)}.keyboard.press(${js(c.key)});`);
         break;
       case 'scroll':
@@ -493,6 +536,9 @@ class Writer {
       unchecked: 'not.toBeChecked',
       enabled: 'toBeEnabled',
       disabled: 'toBeDisabled',
+      focused: 'toBeFocused',
+      editable: 'toBeEditable',
+      'in-viewport': 'toBeInViewport',
     };
     const element = () => firstOf(loc());
     const direct = (target: string, matcher: string, args: string) =>
@@ -509,15 +555,26 @@ class Writer {
     }
     // Matchers by subject: [equals, not-equals, matches] (+ contains for text).
     const page = tab(c);
-    const matchers: Record<string, { target: () => string; matcher: string; contains?: string; arg?: (value: string) => string }> = {
+    const matchers: Record<string, { target: () => string; matcher: string; contains?: string; arg?: (value: string) => string; pattern?: boolean }> = {
       text: { target: element, matcher: 'toHaveText', contains: 'toContainText' },
       input: { target: element, matcher: 'toHaveValue' },
       attribute: { target: element, matcher: 'toHaveAttribute', arg: (value) => `${js(c.name)}, ${value}` },
       count: { target: () => loc(), matcher: 'toHaveCount', arg: (value) => `Number(${value})` },
       url: { target: () => page, matcher: 'toHaveURL' },
       title: { target: () => page, matcher: 'toHaveTitle' },
+      // "class contains a b" = has both classes, as in BlockFlow.
+      class: { target: element, matcher: 'toHaveClass', contains: 'toContainClass' },
+      css: { target: element, matcher: 'toHaveCSS', arg: (value) => `${js(c.name)}, ${value}`, pattern: true },
+      'accessible-name': { target: element, matcher: 'toHaveAccessibleName', pattern: true },
+      'accessible-description': { target: element, matcher: 'toHaveAccessibleDescription', pattern: true },
     };
     const found = matchers[subject];
+    // Matchers that take a RegExp: contains / starts-with / ends-with become an escaped pattern.
+    if (found?.pattern && ['contains', 'not-contains', 'starts-with', 'ends-with'].includes(operator)) {
+      const arg = found.arg ?? ((value: string) => value);
+      const pattern = `textPattern(${js(operator === 'not-contains' ? 'contains' : operator)}, ${expected})`;
+      return direct(found.target(), operator === 'not-contains' ? `not.${found.matcher}` : found.matcher, arg(pattern));
+    }
     if (found) {
       const arg = found.arg ?? ((value: string) => value);
       if (operator === 'equals') return direct(found.target(), found.matcher, arg(expected));
@@ -611,6 +668,12 @@ function urlPattern(pattern: string): (url: URL) => boolean {
 function regexOf(pattern: string): RegExp {
   const literal = /^\\/(.*)\\/([dgimsuyv]*)$/s.exec(pattern);
   return literal ? new RegExp(literal[1] as string, literal[2]) : new RegExp(pattern);
+}
+
+/** A RegExp for text operators Playwright matchers only take as a pattern (contains, starts-with, ends-with). */
+function textPattern(operator: string, text: string): RegExp {
+  const escaped = text.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
+  return new RegExp(operator === 'starts-with' ? '^' + escaped : operator === 'ends-with' ? escaped + '$' : escaped);
 }
 
 /** Wait For text: "/re/i" is a pattern, anything else plain text. */
@@ -748,6 +811,20 @@ async function read(element: Locator, kind: string, name = ''): Promise<string> 
   if (kind === 'visible') return String(await first.isVisible());
   if (kind === 'checked') return String(await first.isChecked());
   if (kind === 'enabled') return String(await first.isEnabled());
+  if (kind === 'focused') return String(await first.evaluate((el) => el === el.ownerDocument.activeElement));
+  if (kind === 'editable') return String(await first.isEditable());
+  if (kind === 'class') return ((await first.getAttribute('class')) ?? '').replace(/\\s+/g, ' ').trim();
+  if (kind === 'css') return await first.evaluate((el, property) => getComputedStyle(el).getPropertyValue(property).trim(), name);
+  if (kind === 'accessible-name' || kind === 'accessible-description') {
+    // Playwright has matchers for these but no getter: a simplified reading of the ARIA attributes.
+    return await first.evaluate((el, which) => {
+      const byIds = (ids: string | null) => (ids ?? '').split(/\\s+/).map((id) => el.ownerDocument.getElementById(id)?.textContent ?? '').join(' ').trim();
+      const text = which === 'accessible-name'
+        ? byIds(el.getAttribute('aria-labelledby')) || el.getAttribute('aria-label') || (el as HTMLElement).innerText || el.getAttribute('title') || ''
+        : byIds(el.getAttribute('aria-describedby')) || el.getAttribute('aria-description') || el.getAttribute('title') || '';
+      return text.replace(/\\s+/g, ' ').trim();
+    }, kind);
+  }
   return ((await first.textContent()) ?? '').replace(/\\s+/g, ' ').trim();
 }
 
