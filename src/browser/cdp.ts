@@ -64,18 +64,103 @@ const KEYS: Record<string, { code: string; keyCode: number; text?: string }> = {
 
 const MODIFIERS: Record<string, number> = { alt: 1, control: 2, ctrl: 2, meta: 4, cmd: 4, command: 4, shift: 8 };
 
+/** CDP `modifiers` bit mask for Playwright modifier names (Alt 1, Control 2, Meta 4, Shift 8). */
+export function modifierMask(modifiers: readonly string[] = []): number {
+  return modifiers.reduce((sum, name) => sum | (MODIFIERS[name.toLowerCase()] ?? 0), 0);
+}
+
+/** CDP `buttons` bit of a pressed button. */
+const BUTTON_BITS = { left: 1, right: 2, middle: 4 } as const;
+
 /**
  * Moves the mouse to (x, y) in CSS pixels of the viewport, then presses and releases `clicks` times
- * (clickCount increases, so 2 is a double click). `hoverOnly` stops after the move.
+ * (clickCount increases, so 2 is a double click). `hoverOnly` stops after the move. `modifiers` are
+ * held throughout (Alt, Control, Meta, Shift).
  */
-export async function mouseClick(send: Send, x: number, y: number, options: { button?: 'left' | 'right'; clicks?: number; hoverOnly?: boolean } = {}): Promise<void> {
+export async function mouseClick(
+  send: Send,
+  x: number,
+  y: number,
+  options: { button?: 'left' | 'middle' | 'right'; clicks?: number; hoverOnly?: boolean; modifiers?: readonly string[] } = {},
+): Promise<void> {
   const button = options.button ?? 'left';
-  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
+  const modifiers = modifierMask(options.modifiers);
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', modifiers });
   if (options.hoverOnly) return;
   for (let click = 1; click <= (options.clicks ?? 1); click += 1) {
-    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, clickCount: click });
-    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button, clickCount: click });
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, buttons: BUTTON_BITS[button], clickCount: click, modifiers });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button, buttons: 0, clickCount: click, modifiers });
   }
+}
+
+/** Pointer moves between the two points of a real drag. */
+const DRAG_STEPS = 5;
+/** How long each early move waits for Chrome to report that a native (HTML5) drag started. */
+const DRAG_START_WAIT_MS = 150;
+
+/**
+ * A real mouse drag from one point to another in the tab's viewport. Press at `from`, move in steps to
+ * `to`, release. Native HTML5 drags are intercepted (`Input.setInterceptDrags`): when the page starts one,
+ * Chrome reports its data (`Input.dragIntercepted`) and the rest goes through `Input.dispatchDragEvent`
+ * (dragEnter, dragOver, drop), the way Playwright does it; without a native drag the moves stay plain
+ * mouse moves with the left button held (sliders, pointer-based sortables). Returns which it was.
+ */
+export async function mouseDrag(tabId: number, from: { x: number; y: number }, to: { x: number; y: number }, options: { modifiers?: readonly string[] } = {}): Promise<'html5' | 'pointer'> {
+  const modifiers = modifierMask(options.modifiers);
+  let intercepted: unknown;
+  let wake: (() => void) | undefined;
+  const listener = (source: { tabId?: number }, method: string, params?: unknown) => {
+    if (source.tabId !== tabId || method !== 'Input.dragIntercepted') return;
+    intercepted = (params as { data?: unknown } | undefined)?.data;
+    wake?.();
+  };
+  const waitForDrag = () =>
+    intercepted !== undefined
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, DRAG_START_WAIT_MS);
+          wake = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+        });
+  return withDebugger(tabId, async (send) => {
+    browser.debugger.onEvent.addListener(listener);
+    try {
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: from.x, y: from.y, button: 'none', modifiers });
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: from.x, y: from.y, button: 'left', buttons: 1, clickCount: 1, modifiers });
+      const intercepting = await send('Input.setInterceptDrags', { enabled: true }).then(
+        () => true,
+        () => false,
+      );
+      let dragging = false;
+      try {
+        for (let step = 1; step <= DRAG_STEPS; step += 1) {
+          const x = from.x + ((to.x - from.x) * step) / DRAG_STEPS;
+          const y = from.y + ((to.y - from.y) * step) / DRAG_STEPS;
+          if (dragging) {
+            await send('Input.dispatchDragEvent', { type: 'dragOver', x, y, data: intercepted, modifiers });
+            continue;
+          }
+          await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'left', buttons: 1, modifiers });
+          if (intercepting) await waitForDrag();
+          if (intercepted !== undefined) {
+            dragging = true;
+            await send('Input.dispatchDragEvent', { type: 'dragEnter', x, y, data: intercepted, modifiers });
+            await send('Input.dispatchDragEvent', { type: 'dragOver', x, y, data: intercepted, modifiers });
+          }
+        }
+        // A native drag ends with the drop (Chrome then sends dragend); no mouse release, as in Playwright.
+        if (dragging) await send('Input.dispatchDragEvent', { type: 'drop', x: to.x, y: to.y, data: intercepted, modifiers });
+        else await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: to.x, y: to.y, button: 'left', buttons: 0, clickCount: 1, modifiers });
+      } finally {
+        if (intercepting) await send('Input.setInterceptDrags', { enabled: false }).catch(() => {});
+      }
+      return dragging ? 'html5' : 'pointer';
+    } finally {
+      browser.debugger.onEvent.removeListener(listener);
+    }
+  });
 }
 
 /**

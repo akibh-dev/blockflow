@@ -20,6 +20,8 @@ import { scheduleBlock } from './scheduleBlock';
 import { dialogsBlock } from './dialogs';
 import { runScriptBlock } from './runScript';
 import { uploadFileBlock } from './uploadFile';
+import { dragBlock } from './drag';
+import { elementActionBlock } from './elementAction';
 import { waitForPopupBlock } from './waitForPopup';
 import { assertBlock } from './assert';
 import { checkBlock } from './check';
@@ -49,6 +51,8 @@ export {
   dialogsBlock,
   runScriptBlock,
   uploadFileBlock,
+  dragBlock,
+  elementActionBlock,
   waitForPopupBlock,
   contextMenuBlock,
   manualStartBlock,
@@ -98,7 +102,7 @@ export {
 export const BLOCK_GROUPS: { category: BlockCategory; blocks: AnyBlockDefinition[] }[] = [
   { category: 'start', blocks: [manualStartBlock, timerBlock, scheduleBlock, pageVisitedBlock, contextMenuBlock, watchElementBlock] },
   { category: 'browser', blocks: [openUrlBlock, navigateBlock, waitForPopupBlock, closeTabBlock] },
-  { category: 'page', blocks: [clickBlock, fillBlock, fillFormBlock, selectOptionBlock, checkBlock, pressKeyBlock, uploadFileBlock, scrollBlock, dialogsBlock, waitForBlock, runScriptBlock] },
+  { category: 'page', blocks: [clickBlock, fillBlock, fillFormBlock, selectOptionBlock, checkBlock, pressKeyBlock, dragBlock, elementActionBlock, uploadFileBlock, scrollBlock, dialogsBlock, waitForBlock, runScriptBlock] },
   { category: 'read', blocks: [readElementBlock, extractListBlock, extractTableBlock, paginateBlock, pageInfoBlock, pageSnapshotBlock] },
   { category: 'test', blocks: [assertBlock, manualStepBlock, stopBlock] },
   { category: 'logic', blocks: [ifBlock, forEachBlock, repeatBlock, runWorkflowBlock] },

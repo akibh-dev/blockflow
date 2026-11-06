@@ -20,7 +20,7 @@ Design rationale (why short calls, why synthetic events) is in
 | Install | `main()` | `globalThis.__blockflowAgent ??= createAgent()`. Re-injecting into the same document keeps the existing agent (and its `lastRects`). |
 | Call | `pageDriver.callOnce` | `scripting.executeScript({ func, args: [call] })` in the default ISOLATED world, so it sees the content script's `globalThis`. The func returns `__blockflowAgent.run(call)` or `{status: 'missing'}`. |
 | Missing | `pageDriver.callAgent` | On `missing`, injects `agent.js` with `files:` and calls once more. A navigation gives a fresh document, so the next call re-injects. |
-| Vanished | `pageDriver.callOnce` | `executeScript` returned no result: the page went away mid-call. For actions (`click`, `fill`, `set-field`, `select`, `check`, `press`) the driver returns `{navigated: true}` rather than repeat the action. |
+| Vanished | `pageDriver.callOnce` | `executeScript` returned no result: the page went away mid-call. For actions (`click`, `fill`, `set-field`, `select`, `check`, `press`, `drag`, `focus`, `blur`, `clear`, `dispatch`) the driver returns `{navigated: true}` rather than repeat the action. |
 | Frames | `pageDriver.actInTab` | Target is the top frame unless the agent answered `{status: 'frame'}`; then the driver looks the frame up with `webNavigation.getAllFrames` (children of the current frame first; exact URL, else prefix match) and sends `rest` to that `frameIds: [id]`, re-injecting there if needed. |
 
 There is one agent per document (per frame). Same-origin iframes are entered by the top-frame agent
@@ -105,8 +105,12 @@ agent does with them.
 | `page-info` | — | — | `{url, title, description, canonical, lang, meta, jsonLd, links}` |
 | `storage` | — | — | `{value}` |
 | `scroll` | `one` for `to: 'element'` | none | `{height, y}` |
-| `upload` | `one`, then input / `label.control` / nested `input[type=file]` | enabled only (hidden inputs allowed) | `{files: names[]}` |
-| `locate` | `one` | visible, enabled, editable (fill, or set-field on a text field), stable, hit | `{x, y, kind: 'text' \| 'select' \| 'check' \| 'other'}` |
+| `upload` | `one`, then input / `label.control` / nested `input[type=file]` (with `dropzone`: the element itself) | enabled only (hidden inputs allowed); drop zone: visible, stable | `{files: names[]}` (+ `dropped`) |
+| `focus` / `blur` | `one` | focus: visible; blur: none | `{focused}` / `{blurred}` |
+| `clear` | `one` | visible, enabled, editable | `{value: ''}` |
+| `dispatch` | `one` | none | `{dispatched, defaultPrevented}` |
+| `drag` | `one` for source and `to` | source visible, stable, hit; target visible, stable | `{dragged, to, mode, dropped}` |
+| `locate` | `one` | visible, enabled, editable (fill, or set-field on a text field), stable, hit (purpose `drop`: visible, stable) | `{x, y, kind: 'text' \| 'select' \| 'check' \| 'other'}` (`position` instead of the center when given) |
 | `snapshot` | body, or `all(locator)[0]` (Pending while none) | none | `SnapshotResult`: `takeSnapshot()` in [snapshot.ts](../../src/dom/snapshot.ts), plus `url` and `title` |
 
 ### Snapshot (`snapshot.ts`)
@@ -167,8 +171,13 @@ are `composed: true`, so they cross shadow boundaries.
 |---|---|---|
 | hover | pointerover, pointerenter, mouseover, mouseenter, pointermove, mousemove | — |
 | click | hover set, then pointerdown, mousedown, (focus unless mousedown cancelled), pointerup, mouseup, click | The browser runs `click`'s default action for dispatched clicks (follow link, toggle checkbox, submit). |
-| double | the press sequence twice (`detail` 1, 2), then dblclick | — |
-| right | press sequence with `button: 2`, `contextmenu` instead of `click` | — |
+| double | the press sequence twice (`detail` 1, 2), dblclick after the second click | — |
+| right | press sequence with `button: 2`, `contextmenu` instead of `click` (kept as before M2: no `auxclick`, which real Chrome also sends) | — |
+| middle (`button: 'middle'`) | press sequence with `button: 1`, `auxclick` instead of `click` | — |
+| click options | `modifiers` set `altKey`/`ctrlKey`/`metaKey`/`shiftKey` on every event (hover too); `position` sets `clientX/Y` (padding box corner + x,y); `clickCount: n` repeats the press n times (`detail` 1…n), `dblclick` after the 2nd left press | — |
+| focus / blur | `focus()` on the element or its closest focusable ancestor / `blur()` on the focused element when it is the element or inside it | — |
+| clear | as fill with `''` | value emptied |
+| dispatch | one event, see [Page Protocol](Page-Protocol.md#ops) | the browser's default for dispatched events only |
 | fill (`mode: 'fill'`) | focus, native value setter, `input` (InputEvent `insertText`), `change` | value set |
 | fill (`mode: 'type'`) | clear (`input` deleteContentBackward), then per char keydown, keypress, value += char, input, keyup; then `change` | char added only if keydown and keypress were not cancelled |
 | fill (contenteditable) | select contents, `execCommand('insertText')`, else `textContent =` + `input` | — |
@@ -176,6 +185,26 @@ are `composed: true`, so they cross shadow boundaries.
 | check | a full `click`, then verifies `checkedState` changed (Fatal if not) | — |
 | press | keydown, keypress (printable or Enter), keyup | printable char typed into inputs/textarea; Enter adds `\n` in textarea, `form.requestSubmit()` in inputs, `.click()` on a/button; Backspace deletes; Tab / Shift+Tab focus the next/previous tabbable; Ctrl+A selects |
 | upload | `input.files = DataTransfer.files`, `input`, `change` | — |
+| upload, drop zone | dragenter, dragover (must be cancelled), drop, each a DragEvent carrying one DataTransfer with the files (`types` includes `Files`); dragleave instead of drop when dragover was not cancelled | — |
+
+### Drag and drop
+
+`drag()` takes the source's point (center or `fromPosition`) and the target's (center or `toPosition`). After
+the hover set, pointerdown and mousedown on the source:
+
+- **HTML5 path**, when the source is draggable (`draggable="true"` on it or an ancestor, or a link/image
+  that is not `draggable="false"`) and its `dragstart` is not cancelled: one DataTransfer (`new
+  DataTransfer()`, or a stand-in with the same methods where it cannot be constructed) travels through
+  dragstart, pointercancel, drag, dragenter and dragover on the element under the target point, then drop
+  when dragover was cancelled (with `dropEffect` set from `effectAllowed`) or dragleave when not, then
+  dragend on the source. No pointerup/mouseup follow, as in browsers. `{mode: 'html5', dropped}`.
+- **Pointer path** otherwise (sliders, pointer-event sortables, canvases): 5 pointermove/mousemove steps
+  with `buttons: 1`, then pointerup/mouseup at the target point. Pointer events go to the source, as they
+  would to an element that captured the pointer (the content script runs in an isolated world, so it
+  cannot see or emulate the page's `setPointerCapture`); mouse events go to the element under each point.
+  Code that listens on the document gets both. `{mode: 'pointer'}`.
+
+With real input the driver drags with CDP instead: see [Browser Host](Browser-Host.md#cdpts).
 
 **Native setter.** `setNativeValue` calls the `value` setter from `HTMLInputElement.prototype` (or
 TextArea/Select), bypassing the instance-level property React installs to track value. That makes React,
@@ -198,7 +227,8 @@ ARIA switch → `check` with `true/yes/on/1/checked` meaning checked; file input
 With `step.realInput`, [pageDriver.ts](../../src/browser/pageDriver.ts) sends `{op: 'locate'}` first (same
 waits as the action), takes `{x, y}` and drives `chrome.debugger` `Input.*` events instead
 ([cdp.ts](../../src/browser/cdp.ts)). The agent's only role is waiting and reporting the center and field
-kind; `set-field` on non-text fields and all non-action ops fall back to the synthetic path. See
+kind (or the `position` point); `set-field` on non-text fields and all non-action ops fall back to the
+synthetic path. See
 [Browser Host](Browser-Host.md).
 
 Coordinates are the tab's, also inside frames: for an element in a same-origin frame, `locate` brings the

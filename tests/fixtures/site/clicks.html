@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Fixture: click options and element actions</title>
+<style>
+  #target { width: 200px; height: 60px; }
+  #far { margin-top: 3000px; }
+</style></head>
+<body>
+  <!-- Click options: every press is logged as "type button detail keys x,y trusted" (x,y inside the button). -->
+  <button type="button" id="target">Target</button>
+  <button type="button" id="reset">Reset log</button>
+  <pre id="log"></pre>
+
+  <!-- Element actions. -->
+  <input id="name" aria-label="Name" value="prefilled">
+  <p id="focus-state">none</p>
+  <div id="custom-target">custom</div>
+  <p id="custom"></p>
+  <p id="scrolled">top</p>
+  <div id="far">far down</div>
+  <script>
+    const log = document.getElementById('log');
+    const target = document.getElementById('target');
+    for (const type of ['click', 'dblclick', 'auxclick', 'contextmenu']) {
+      target.addEventListener(type, (event) => {
+        if (type === 'contextmenu') event.preventDefault();
+        const rect = target.getBoundingClientRect();
+        const keys = [event.altKey && 'Alt', event.ctrlKey && 'Control', event.metaKey && 'Meta', event.shiftKey && 'Shift'].filter(Boolean).join('+') || '-';
+        // Inside the padding box, as Playwright measures `position`.
+        const at = `${Math.round(event.clientX - rect.left - target.clientLeft)},${Math.round(event.clientY - rect.top - target.clientTop)}`;
+        log.textContent += `${type} ${event.button} ${event.detail} ${keys} ${at} ${event.isTrusted};`;
+      });
+    }
+    // Middle clicks must not start autoscroll or open anything.
+    target.addEventListener('mousedown', (event) => { if (event.button === 1) event.preventDefault(); });
+    document.getElementById('reset').addEventListener('click', () => { log.textContent = ''; });
+
+    const name = document.getElementById('name');
+    name.addEventListener('focus', () => { document.getElementById('focus-state').textContent = 'focused'; });
+    name.addEventListener('blur', () => { document.getElementById('focus-state').textContent = 'blurred'; });
+    name.addEventListener('change', () => { name.dataset.changed = `[${name.value}]`; });
+    document.addEventListener('my-event', (event) => {
+      document.getElementById('custom').textContent = `${event.target.id} ${JSON.stringify(event.detail)}`;
+    });
+    // Polled, not on "scroll": background tabs do not paint, so scroll events may not fire there.
+    setInterval(() => { document.getElementById("scrolled").textContent = window.scrollY > 1000 ? "far" : "top"; }, 100);
+  </script>
+</body></html>

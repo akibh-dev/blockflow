@@ -94,11 +94,22 @@ async function navigate(tabId: number, { action, url, waitUntil, timeoutMs }: Na
 const MAX_BODY_CHARS = 200_000;
 
 /** `Host.http.fetch`: plain `fetch` from the extension origin (host permissions bypass CORS). Body capped at MAX_BODY_CHARS. */
-async function httpFetch({ url, method, headers, body }: HttpRequestOptions): Promise<HttpResult> {
+async function httpFetch({ url, method, headers, body, responseType }: HttpRequestOptions): Promise<HttpResult> {
   const response = await fetch(url, { method, headers, ...(body !== undefined ? { body } : {}) });
+  const mime = response.headers.get('content-type')?.split(';')[0]?.trim() || undefined;
+  if (responseType === 'base64') {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length > MAX_BINARY_BYTES) throw new Error(`The response is ${bytes.length} bytes; base64 bodies are limited to ${MAX_BINARY_BYTES} bytes`);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return { status: response.status, ok: response.ok, body: '', base64: btoa(binary), ...(mime ? { mime } : {}) };
+  }
   const text = await response.text();
-  return { status: response.status, ok: response.ok, body: text.slice(0, MAX_BODY_CHARS) };
+  return { status: response.status, ok: response.ok, body: text.slice(0, MAX_BODY_CHARS), ...(mime ? { mime } : {}) };
 }
+
+/** Largest body HTTP Request answers as base64 (it travels in the run's data). */
+const MAX_BINARY_BYTES = 20 * 1024 * 1024;
 
 /** `Host.notify`: a basic system notification. */
 async function notify({ title, message }: NotifyOptions): Promise<void> {
