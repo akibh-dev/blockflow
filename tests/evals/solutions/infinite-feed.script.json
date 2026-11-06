@@ -1,0 +1,7 @@
+{ "format": "blockflow-script", "version": 1, "name": "Eval: infinite-feed",
+  "steps": [
+    { "open": "{{BASE}}/feed.html" },
+    { "scroll": { "to": "end", "pauseMs": 800 } },
+    { "read-element": { "locator": ".post", "read": "count" } },
+    { "close-tab": {} }
+  ] }

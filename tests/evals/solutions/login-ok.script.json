@@ -1,0 +1,11 @@
+{ "format": "blockflow-script", "version": 1, "name": "Eval: login-ok",
+  "steps": [
+    { "open": "{{BASE}}/login.html" },
+    { "fill": { "locator": "label=Email", "value": "me@example.com" } },
+    { "fill": { "locator": "label=Password", "value": "{{secret.password}}" } },
+    { "select": { "locator": "label=Country", "value": "bd" } },
+    { "check": "label=Remember me" },
+    { "click": "role=button[name=\"Sign in\"]" },
+    { "assert": { "locator": "role=heading[level=1]", "operator": "equals", "expected": "Welcome, me!" } },
+    { "close-tab": {} }
+  ] }

@@ -12,6 +12,12 @@ imports with no error issues, the run finishes, and every entry in `checks` hold
 described in the file). If it fails, the model gets one retry with the import issues (code, path, hint)
 or the failed step's code and message. Target: 9 of 10 within two tries.
 
-**Running them.** Scoring needs the CLI runner from M4 ([IMPLEMENTATION.md](../../docs/IMPLEMENTATION.md)).
-Until then `tests/core/evals.test.ts` keeps the file well formed and its fixture pages present, and a
-person can paste a task into a chat and import the answer by hand.
+**Reference solutions.** `solutions/<task id>.script.json` is one passing answer per task, in the script
+format. `npm run e2e -- evals` ([tests/e2e/specs/evals.mjs](../e2e/specs/evals.mjs)) imports each through
+the editor, runs it and scores it with the task's checks, so every task is known to be solvable and the
+scorer is tested. `tests/core/evals.test.ts` keeps `tasks.json` well formed and checks that each solution
+imports with no issues.
+
+**Scoring a model.** Automated scoring of a model's answers needs the CLI runner from M4
+([IMPLEMENTATION.md](../../docs/IMPLEMENTATION.md)); it will reuse the scorer in `evals.mjs`. Until then,
+paste `llms.txt` and a task into a chat, import the answer, and run it.

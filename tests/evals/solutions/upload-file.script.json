@@ -1,0 +1,7 @@
+{ "format": "blockflow-script", "version": 1, "name": "Eval: upload-file",
+  "steps": [
+    { "open": "{{BASE}}/upload.html" },
+    { "upload-file": { "locator": "label=Upload CV", "content": "hello", "filename": "notes.txt" } },
+    { "assert": { "locator": "#out", "operator": "equals", "expected": "notes.txt|text/plain|hello" } },
+    { "close-tab": {} }
+  ] }

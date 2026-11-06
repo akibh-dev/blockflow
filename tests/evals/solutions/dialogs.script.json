@@ -1,0 +1,11 @@
+{ "format": "blockflow-script", "version": 1, "name": "Eval: dialogs",
+  "steps": [
+    { "open": "{{BASE}}/dialogs.html" },
+    { "dialogs": { "action": "accept" } },
+    { "click": "role=button[name=\"Delete\"]" },
+    { "assert": { "locator": "#result", "operator": "equals", "expected": "deleted" } },
+    { "dialogs": { "action": "accept", "text": "Akib" } },
+    { "click": "role=button[name=\"Your name\"]" },
+    { "assert": { "locator": "#result", "operator": "equals", "expected": "Hi Akib" } },
+    { "close-tab": {} }
+  ] }

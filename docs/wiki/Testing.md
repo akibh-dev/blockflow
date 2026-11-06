@@ -69,7 +69,7 @@ against real Chromium.
 | [core/workflow.test.ts](../../tests/core/workflow.test.ts) | `diffWorkflows`, `rootSignature`, `createWorkflow`, sample workflows, timer keys, `uid` |
 | [core/library.test.ts](../../tests/core/library.test.ts) | `uniqueName`, clone / duplicate, export / import (refusals carry `issues`) |
 | [core/migrate.test.ts](../../tests/core/migrate.test.ts) | v1 → v2 key renames (`selector`/`next` → `locator`), no-op on current workflows, old keys accepted on import |
-| [core/evals.test.ts](../../tests/core/evals.test.ts) | The authoring eval set ([tests/evals/tasks.json](../../tests/evals/tasks.json)) is well formed: ten tasks, known check kinds and block types, fixture pages that exist |
+| [core/evals.test.ts](../../tests/core/evals.test.ts) | The authoring eval set ([tests/evals/tasks.json](../../tests/evals/tasks.json)) is well formed: ten tasks, known check kinds and block types, fixture pages that exist; each reference solution (`tests/evals/solutions`) imports with no issues |
 | [core/check.test.ts](../../tests/core/check.test.ts) | `checkFile`: one fixture per issue code (level and JSON path), did-you-mean hints, the blocks' `validate` hooks (import and editor), `parseImport` with errors / warnings, `editDistance` / `closest` |
 | [core/expression.test.ts](../../tests/core/expression.test.ts) | Expression language and templates with expressions |
 | [core/template.test.ts](../../tests/core/template.test.ts) | `render`, `hasTemplate`, `getPath` |
@@ -284,6 +284,7 @@ Scenarios by spec:
 | Notify | none | The run passes and `chrome.notifications.getAll()` in the worker lists the notification |
 | Editor UX (`editor-ux`) | editor UI; `docs/manual-test/playground.html` via `scripts/playground.mjs` on port 7357 | In-editor toasts and confirm/input dialogs (no native ones), the All workflows switch and Turn all on with a problem workflow, `bf:state` cleanup on delete, recorder start-URL check, real-input setting only on page actions, undo per workflow, paste at the mouse, the Try it card and the playground template passing |
 | Import checking (`import-check`) | editor UI | Importing a broken file (unknown type, mistyped config key) opens the issues dialog with each code, JSON path and did-you-mean and imports nothing; a file with only warnings imports and its toast's Details lists `page.no-tab`; Escape closes the dialog |
+| Authoring evals (`evals`) | every page used by [tests/evals/tasks.json](../../tests/evals/tasks.json) | Each reference solution in `tests/evals/solutions/` is imported through the editor (compiled and checked), run, and scored with its task's checks (`status`, `output` at a dot path, `step-type`); the scorer the M4 CLI will reuse |
 
 The Playwright export step writes `.output-e2e/playwright/exported.spec.ts` plus a config and runs it with
 `LOGINPASSWORD` set, so `@playwright/test` is a dev dependency only for this.

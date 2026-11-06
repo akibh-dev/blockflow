@@ -1,0 +1,13 @@
+{ "format": "blockflow-script", "version": 1, "name": "Eval: spa-signup",
+  "steps": [
+    { "open": "{{BASE}}/spa/" },
+    { "click": "role=button[name=\"Accept\"]" },
+    { "fill": { "locator": "label=Full name", "value": "Ada Lovelace" } },
+    { "fill": { "locator": "label=Email", "value": "ada@example.com" } },
+    { "select": { "locator": "label=Plan", "value": "pro" } },
+    { "check": "label=I accept the terms" },
+    { "click": "role=button[name=\"Create account\"]" },
+    { "assert": { "locator": "role=heading[level=1]", "operator": "equals", "expected": "Thanks, Ada Lovelace!" } },
+    { "assert": { "subject": "url", "operator": "ends-with", "expected": "/spa/done" } },
+    { "close-tab": {} }
+  ] }
