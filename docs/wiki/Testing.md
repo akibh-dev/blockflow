@@ -245,7 +245,7 @@ A spec that throws is reported as `<name>: spec crashed` and the run goes on wit
 | Serve fixtures | `startServer()` from `server.mjs` on `127.0.0.1:<random port>` |
 | Launch | `chromium.launchPersistentContext` (playwright-core) with a temp profile, `--load-extension`, headed by default; `BF_HEADLESS=1` adds `--headless=new` |
 | Find the extension | Waits for the service worker; its URL gives the extension id; opens `chrome-extension://<id>/editor.html` |
-| Run a workflow | `run(wf)` sends `{ type: 'bf:run-workflow', workflow }` from the editor page, then polls `bf:runs` in `chrome.storage.local` every 200 ms until a finished run appears (90 s limit). See [Message Protocol](Message-Protocol.md) and [Storage Keys](Storage-Keys.md) |
+| Run a workflow | `run(wf)` sends `{ type: 'bf:run-workflow', workflow }` from the editor page, then polls `bf:runs` in `chrome.storage.local` every 200 ms until a finished run of that workflow appears that was not there before the call (so running the same workflow twice in a row gets the second run; 90 s limit). See [Message Protocol](Message-Protocol.md) and [Storage Keys](Storage-Keys.md) |
 | Seed state | `seedWorkflows(list)` closes the editor (it saves on close), writes `bf:workflows`, reopens it. Secrets go to `bf:secrets` |
 | First-run card | Sets `bf:onboarding` to dismissed before the editor opens, so the "Try it" card does not cover the canvas (the `editor-ux` spec brings it back) |
 | Report | `check(name, ok, detail)` prints ✓/✗; exit code 1 if any check failed. Last check: no uncaught errors in the editor page. |

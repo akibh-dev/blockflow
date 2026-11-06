@@ -123,14 +123,17 @@ export async function launch() {
 
   /**
    * Runs `wf` through the background worker (`bf:run-workflow` message from the editor page), then polls
-   * `bf:runs` in storage every 200 ms until a finished run of that workflow appears (90 s limit).
+   * `bf:runs` in storage every 200 ms until a new finished run of that workflow appears (90 s limit).
    */
   async function run(wf) {
+    // Runs of this workflow that already exist: the same workflow may be run several times in a row.
+    const readRuns = async () => (await worker.evaluate(() => chrome.storage.local.get('bf:runs')))['bf:runs'] ?? [];
+    const seen = new Set((await readRuns()).filter((candidate) => candidate.workflowId === wf.id).map((candidate) => candidate.id));
     await editor.evaluate((w) => chrome.runtime.sendMessage({ type: 'bf:run-workflow', workflow: w }), wf);
     const deadline = Date.now() + 90_000;
     while (Date.now() < deadline) {
-      const runs = (await worker.evaluate(() => chrome.storage.local.get('bf:runs')))['bf:runs'] ?? [];
-      const done = runs.findLast((candidate) => candidate.workflowId === wf.id && candidate.status !== 'running');
+      const runs = await readRuns();
+      const done = runs.findLast((candidate) => candidate.workflowId === wf.id && !seen.has(candidate.id) && candidate.status !== 'running');
       if (done) return done;
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
