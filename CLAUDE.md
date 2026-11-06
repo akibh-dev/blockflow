@@ -10,7 +10,7 @@ npm install            # runs `wxt prepare` (generates .wxt/ types)
 npm run typecheck      # tsc --noEmit
 npm test               # vitest run (core + editor + browser in Node, tests/dom in jsdom)
 npm run check          # typecheck + tests + learning examples and generated guide in sync + wiki links
-npm run e2e            # BF_E2E=1 build into .output-e2e (optional permissions granted) + drive it in Brave/Chromium
+npm run e2e            # BF_E2E=1 build into .output-e2e (optional permissions granted) + drive it in Chromium (or Brave)
                        # (tests/e2e, fixtures in tests/fixtures/site; BF_BROWSER=/path/to/chrome to choose)
 npm run guide:sync     # regenerate docs/guide/blocks.* from the registry (guide:check is part of npm run check)
 npm run learn:sync     # regenerate docs/learning/examples from the lessons (learn:check verifies)

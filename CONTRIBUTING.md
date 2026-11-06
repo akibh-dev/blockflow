@@ -59,7 +59,7 @@ Never hand-edit `docs/learning/examples/` or `docs/guide/blocks.*`. Both are gen
 - Page agent, locators, picker and recorder: `tests/dom/*` in jsdom.
 - Editor model: `tests/editor/*`.
 - End to end: `npm run e2e` builds with optional permissions granted and drives the extension in
-  Brave/Chromium against `tests/fixtures/site`. Set `BF_BROWSER=/path/to/chrome` to choose the browser and
+  Chromium (or Brave) against `tests/fixtures/site`. Set `BF_BROWSER=/path/to/chrome` to choose the browser and
   `BF_HEADLESS=1` to hide it. One area only: `npm run e2e -- blocks-coverage` (spec files in `tests/e2e/specs/`).
   CI runs the whole suite in its `e2e` job.
 - Coverage: `npm run test:coverage` writes `coverage/` (CI uploads it as an artifact; no threshold).

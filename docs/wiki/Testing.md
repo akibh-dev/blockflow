@@ -236,7 +236,7 @@ A spec that throws is reported as `<name>: spec crashed` and the run goes on wit
 
 | Step | Detail |
 | --- | --- |
-| Pick a browser | First existing of: `$BF_BROWSER`, Brave (`/opt/brave.com/brave-origin/brave`, `/opt/brave.com/brave/brave`), `/usr/bin/chromium`, `/usr/bin/chromium-browser`, `/usr/bin/google-chrome`, macOS Chrome, newest `~/.cache/ms-playwright/chromium-*`. Fails if none, or if `.output-e2e/chrome-mv3/manifest.json` is missing |
+| Pick a browser | First existing of: `$BF_BROWSER`, `/usr/bin/chromium`, `/usr/bin/chromium-browser`, Brave (`/opt/brave.com/brave-origin/brave`, `/opt/brave.com/brave/brave`), `/usr/bin/google-chrome`, macOS Chrome, newest `~/.cache/ms-playwright/chromium-*`. Fails if none, or if `.output-e2e/chrome-mv3/manifest.json` is missing |
 | Serve fixtures | `startServer()` from `server.mjs` on `127.0.0.1:<random port>` |
 | Launch | `chromium.launchPersistentContext` (playwright-core) with a temp profile, `--load-extension`, headed by default; `BF_HEADLESS=1` adds `--headless=new` |
 | Find the extension | Waits for the service worker; its URL gives the extension id; opens `chrome-extension://<id>/editor.html` |
