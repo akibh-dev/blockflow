@@ -256,6 +256,29 @@ describe('scraping', () => {
     document.head.innerHTML = '';
   });
 
+  it('storage: set, delete and clear local / session storage; cookies stay read only', async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    expect(await run({ op: 'storage', area: 'local', action: 'set', key: 'token', value: 'abc' })).toEqual({ status: 'done', result: { value: 'abc' } });
+    expect(localStorage.getItem('token')).toBe('abc');
+    expect(await run({ op: 'storage', area: 'local', action: 'delete', key: 'token' })).toEqual({ status: 'done', result: { deleted: 1 } });
+    expect(await run({ op: 'storage', area: 'local', action: 'delete', key: 'token' })).toEqual({ status: 'done', result: { deleted: 0 } });
+    sessionStorage.setItem('a', '1');
+    sessionStorage.setItem('b', '2');
+    expect(await run({ op: 'storage', area: 'session', action: 'clear' })).toEqual({ status: 'done', result: { cleared: 2 } });
+    expect(sessionStorage.length).toBe(0);
+    expect(await run({ op: 'storage', area: 'local', action: 'set' })).toMatchObject({ status: 'error', code: 'config.invalid' });
+    expect(await run({ op: 'storage', area: 'cookies', action: 'clear' })).toMatchObject({ status: 'error', code: 'config.invalid' });
+  });
+
+  it('measure: page size and scroll, or an element box', async () => {
+    page('<div id="box">Hi</div><div id="gone" hidden>x</div>');
+    const metrics = await run({ op: 'measure' });
+    expect(metrics).toMatchObject({ status: 'done', result: { scrollX: 0, scrollY: 0, devicePixelRatio: 1 } });
+    expect(await run({ op: 'measure', locator: '#box' })).toEqual({ status: 'done', result: { x: 0, y: 0, width: 0, height: 0 } });
+    expect(await run({ op: 'measure', locator: '#gone' })).toMatchObject({ status: 'pending', code: 'element.not-visible' });
+  });
+
   it('works on HTML that is parsed, not displayed', async () => {
     const parsed = new DOMParser().parseFromString(`<base href="https://shop.test/">${shop}`, 'text/html');
     const offscreen = createAgent(window as never, parsed);

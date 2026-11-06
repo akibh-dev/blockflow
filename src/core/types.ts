@@ -255,6 +255,9 @@ export interface BlockContext<C extends object = BlockConfig> {
   };
 }
 
+/** Optional permissions a block can ask for (see `BlockDefinition.permissions`). */
+export type OptionalPermission = 'debugger' | 'userScripts' | 'cookies';
+
 /** Palette group of a block. */
 export type BlockCategory = 'start' | 'browser' | 'page' | 'read' | 'test' | 'logic' | 'data' | 'output';
 
@@ -305,8 +308,11 @@ export interface BlockDefinition<C extends object = BlockConfig> {
    */
   realInput?: boolean;
 
-  /** Optional browser permissions this block needs (the editor offers a Grant button). */
-  permissions?: ('debugger' | 'userScripts')[];
+  /**
+   * Optional browser permissions this block needs (the editor offers a Grant button). A function gets
+   * the block's config, for blocks that need one only for some settings.
+   */
+  permissions?: OptionalPermission[] | ((config: C) => OptionalPermission[]);
 
   /**
    * Config keys that are not settings any more but are still read when present (old saved
@@ -464,6 +470,90 @@ export interface HttpResult {
   mime?: string;
 }
 
+/** A file the browser downloaded (Wait for Download). */
+export interface DownloadInfo {
+  downloadId: number;
+  /** Where it was downloaded from (after redirects). */
+  url: string;
+  /** The file name, without folders. */
+  filename: string;
+  /** Where the browser saved it. */
+  path: string;
+  /** Bytes (-1 when the browser does not know). */
+  size: number;
+  /** MIME type the server sent ('' when unknown). */
+  mime: string;
+}
+
+/** One cookie, as the Cookies & Storage block reports it (close to Playwright's `Cookie`). */
+export interface CookieInfo {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  /** Unix time in seconds; -1 for a session cookie. */
+  expires: number;
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: 'Strict' | 'Lax' | 'None' | '';
+}
+
+/** What `Host.cookies.set` writes. `url` decides the domain and path when they are not given. */
+export interface CookieSetOptions {
+  url: string;
+  name: string;
+  value: string;
+  domain?: string;
+  path?: string;
+  /** Unix time in seconds; missing = a session cookie. */
+  expires?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: 'Strict' | 'Lax' | 'None';
+}
+
+/** What the Screenshot block asks `Host.screenshots.take` for. */
+export interface ScreenshotOptions {
+  runId: string;
+  /** visible: what the tab shows; full: the whole page; element: one element's box. */
+  area: 'visible' | 'full' | 'element';
+  /** For `element`. */
+  locator?: string;
+  format: 'png' | 'jpeg';
+  /** JPEG quality, 0 to 100. */
+  quality?: number;
+  /** For waiting on the element. */
+  timeoutMs: number;
+}
+
+/** A stored screenshot (`id` as in `StepRecord.screenshot`) with its size in pixels. */
+export interface ScreenshotResult {
+  id: string;
+  width: number;
+  height: number;
+}
+
+/** A finished network response (Wait For "response"). `body` only with `captureBody`. */
+export interface ResponseInfo {
+  url: string;
+  status: number;
+  method: string;
+  /** The response body as text (cut to a safe size), when asked for and readable. */
+  body?: string;
+  /** Set instead of `body` for binary responses: the body as base64. */
+  bodyBase64?: string;
+}
+
+/** A request the page sent (Wait For "request"). */
+export interface RequestInfo {
+  url: string;
+  method: string;
+  /** script, xmlhttprequest, main_frame… as the browser names it. */
+  type: string;
+  /** The request body as text, when there is one (cut to a safe size). */
+  postData?: string;
+}
+
 /** A desktop notification. */
 export interface NotifyOptions {
   title: string;
@@ -500,7 +590,19 @@ export interface Host {
      * A finished network request of the tab whose URL matches `pattern` (and status, if given:
      * "200", "2xx"), from the last `lookBackMs`, or the next one.
      */
-    waitForResponse(tabId: number, pattern: string, status: string, lookBackMs: number, timeoutMs: number): Promise<{ url: string; status: number; method: string }>;
+    waitForResponse(
+      tabId: number,
+      pattern: string,
+      status: string,
+      lookBackMs: number,
+      timeoutMs: number,
+      options?: { method?: string; captureBody?: boolean },
+    ): Promise<ResponseInfo>;
+    /**
+     * A request the tab sent whose URL matches `pattern` (and `method`, if given), from the last
+     * `lookBackMs`, or the next one. Each request is returned once.
+     */
+    waitForRequest(tabId: number, pattern: string, method: string, lookBackMs: number, timeoutMs: number): Promise<RequestInfo>;
   };
   page: {
     /** Watch Element / Read Element without a tab: BlockFlow's own background tab per URL. */
@@ -531,6 +633,16 @@ export interface Host {
   /** Screenshot of a tab's visible area; resolves with an id to show it later, or null if not possible. */
   screenshots: {
     capture(tabId: number, runId: string): Promise<string | null>;
+    /** Screenshot block: the visible area, the full page or one element. Throws when it cannot be taken. */
+    take(tabId: number, options: ScreenshotOptions): Promise<ScreenshotResult>;
+  };
+  /** The browser's cookies (optional "cookies" permission; HttpOnly ones included). */
+  cookies: {
+    /** Cookies that would be sent to `url`; only those called `name` when given. */
+    get(url: string, name?: string): Promise<CookieInfo[]>;
+    set(cookie: CookieSetOptions): Promise<CookieInfo>;
+    /** Removes the cookies `get(url, name)` returns (every cookie of `url` without `name`); resolves with how many. */
+    remove(url: string, name?: string): Promise<number>;
   };
   /** Named lists of rows kept between runs (scraped data, test results). */
   datasets: {
@@ -541,6 +653,17 @@ export interface Host {
   /** Saves a file to the user's Downloads folder. */
   downloads: {
     save(filename: string, content: string, mime: string): Promise<void>;
+    /**
+     * A download (not one BlockFlow made) that started in the last `lookBackMs` or starts before
+     * `timeoutMs` runs out, whose URL or file name matches `pattern` ('' = any); resolves once it has
+     * finished. Each download is returned once.
+     */
+    waitFor(pattern: string, lookBackMs: number, timeoutMs: number): Promise<DownloadInfo>;
+    /**
+     * A finished download's content as text, fetched again from its URL (extensions cannot read files on
+     * disk): http(s) and data: URLs from the background, blob: URLs in the tab `tabId` that made them.
+     */
+    readText(download: DownloadInfo, tabId?: number): Promise<string>;
   };
   /** Runs a page-agent request against HTML that was fetched, not shown in a tab (Extract from HTML). */
   html: {

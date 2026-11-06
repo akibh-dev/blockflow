@@ -142,7 +142,11 @@ capability **records** what it was asked in a public array and **answers** throu
 | `notifications` | `notify` |
 | `dialogSettings`, `scripts` | `page.dialogs`, `page.runScript` |
 | `screenshotsTaken` | `screenshots.capture` (returns `shot-1`, `shot-2`, …) |
+| `screenshotRequests` | `screenshots.take` (returns `block-shot-1`, … 800×600, full page 800×2400) |
+| `cookieJar` | `cookies.get/set/remove`: cookies by origin |
 | `downloaded` | `downloads.save` |
+| `pageDownloads`, `downloadReads` | `downloads.waitFor` consumes `pageDownloads` (with an optional `content` for `readText`); `readText` calls |
+| `sentRequests`, `responseOptions` | `tabs.waitForRequest` consumes `sentRequests`; options passed to `waitForResponse` (`responses` entries may carry `method` and `body`) |
 | `prompts` | `prompt.ask` messages |
 | `sleeps` | Every `host.sleep(ms)` (timeouts, retry backoff, Assert polling) |
 | `scheduler.timers`, `state.data` | Pending timers and block state |
@@ -275,6 +279,8 @@ Scenarios by spec:
 | Element Action | `clicks.html` | focus, clear (`change` with the empty value), blur, a CustomEvent with templated JSON `detail`, a built-in `click` with its init, scroll into view |
 | Drag | `dnd.html` | An HTML5 sortable list reorders and a pointer-capture slider moves to 75, synthetic (`dragMode` html5 / pointer) and with real input (CDP drag interception; trusted `dragstart` and `pointerdown`) |
 | Drop zone, upload from data | `upload.html` | Upload File `target: dropzone` (text, and a `data:` URL), HTTP Request `responseType: base64` → Upload File `source: data` with `{{body64}}` and `{{mime}}` |
+| **m2-browser** | | |
+| M2.7, M2.8, M2.10, M2.13 | `m2-browser.html`, `/export.csv`, `/login-cookie`, `/whoami` | Wait for Download of a CSV link (rows into a dataset) and of a page-made `blob:` JSON file; Screenshot visible (background tab), full page (taller than 2600 px), element (300×120 card), stored as PNG in IndexedDB; Cookies & Storage reading an HttpOnly cookie, setting one the server then receives, delete, clear; local/session storage set/get/delete/clear; Wait For request (POST body), response with a method filter and a captured body; the same blocks exported to Playwright and run with `npx playwright test` |
 | **scripts** | | |
 | M1.2 | `table.html` + editor UI | Importing a `.script.json` through the Import button: blocks laid out (If rejoin), the run passes; Export as script enabled; Tidy up after a drag puts the blocks back on the grid, and Undo reverts it |
 | **blocks-coverage** | | |
@@ -349,9 +355,11 @@ register a bridge content script on `http://127.0.0.1/*`
 `{ bfE2e, op, arg }` (`send` a runtime message, `get` from `storage.local`, `ping`) and the bridge answers.
 Workflows run through `bf:run-workflow`, exactly like the Chromium specs.
 
-The 14 checks cover forms, HTML parsing without an offscreen document, `storage.session` watch tabs,
-upload, popups, dialogs, IndexedDB datasets, in-run delays, screenshots on failure, Notify, and the
-"Chromium only" errors for Run Script and real input. CI runs it in the `e2e-firefox` job.
+The 24 checks cover forms, HTML parsing without an offscreen document, `storage.session` watch tabs,
+upload, popups, dialogs, IndexedDB datasets, in-run delays, screenshots on failure, Notify, the
+"Chromium only" errors for Run Script, real input and response bodies, and M2: Wait for Download (real file
+names, CSV and `blob:` JSON), Screenshot in all three areas through `tabs.captureTab`, Cookies & Storage,
+and Wait For request. CI runs it in the `e2e-firefox` job.
 
 ## Manual test pages
 

@@ -27,12 +27,15 @@ workflow timing goes through the scheduler.
 | `host.ts` | Assembles the `Host` | `createExtensionHost(scheduler)` | background |
 | `tabs.ts` | Tab primitives | `requireTabId`, `waitForTabComplete`, `reloadAndWait`, `tabExists`, `sleep` | most modules |
 | `ownTabs.ts` | Tabs BlockFlow opened (session storage) | `addOwnTab`, `isOwnTab` | host, pageReader, recording, background |
-| `navigation.ts` | Load / network idle / URL / response waits | `tabInfo`, `waitForLoad`, `waitForUrl`, `waitForNetworkIdle`, `watchNetwork`, `waitForResponse`, `statusMatches` | host |
+| `navigation.ts` | Load / network idle / URL / request / response waits | `tabInfo`, `waitForLoad`, `waitForUrl`, `waitForNetworkIdle`, `watchNetwork`, `waitForResponse`, `waitForRequest`, `statusMatches`, `methodMatches` | host |
 | `pageDriver.ts` | Sends requests to the page agent | `act`, `actInTab` | host, pageReader, picking |
 | `pageReader.ts` | Watch Element / Read Element with a URL | `readElement` | host |
 | `htmlParse.ts` | Agent on an HTML string | `actOnHtml`, `runOnHtml` | host, offscreen document |
 | `cdp.ts` | Real input and background screenshots via `debugger` | `withDebugger`, `mouseClick`, `mouseDrag`, `modifierMask`, `pressKey`, `insertText`, `typeInto`, `captureWithDebugger`, `hasDebugger` | pageDriver, host |
 | `popups.ts` | Tabs opened by pages | `recordPopup`, `waitForPopup` | background, host |
+| `screenshots.ts` | Step screenshots and the Screenshot block | `capture`, `take` | host |
+| `downloads.ts` | Wait for Download | `waitForDownload`, `readDownloadText` | host |
+| `cookies.ts` | Cookies & Storage (cookie jar) | `getCookies`, `setCookie`, `removeCookies` | host |
 | `prompts.ts` | Manual Step | `askUser`, `answerPrompt`, `promptRunId`, `clearStalePrompts`, `PendingPrompt` | host, background, editor |
 | `picking.ts` | Background side of the element picker and the editor's 📸 Snapshot page | `startPicking`, `finishPicking`, `cancelPicking`, `relayPickerSync`, `snapshotForEditor` | background |
 | `recording.ts` | Background side of the recorder | `startRecording`, `recordStep`, `onRecordedPopup`, `onRecordedTabUpdated`, `relayRecorderSync`, `stopRecording`, `loadRecording`, `RecordingState` | background, editor (type) |
@@ -52,7 +55,7 @@ workflow timing goes through the scheduler.
 | `tabs.open(opts)` | `openTab`: reuse `reuseTabId` if it exists → else navigate the active tab when `newTab` is false → else `windows.create` (`newWindow`) or `tabs.create`. Then `addOwnTab`, `watchNetwork`, and if `waitUntil !== 'none'` sleep 100 ms and `waitForLoad`. | `tabs`, `webRequest` |
 | `tabs.navigate(tabId, opts)` | `tabs.update` / `goBack` / `goForward` / `reload`, sleep 100 ms, `waitForLoad`; returns the final URL | `tabs` |
 | `tabs.close(tabId)` | `tabs.remove` if it still exists | `tabs` |
-| `tabs.info`, `waitForLoad`, `waitForUrl`, `waitForResponse` | `navigation.ts` | `tabs`, `webRequest` |
+| `tabs.info`, `waitForLoad`, `waitForUrl`, `waitForResponse`, `waitForRequest` | `navigation.ts` | `tabs`, `webRequest`; `debugger` for `waitForResponse(…, {captureBody: true})` |
 | `tabs.current()` | Active http(s) tab of the last focused window, else the most recently accessed http(s) tab (when the editor is focused) | `tabs` |
 | `tabs.waitForPopup` | `popups.ts` | `webNavigation`, `storage` |
 | `page.act` | `pageDriver.act` | `scripting`, host permissions; `debugger` for real input |
@@ -63,10 +66,14 @@ workflow timing goes through the scheduler.
 | `state` | `StorageState`: `storage.local` under `bf:state:<key>` (a deleted workflow's keys are removed by `clearWorkflowState` in `stores.ts`) | `storage` |
 | `workflows.get(id)` | `loadWorkflows()` and find | `storage` |
 | `secrets.all()` | `bf:secrets` | `storage` |
-| `screenshots.capture(tabId, runId)` | Active tab: `tabs.captureVisibleTab` (JPEG 60). Background tab: `captureWithDebugger` (null without the permission). Saved with `saveScreenshot`; returns the id. | `<all_urls>`; `debugger` for background tabs |
+| `screenshots.capture(tabId, runId)` | `screenshots.ts`. Firefox: `tabs.captureTab` (any tab, JPEG 60). Chromium: active tab `tabs.captureVisibleTab` (JPEG 60), background tab `captureWithDebugger` (null without the permission). Saved with `saveScreenshot`; returns the id. | `<all_urls>`; Chromium `debugger` for background tabs |
+| `screenshots.take(tabId, {runId, area, locator, format, quality, timeoutMs})` | `screenshots.ts`, Screenshot block. Firefox: `tabs.captureTab` with `rect` in document CSS pixels (full page = `{0, 0, pageWidth, pageHeight}`, element = its box + scroll, from the agent's `measure` op). Chromium: visible = `captureVisibleTab` (showing tab) or `Page.captureScreenshot`; full = `Page.getLayoutMetrics` + `captureScreenshot` with `captureBeyondViewport` and a `clip`; element = `measure` box + scroll as `clip`, or, without the debugger on a showing tab, cut out of a `captureVisibleTab` with `OffscreenCanvas`. Sides capped at 16 000 px. Saved like step screenshots; returns `{id, width, height}`. Throws `permission.missing` when Chromium needs the debugger. | `<all_urls>`; Chromium `debugger` (optional) for full page and tabs not showing |
+| `cookies.get(url, name?)` / `set(options)` / `remove(url, name?)` | `cookies.ts`: `cookies.getAll({url, name})`, `cookies.set` (`expires` → `expirationDate`, `sameSite` `None` → `no_restriction`), and remove = `getAll` + `cookies.remove({url: scheme://domain+path, name, storeId})` per cookie (clearing a site = without `name`). A refused cookie (Chrome: null, Firefox: throws) → `step.failed`. Without the permission → `permission.missing`. | `cookies` (optional; granted in e2e builds) |
 | `prompt.ask` | `prompts.askUser` | `notifications`, `storage` |
 | `datasets.read/write` | `blobStore` | IndexedDB, `unlimitedStorage` |
 | `downloads.save(filename, content, mime)` | `downloads.download` with a `blob:` URL where `URL.createObjectURL` exists (Firefox), else a `data:` URL (Chrome's worker). `conflictAction: 'uniquify'`; `\ / : * ? " < > |` in names become `-`. | `downloads` |
+| `downloads.waitFor(pattern, lookBackMs, timeoutMs)` | `downloads.ts`: polls `downloads.search({startedAfter: now - lookBackMs})` every 250 ms for an unclaimed download that is not BlockFlow's own (`byExtensionId`, or a `blob:` URL of the extension's origin) whose URL, final URL or file name matches `pattern`; claims it (`storage.session` `bf:downloads-claimed`), then polls until `state: complete` (`interrupted` → `download.failed`). Returns `{downloadId, url, filename, path, size, mime}`. The browser's own download list is the look-back, so nothing is recorded while the worker sleeps and no listener is needed. | `downloads` |
+| `downloads.readText(download, tabId?)` | `downloads.ts`: extensions cannot read files on disk, so the content is fetched again: `data:` decoded, http(s) `fetch` from the background with cookies, `blob:` fetched in the tab by `executeScript` (only while the page still holds it). Cut to 2 000 000 chars. Errors → `download.failed`. | host permissions, `scripting` |
 | `html.act` | `htmlParse.actOnHtml` | `offscreen` (Chrome) |
 | `now()` | `new Date()` | none |
 
@@ -95,9 +102,11 @@ meaningless after a restart. Note: the picker's tab is **not** added. See
 | `waitForLoad(tabId, until, timeoutMs)` | `'none'`: return. `'load'`: poll `tabInfo` every 100 ms until not loading. `'networkidle'`: then `waitForNetworkIdle(tabId, 500, remaining ≥ 1 s)`. Polling, not events, so a `complete` that already happened is not missed and each poll keeps the worker alive. |
 | `waitForNetworkIdle(tabId, idleMs, timeoutMs)` | Temporary `webRequest.onBeforeRequest/onCompleted/onErrorOccurred` listeners filtered by `tabId`; resolves after `idleMs` with nothing in flight. Requests started before the call are invisible. |
 | `waitForUrl(tabId, pattern, timeoutMs)` | Polls the URL every 150 ms with `urlMatches`; catches `pushState`. |
-| `watchNetwork(tabId)` | Per-tab in-memory log (last 300 completed/failed responses: url, status, method, time). Listeners filtered by tab so normal browsing never wakes the worker; removed on `tabs.onRemoved`. Lost on worker restart. |
+| `watchNetwork(tabId)` | Per-tab in-memory logs (last 300 completed/failed responses: url, status, method, time; last 300 sent requests with their bodies). Listeners filtered by tab so normal browsing never wakes the worker; removed on `tabs.onRemoved`. Lost on worker restart. |
 | `statusMatches(status, wanted)` | `""` any, `"200"`, `"2xx"`, `"200,201"`. |
-| `waitForResponse(tabId, pattern, status, lookBackMs, timeoutMs)` | Starts `watchNetwork` if needed, then polls the log every 150 ms for an unused entry since `now - lookBackMs`. Matched entries are marked `used`. Timeout message lists statuses seen for that URL. |
+| `waitForResponse(tabId, pattern, status, lookBackMs, timeoutMs, {method, captureBody})` | Starts `watchNetwork` if needed, then polls the log every 150 ms for an unused entry since `now - lookBackMs` (and `methodMatches`). Matched entries are marked `used`. Timeout message lists statuses seen for that URL. With `captureBody`: `waitForResponseBody` attaches the debugger, `Network.enable`, follows `requestWillBeSent` / `responseReceived` / `loadingFinished` events of the tab for the first match, then `Network.getResponseBody` (`body`, or `bodyBase64` for binary; 200 000 chars). No look-back there: bodies exist only for requests seen while attached. Without the debugger (Firefox) → `permission.missing`. |
+| `waitForRequest(tabId, pattern, method, lookBackMs, timeoutMs)` | Same as `waitForResponse` on the request log (`webRequest.onBeforeRequest` with `requestBody`): `{url, method, type, postData}`; `postData` is the raw body as UTF-8 or form fields URL-encoded, 200 000 chars. |
+| `methodMatches(method, wanted)` | `""` any, `"POST"`, `"get,post"` (case-insensitive). |
 
 `webRequest` is observe-only (no blocking listeners: MV3 forbids them without `webRequestBlocking`).
 
@@ -173,6 +182,9 @@ Firefox's build declares neither `debugger` nor `userScripts`.
 | `insertText(send, text)` | `Input.insertText` (Press Key `mode: "text"`; with a locator the driver clicks the element first). |
 | `typeInto(send, x, y, text)` | Click, Ctrl+A (`commands: ['selectAll']`), then `Input.insertText` (or Backspace for empty). |
 | `captureWithDebugger(tabId)` | `Page.captureScreenshot` JPEG 60, raced against 4 s (background tabs may not paint); null without permission. |
+
+`withDebugger` is also used by `screenshots.ts` (full page, element clips) and `navigation.ts` (response
+bodies), each attaching for its own call only.
 
 ## popups.ts
 
@@ -269,6 +281,10 @@ Shapes and lifecycles: [Storage Keys](Storage-Keys.md).
 | Downloads | `data:` URL | `blob:` URL | not verified |
 | Manual Step notification | Continue / Fail buttons | click = Continue | not verified |
 | Real input, background-tab screenshots (`debugger`) | optional permission | not available | not available |
+| Screenshot block | visible: `captureVisibleTab` (showing tab); full page, background tabs: `debugger`; element: `debugger`, or cut from the visible area | `tabs.captureTab` with `rect`: all areas, any tab, no extra permission | not verified |
+| Response bodies (Wait For `captureBody`) | `debugger` | not available (`permission.missing`) | not available |
+| Cookies (`cookies` API) | optional permission | optional permission | not verified |
+| Wait for Download | `downloads.search`; `byExtensionId` filters our own | same (own = `blob:moz-extension://…`) | not verified |
 | Run Script (`userScripts.execute`) | Chrome 135+, optional permission + toggle | not available | not available |
 | Drag, drop zones (synthetic) | `new DataTransfer()` + `DragEvent` | same; CustomEvent `detail` objects go through `cloneInto` | not verified |
 | Host access | granted at install | must be granted in `about:addons` (README) | not verified |
@@ -278,6 +294,8 @@ Shapes and lifecycles: [Storage Keys](Storage-Keys.md).
 
 - `executeScript` with `func` serialises the function: it must not close over anything.
 - Chrome sorts object keys of `executeScript` results; the agent returns tables as `{columns, values}`.
+- Under Playwright (e2e), Chromium saves downloads under GUID file names: `download.filename` is then
+  that GUID; a normal browser keeps the real name (the Firefox e2e checks it).
 - `watchNetwork` logs and the `answers` map are in memory: a worker restart loses them (a run in progress
   keeps the worker alive, so this only matters after a crash).
 - `bf:state:*` entries of a block are kept when only that block is removed (they go with the workflow).

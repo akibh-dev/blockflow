@@ -510,6 +510,210 @@
       ]
     },
     {
+      "type": "wait-for-download",
+      "label": "Wait for Download",
+      "category": "browser",
+      "description": "Wait until the page downloads a file (an export, a report) and get its name, size and type. Can read CSV / JSON / text files.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "tab": "main",
+        "url": "",
+        "read": "none",
+        "dataset": ""
+      },
+      "fields": [
+        {
+          "key": "url",
+          "label": "URL or file name (optional)",
+          "kind": "text",
+          "templated": true,
+          "help": "Empty = the first download. Plain text: the address or file name contains it; * and /regex/ as in Wait For."
+        },
+        {
+          "key": "read",
+          "label": "Read the file",
+          "kind": "select",
+          "options": [
+            "none",
+            "text",
+            "csv",
+            "json"
+          ],
+          "help": "Extensions cannot open files on disk, so the file is fetched again from its address (with the site's cookies). Fine for exports; a link that makes a new file each time gives that new file."
+        },
+        {
+          "key": "dataset",
+          "label": "Save rows to dataset (optional)",
+          "kind": "text",
+          "templated": true,
+          "help": "CSV rows, or a JSON list, replace this dataset."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The tab that starts the download. Needed only to read files the page made itself (blob: addresses)."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "download",
+          "description": "{filename, url, path, size, mime, downloadId} of the finished download."
+        },
+        {
+          "key": "content",
+          "description": "With \"as text\": the file content."
+        },
+        {
+          "key": "rows",
+          "description": "With \"as CSV\": one object per row, by header."
+        },
+        {
+          "key": "data",
+          "description": "With \"as JSON\": the parsed value."
+        },
+        {
+          "key": "datasetSize",
+          "description": "With a dataset: its rows afterwards."
+        }
+      ]
+    },
+    {
+      "type": "cookies-storage",
+      "label": "Cookies & Storage",
+      "category": "browser",
+      "description": "Read, set, delete or clear a site's cookies, or the page's localStorage / sessionStorage.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "action": "get",
+        "area": "cookies",
+        "name": "",
+        "value": "",
+        "url": "",
+        "domain": "",
+        "path": "",
+        "maxAgeSeconds": 0,
+        "httpOnly": false,
+        "secure": false,
+        "sameSite": ""
+      },
+      "fields": [
+        {
+          "key": "action",
+          "label": "Do",
+          "kind": "select",
+          "options": [
+            "get",
+            "set",
+            "delete",
+            "clear"
+          ]
+        },
+        {
+          "key": "area",
+          "label": "In",
+          "kind": "select",
+          "options": [
+            "cookies",
+            "local",
+            "session"
+          ]
+        },
+        {
+          "key": "name",
+          "label": "Name / key",
+          "kind": "text",
+          "templated": true,
+          "help": "Needed to set or delete. For get: empty = all of them."
+        },
+        {
+          "key": "value",
+          "label": "Value",
+          "kind": "text",
+          "templated": true,
+          "help": "For set."
+        },
+        {
+          "key": "url",
+          "label": "Site (cookies, optional)",
+          "kind": "text",
+          "templated": true,
+          "help": "Whose cookies. Empty = the page open in the tab."
+        },
+        {
+          "key": "domain",
+          "label": "Domain (set, optional)",
+          "kind": "text",
+          "templated": true,
+          "help": "With a leading dot the cookie is also sent to subdomains."
+        },
+        {
+          "key": "path",
+          "label": "Path (set, optional)",
+          "kind": "text"
+        },
+        {
+          "key": "maxAgeSeconds",
+          "label": "Expires in seconds (set)",
+          "kind": "number",
+          "min": 0,
+          "help": "0 = a session cookie, gone when the browser closes."
+        },
+        {
+          "key": "httpOnly",
+          "label": "HttpOnly (set)",
+          "kind": "boolean"
+        },
+        {
+          "key": "secure",
+          "label": "Secure (set)",
+          "kind": "boolean"
+        },
+        {
+          "key": "sameSite",
+          "label": "SameSite (set)",
+          "kind": "select",
+          "options": [
+            "",
+            "Lax",
+            "Strict",
+            "None"
+          ]
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "value",
+          "description": "get with a name: the value (null when missing). get without: an object of name → value. set: the value."
+        },
+        {
+          "key": "cookies",
+          "description": "Cookies, get/set: the full cookies [{name, value, domain, path, expires, httpOnly, secure, sameSite}]."
+        },
+        {
+          "key": "deleted",
+          "description": "delete / clear: how many were removed."
+        }
+      ]
+    },
+    {
       "type": "close-tab",
       "label": "Close Tab",
       "category": "browser",
@@ -1278,7 +1482,9 @@
         "locator": "",
         "text": "",
         "url": "",
-        "status": ""
+        "status": "",
+        "method": "",
+        "captureBody": false
       },
       "fields": [
         {
@@ -1296,7 +1502,8 @@
             "url",
             "load",
             "networkidle",
-            "response"
+            "response",
+            "request"
           ]
         },
         {
@@ -1317,13 +1524,25 @@
           "label": "URL pattern",
           "kind": "text",
           "templated": true,
-          "help": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression. Also the request address for \"a network request finishes\"."
+          "help": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression. Also the request address for the network modes."
         },
         {
           "key": "status",
           "label": "Status (optional)",
           "kind": "text",
           "help": "For \"a network request finishes\"."
+        },
+        {
+          "key": "method",
+          "label": "Method (optional)",
+          "kind": "text",
+          "help": "For the network modes. Empty = any."
+        },
+        {
+          "key": "captureBody",
+          "label": "Capture the response body",
+          "kind": "boolean",
+          "help": "For \"a network request finishes\". Chrome, Edge, Brave only (debugger permission). Only responses that start after this block starts can be read, so it suits slow or later requests."
         },
         {
           "key": "tab",
@@ -1339,7 +1558,11 @@
         },
         {
           "key": "response",
-          "description": "For \"a network request finishes\": {url, status, method}."
+          "description": "For \"a network request finishes\": {url, status, method}, plus body (or bodyBase64) with \"Capture the response body\"."
+        },
+        {
+          "key": "request",
+          "description": "For \"the page sends a request\": {url, method, type, postData}."
         }
       ]
     },
@@ -1805,6 +2028,76 @@
         {
           "key": "elements",
           "description": "The same elements as a list of {ref, role, name, tag, locator, value?, checked?, disabled?, level?, url?}."
+        }
+      ]
+    },
+    {
+      "type": "screenshot",
+      "label": "Screenshot",
+      "category": "read",
+      "description": "Take a picture of what the tab shows, the whole page, or one element. Shown on the step and in the report.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "area": "visible",
+        "locator": "",
+        "format": "png",
+        "quality": 80
+      },
+      "fields": [
+        {
+          "key": "area",
+          "label": "Take",
+          "kind": "select",
+          "options": [
+            "visible",
+            "full",
+            "element"
+          ]
+        },
+        {
+          "key": "locator",
+          "label": "Element",
+          "kind": "locator",
+          "templated": true,
+          "help": "For \"one element\". It is scrolled into view first."
+        },
+        {
+          "key": "format",
+          "label": "Format",
+          "kind": "select",
+          "options": [
+            "png",
+            "jpeg"
+          ]
+        },
+        {
+          "key": "quality",
+          "label": "JPEG quality",
+          "kind": "number",
+          "min": 1,
+          "max": 100
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "screenshotId",
+          "description": "Id of the stored picture (shown on the step and in the report)."
+        },
+        {
+          "key": "screenshot",
+          "description": "{id, width, height, area}: the size in pixels."
         }
       ]
     },

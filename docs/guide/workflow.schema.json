@@ -605,6 +605,168 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "wait-for-download"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Wait until the page downloads a file (an export, a report) and get its name, size and type. Can read CSV / JSON / text files.",
+                    "properties": {
+                      "url": {
+                        "description": "Empty = the first download. Plain text: the address or file name contains it; * and /regex/ as in Wait For.",
+                        "type": "string"
+                      },
+                      "read": {
+                        "description": "Extensions cannot open files on disk, so the file is fetched again from its address (with the site's cookies). Fine for exports; a link that makes a new file each time gives that new file.",
+                        "enum": [
+                          "none",
+                          "text",
+                          "csv",
+                          "json"
+                        ]
+                      },
+                      "dataset": {
+                        "description": "CSV rows, or a JSON list, replace this dataset.",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The tab that starts the download. Needed only to read files the page made itself (blob: addresses).",
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "cookies-storage"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Read, set, delete or clear a site's cookies, or the page's localStorage / sessionStorage.",
+                    "properties": {
+                      "action": {
+                        "description": "Do",
+                        "enum": [
+                          "get",
+                          "set",
+                          "delete",
+                          "clear"
+                        ]
+                      },
+                      "area": {
+                        "description": "In",
+                        "enum": [
+                          "cookies",
+                          "local",
+                          "session"
+                        ]
+                      },
+                      "name": {
+                        "description": "Needed to set or delete. For get: empty = all of them.",
+                        "type": "string"
+                      },
+                      "value": {
+                        "description": "For set.",
+                        "type": "string"
+                      },
+                      "url": {
+                        "description": "Whose cookies. Empty = the page open in the tab.",
+                        "type": "string"
+                      },
+                      "domain": {
+                        "description": "With a leading dot the cookie is also sent to subdomains.",
+                        "type": "string"
+                      },
+                      "path": {
+                        "description": "Path (set, optional)",
+                        "type": "string"
+                      },
+                      "maxAgeSeconds": {
+                        "description": "0 = a session cookie, gone when the browser closes.",
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "httpOnly": {
+                        "description": "HttpOnly (set)",
+                        "type": "boolean"
+                      },
+                      "secure": {
+                        "description": "Secure (set)",
+                        "type": "boolean"
+                      },
+                      "sameSite": {
+                        "description": "SameSite (set)",
+                        "enum": [
+                          "",
+                          "Lax",
+                          "Strict",
+                          "None"
+                        ]
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "close-tab"
                   },
                   "position": {
@@ -1399,7 +1561,8 @@
                           "url",
                           "load",
                           "networkidle",
-                          "response"
+                          "response",
+                          "request"
                         ]
                       },
                       "locator": {
@@ -1411,12 +1574,20 @@
                         "type": "string"
                       },
                       "url": {
-                        "description": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression. Also the request address for \"a network request finishes\".",
+                        "description": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression. Also the request address for the network modes.",
                         "type": "string"
                       },
                       "status": {
                         "description": "For \"a network request finishes\".",
                         "type": "string"
+                      },
+                      "method": {
+                        "description": "For the network modes. Empty = any.",
+                        "type": "string"
+                      },
+                      "captureBody": {
+                        "description": "For \"a network request finishes\". Chrome, Edge, Brave only (debugger permission). Only responses that start after this block starts can be read, so it suits slow or later requests.",
+                        "type": "boolean"
                       },
                       "tab": {
                         "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
@@ -1868,6 +2039,74 @@
                         "type": "number",
                         "minimum": 10,
                         "maximum": 10000
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "screenshot"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Take a picture of what the tab shows, the whole page, or one element. Shown on the step and in the report.",
+                    "properties": {
+                      "area": {
+                        "description": "Take",
+                        "enum": [
+                          "visible",
+                          "full",
+                          "element"
+                        ]
+                      },
+                      "locator": {
+                        "description": "For \"one element\". It is scrolled into view first.",
+                        "type": "string"
+                      },
+                      "format": {
+                        "description": "Format",
+                        "enum": [
+                          "png",
+                          "jpeg"
+                        ]
+                      },
+                      "quality": {
+                        "description": "JPEG quality",
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 100
                       },
                       "tab": {
                         "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",

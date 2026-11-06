@@ -110,7 +110,17 @@ export type AgentRequest =
   | { op: 'table'; locator: string }
   /** URL, title, description, canonical, language, meta tags, JSON-LD. */
   | { op: 'page-info' }
-  | { op: 'storage'; area: 'local' | 'session' | 'cookies'; key?: string }
+  /**
+   * localStorage / sessionStorage (and `document.cookie`, read only). `action` defaults to `get`: one
+   * `key`, or every entry. `set` needs `key` and `value`; `delete` removes `key`; `clear` empties the area.
+   */
+  | { op: 'storage'; area: 'local' | 'session' | 'cookies'; key?: string; action?: 'get' | 'set' | 'delete' | 'clear'; value?: string }
+  /**
+   * Geometry for screenshots. With `locator`: waits until the element is visible and still, scrolls it
+   * into view, and answers its box `{ x, y, width, height }` in the tab's viewport (frames added up).
+   * Without: `{ scrollX, scrollY, viewportWidth, viewportHeight, pageWidth, pageHeight, devicePixelRatio }`.
+   */
+  | { op: 'measure'; locator?: string }
   | { op: 'scroll'; to: 'bottom' | 'top' | 'element'; locator?: string }
   /**
    * Put files on an <input type=file> (also a hidden one, as custom upload buttons use). With `dropzone`,
@@ -221,7 +231,7 @@ export type AgentResponse =
   | ({ status: 'error'; message: string } & AgentErrorInfo)
   /**
    * The locator enters an iframe from another site: run `rest` inside the frame showing `src`.
-   * `offset` (for `locate` only) is where the frame's content starts in this frame's viewport, so
+   * `offset` (for `locate` and `measure` only) is where the frame's content starts in this frame's viewport, so
    * the driver can turn the inner frame's coordinates into the tab's.
    */
   | { status: 'frame'; src: string; rest: string; offset?: { x: number; y: number } };

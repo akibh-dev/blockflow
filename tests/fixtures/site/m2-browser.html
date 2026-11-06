@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Fixture: downloads, screenshots, cookies, requests</title>
+<style>
+  body { margin: 0; font: 16px sans-serif; }
+  #card { margin: 40px; width: 300px; height: 120px; background: #2563eb; color: white; padding: 10px; box-sizing: border-box; }
+  #tall { height: 2600px; background: linear-gradient(#fff, #fde68a); }
+  #bottom { height: 80px; background: #16a34a; }
+</style></head>
+<body>
+  <!-- For tests/e2e/specs/m2-browser.mjs and the Firefox e2e: Wait for Download, Screenshot, Cookies & Storage, Wait For request / response body. -->
+  <h1>Reports</h1>
+  <p><a id="csv" href="/export.csv">Export CSV</a> · <button type="button" id="blob">Export JSON (made in the page)</button></p>
+  <p><button type="button" id="send">Send order</button> <button type="button" id="later">Load later</button> <span id="status"></span></p>
+  <div id="card">Card 300×120</div>
+  <div id="tall"></div>
+  <div id="bottom">Bottom</div>
+  <script>
+    document.getElementById('blob').onclick = () => {
+      const blob = new Blob([JSON.stringify([{ id: 1, name: 'mug' }, { id: 2, name: 'cup' }])], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'orders.json';
+      document.body.append(link);
+      link.click();
+      link.remove();
+    };
+    document.getElementById('send').onclick = async () => {
+      const response = await fetch('/api/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item: 'mug', qty: 2 }) });
+      document.getElementById('status').textContent = String(response.status);
+    };
+    // Starts its request 1.5 s after the click, so a Wait For that captures the body is listening by then.
+    document.getElementById('later').onclick = () => {
+      setTimeout(async () => {
+        const response = await fetch('/api/slow');
+        document.getElementById('status').textContent = (await response.json()).order;
+      }, 1500);
+    };
+  </script>
+</body></html>

@@ -294,6 +294,10 @@
           "description": "An optional permission (host access, debugger, userScripts, downloads) is not granted. Fix: Grant it on the block or in the extension settings."
         },
         {
+          "const": "download.failed",
+          "description": "A download was interrupted or cancelled, or its content cannot be read (Wait for Download). Fix: Check the link works in a normal tab; to read the file, its address must still be reachable."
+        },
+        {
           "const": "script.error",
           "description": "Run Script code threw. Fix: Fix the script; the message has its error."
         },
