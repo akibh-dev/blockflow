@@ -1750,10 +1750,21 @@
       },
       "press-key": {
         "type": "object",
-        "description": "Press Key: Press a key or shortcut: Enter, Tab, Escape, Control+A…",
+        "description": "Press Key: Press a key or shortcut (Enter, Tab, Escape, Control+A…), or insert text at the caret.",
         "properties": {
+          "mode": {
+            "description": "Do",
+            "enum": [
+              "key",
+              "text"
+            ]
+          },
           "key": {
-            "description": "Key names as on the keyboard: Enter, Tab, Escape, Backspace, ArrowDown, a, Control+A, Shift+Tab.",
+            "description": "Key names as on the keyboard: Enter, Tab, Escape, Backspace, ArrowDown, a, Control+A, Shift+Tab, Control+Shift+K. ControlOrMeta+A is ⌘A on a Mac, Ctrl+A elsewhere.",
+            "type": "string"
+          },
+          "text": {
+            "description": "For \"insert text\": typed at the caret in one go, like pasting.",
             "type": "string"
           },
           "locator": {
@@ -2139,6 +2150,13 @@
               "unchecked",
               "enabled",
               "disabled",
+              "focused",
+              "editable",
+              "in-viewport",
+              "class",
+              "css",
+              "accessible-name",
+              "accessible-description",
               "url",
               "title",
               "value"
@@ -2149,7 +2167,7 @@
             "type": "string"
           },
           "name": {
-            "description": "Only for \"attribute of an element\".",
+            "description": "The attribute name for \"attribute of an element\", the CSS property (color, display…) for \"CSS value\".",
             "type": "string"
           },
           "value": {

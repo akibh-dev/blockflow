@@ -262,7 +262,7 @@ Adds to the data: `(same data)` (The input, passed on.)
 
 ## ⏎ Press Key — `press-key`
 
-Press a key or shortcut: Enter, Tab, Escape, Control+A…
+Press a key or shortcut (Enter, Tab, Escape, Control+A…), or insert text at the caret.
 
 - Outputs (ports): `out` (plus `error` when step.onError is "port")
 - Default timeout: 30s
@@ -271,7 +271,9 @@ Press a key or shortcut: Enter, Tab, Escape, Control+A…
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `key` (Key) | text | `"Enter"` | required. Key names as on the keyboard: Enter, Tab, Escape, Backspace, ArrowDown, a, Control+A, Shift+Tab. |
+| `mode` (Do) | one of `key`, `text` | `"key"` |  |
+| `key` (Key) | text | `"Enter"` | Key names as on the keyboard: Enter, Tab, Escape, Backspace, ArrowDown, a, Control+A, Shift+Tab, Control+Shift+K. ControlOrMeta+A is ⌘A on a Mac, Ctrl+A elsewhere. |
+| `text` (Text) | text | `""` | supports `{{…}}`. For "insert text": typed at the caret in one go, like pasting. |
 | `locator` (On element (optional)) | locator | `""` | supports `{{…}}`. Focus this element first. Empty = whatever has focus. |
 | `tab` (Tab) | text | `"main"` | The name an Open Tab block gave the tab earlier in this run. Usually "main". |
 
@@ -484,9 +486,9 @@ Check that something is true. Fails the run (or just records it, if soft) when i
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `subject` (Check) | one of `text`, `input`, `attribute`, `count`, `visible`, `hidden`, `checked`, `unchecked`, `enabled`, `disabled`, `url`, `title`, `value` | `"text"` |  |
+| `subject` (Check) | one of `text`, `input`, `attribute`, `count`, `visible`, `hidden`, `checked`, `unchecked`, `enabled`, `disabled`, `focused`, `editable`, `in-viewport`, `class`, `css`, `accessible-name`, `accessible-description`, `url`, `title`, `value` | `"text"` |  |
 | `locator` (Element) | locator | `""` | supports `{{…}}`. For element checks. |
-| `name` (Attribute name) | text | `""` | Only for "attribute of an element". |
+| `name` (Attribute or CSS property) | text | `""` | The attribute name for "attribute of an element", the CSS property (color, display…) for "CSS value". |
 | `value` (Value) | text | `""` | supports `{{…}}`. Only for "a value from the data". |
 | `operator` (Must) | one of `equals`, `not-equals`, `contains`, `not-contains`, `starts-with`, `ends-with`, `matches`, `greater`, `greater-equal`, `less`, `less-equal`, `empty`, `not-empty`, `true`, `false` | `"contains"` | Not used by the yes/no checks (visible, checked…). |
 | `expected` (Expected) | text | `""` | supports `{{…}}` |

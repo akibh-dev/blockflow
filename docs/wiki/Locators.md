@@ -24,17 +24,30 @@ one resolves, or to understand which locator the picker and recorder suggest and
 ```ts
 export class LocatorSyntaxError extends Error {}
 export interface LocatorStep { engine: string; body: string }
-export const ENGINES: Set<string>;   // css text role label placeholder testid alt title xpath nth frame
-export function parseLocatorSteps(source: string): LocatorStep[];
+export const FILTERS: Set<string>;   // has-text has-not-text has has-not visible
+export const ENGINES: Set<string>;   // css text role label placeholder testid alt title xpath nth frame + FILTERS
+export const ROLE_OPTIONS;           // name exact checked pressed expanded selected disabled level include-hidden
+export function splitAlternatives(source: string): string[];          // `A || B` → ['A', 'B']
+export function parseLocatorSteps(source: string): LocatorStep[];      // one alternative
+export function parseLocatorAlternatives(source: string): LocatorStep[][];
+export function nestedLocator(body: string): string;                   // has=/has-not= body, unquoted
+export function visibleFilter(body: string): boolean;                  // '', true → true; false → false
+export function parseRoleSelector(body: string): { role: string; options: { key; value? }[] };
+export function roleState(option): boolean;                            // [x] / [x=true] / [x=false]
+export function unquoteValue(value: string): string;
 ```
 
+- **Alternatives** are split first, on `||` outside quotes and brackets (a lone `|`, XPath's union, is
+  left alone). `||` binds loosest: `A >> B || C` is `(A >> B) || C`. An empty side →
+  `Invalid locator: … ("||" needs a locator on both sides)`.
 - **Steps** are split on `>>` outside quotes (`"` / `'`, with `\` escapes) and outside `[...]` / `(...)`.
   The shadow-piercing `>>>` is never a split point.
 - Each step is trimmed, then classified:
 
 | Step looks like | Engine |
 |---|---|
-| `<engine>=<body>` with a known engine name (lowercase, optional spaces before `=`) | that engine; body trimmed |
+| `<engine>=<body>` with a known engine name (lowercase letters and `-`, optional spaces before `=`) | that engine; body trimmed |
+| exactly `visible` | the `visible` filter, body `true` |
 | starts with `//` or `(//` | `xpath` |
 | fully wrapped in `"..."` | `text` (exact, body keeps the quotes) |
 | anything else | `css` |
@@ -42,9 +55,13 @@ export function parseLocatorSteps(source: string): LocatorStep[];
 - Empty locator → `"The locator is empty"`; an empty step (`a >> >> b`) → `"Invalid locator: …"`.
 - An unknown `foo=bar` is treated as CSS, which then fails as invalid CSS.
 
-Who parses: [locator.ts](../../src/dom/locator.ts) `parseLocator` (rethrows as `LocatorError`) and the
-Playwright exporter [playwright.ts](../../src/core/playwright.ts), which maps steps to `getByRole`,
-`getByLabel`, `frameLocator`… (see [Core Modules](Core-Modules.md)).
+Who parses: [locator.ts](../../src/dom/locator.ts) (`resolveLocator`, `parseLocator`; syntax errors
+rethrown as `LocatorError`), the checker [check.ts](../../src/core/check.ts) `locatorProblem` (filters as a
+first step, bad `visible=`, unknown or mistyped role options and state values, a bare step that looks like
+a mistyped `visible`, and the inner locator of `has=` checked recursively), and the Playwright exporter
+[playwright.ts](../../src/core/playwright.ts), which maps steps to `getByRole`, `getByLabel`,
+`frameLocator`, `.filter({ hasText | hasNotText | has | hasNot | visible })` and `.or()` (see
+[Core Modules](Core-Modules.md)). A quoted `has-text="x"` exports as `hasText: /^x$/` (whole text).
 
 ## Engines (`locator.ts`)
 
@@ -60,6 +77,23 @@ Playwright exporter [playwright.ts](../../src/core/playwright.ts), which maps st
 | `xpath` | `xpath=//form//button`, `//form//button` | `document.evaluate` with the scope as context node, element nodes only | no | included |
 | `nth` | `>> nth=0`, `>> nth=-1` | One element of the matches so far by index; negative counts from the end; out of range → no match | — | — |
 | `frame` | `frame=iframe#pay >> label=Card` | See [Frames](#frames) | — | — |
+
+### Filters
+
+Filter steps narrow the matches so far instead of searching inside them (Playwright's `locator.filter()`),
+so the following steps search inside the kept elements. A filter as the first step is a `LocatorError`
+(`… filters the matches of the step before it`).
+
+| Filter | Keeps a match when |
+|---|---|
+| `has-text=<text>` | its text (`textContent`, or `value` for input buttons) passes `textMatcher(body)`: substring any case, `"exact"` (whole text), `/regex/` |
+| `has-not-text=<text>` | it does not |
+| `has=<locator>` | `resolveLocator(inner, match)` finds an element other than the match itself (strictly inside). The body is unquoted when fully quoted, so an inner locator with `>>` or `||` is written `has="li >> text=x"`. A cross-origin frame inside counts as no match. |
+| `has-not=<locator>` | it does not |
+| `visible`, `visible=true` / `visible=false` | `isVisibleElement(match)` is true / false: connected, no `[hidden]` / `display:none` on it or an ancestor, no `visibility:hidden\|collapse` on itself, and a non-empty box when the document has layout (same rule as the agent's `isVisible`) |
+
+`A || B` resolves each alternative from the same root and merges the matches in document order, without
+duplicates. A `FrameBoundaryError` from one alternative is thrown only when no alternative found anything.
 
 ### Text matching (`textMatcher(body, exact = false)`)
 
@@ -81,11 +115,19 @@ Whitespace is collapsed and trimmed on both sides before comparing.
 | `[name="…"]` / `[name=/re/i]` / `[name=…]` | accessible name. **Unlike `text=`, a quoted name is still a case-insensitive substring**; add `[exact]` for equality. |
 | `[exact]` | exact (case-sensitive) name match |
 | `[checked]`, `[checked=false]` | `checkedState` (native checked, else `aria-checked` / `aria-pressed`) |
+| `[pressed]`, `[pressed=false]` | `pressedState`: `aria-pressed` |
+| `[expanded]`, `[expanded=false]` | `expandedState`: `aria-expanded` |
+| `[selected]`, `[selected=false]` | `selectedState`: a native `<option>`'s `selected`, else `aria-selected` |
+| `[disabled]`, `[disabled=false]` | `disabledState`: native `disabled` on button/input/select/textarea/option/optgroup/fieldset, a disabled fieldset ancestor (outside its first legend) or optgroup, or `aria-disabled="true"` on it or an ancestor |
 | `[level=N]` | `aria-level`, else the `hN` number |
 | `[include-hidden]` | also match elements hidden from ARIA |
 
-Anything else is `Unknown role option [x]. Use name, exact, checked, level.` Leftover text after the
-role is `Invalid role locator`.
+State options take `true` / `false` (quotes allowed); a bare `[x]` is `true`. An element whose state
+reader answers `null` (no `aria-pressed` / `aria-expanded` / `aria-selected`) matches neither `[x]` nor
+`[x=false]`, as in Playwright. Parsing is shared (`parseRoleSelector` in core): an unknown option is
+`Unknown role option [x]. Use name, exact, checked, pressed, expanded, selected, disabled, level, include-hidden.`,
+a bad state value `[pressed=…] takes true or false`, a non-number level `[level=…] takes a number`.
+Leftover text after the role is `Invalid role locator`.
 
 ### Roles and names (`aria.ts`)
 
@@ -96,6 +138,11 @@ export function getRole(element: Element): string | null;
 export function accessibleName(element: Element): string;
 export function isHiddenForAria(element: Element): boolean;
 export function checkedState(element: Element): boolean | null;
+export function pressedState(element: Element): boolean | null;
+export function expandedState(element: Element): boolean | null;
+export function selectedState(element: Element): boolean | null;
+export function disabledState(element: Element): boolean;
+export function accessibleDescription(element: Element): string;  // aria-describedby, aria-description, title (if not the name)
 ```
 
 | Element | Role |
@@ -179,7 +226,7 @@ Given
 | `xpath=//li[2]` or `//li[2]` | l2 |
 | `my-widget >>> button` | button inside the open shadow root |
 
-More cases live in [tests/dom/locator.test.ts](../../tests/dom/locator.test.ts).
+More cases live in [tests/dom/locator.test.ts](../../tests/dom/locator.test.ts) and, for filters, `||` and role states, [tests/dom/locatorFilters.test.ts](../../tests/dom/locatorFilters.test.ts).
 
 ## Generated locators
 
@@ -202,6 +249,13 @@ element**:
 | last | `generateSelector(element)` CSS | always, unless already listed |
 
 At most `max − 1` readable ideas are kept, then the CSS selector. `bestLocator` returns the first.
+
+**Scoped ideas (`has-text`).** When none of the ideas above is unique (the same "Delete" button in every
+row), `scopedIdeas` tries the first two role/text/label/placeholder ideas inside the nearest ancestors (up
+to 8 levels) whose role is listitem, row, article, group, region, form, dialog, navigation or cell, picked
+by that ancestor's first short text outside the element: `role=listitem >> has-text=Banana >>
+role=button[name="Delete"]`. Only texts that are safe unquoted (≤ 40 chars, no quotes, `/`, `>`, `|`, `[`,
+`]`, `\`, `=`) are used, since an unquoted `has-text` is a substring match. Kept only if unique, like the rest.
 
 `firstLocator(element, cache?)` gives the same answer as `bestLocator` but stops at the first idea that
 works; with a `cache` (locator → matches, one `Map` per document, only while the page does not change)

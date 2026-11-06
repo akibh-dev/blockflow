@@ -811,7 +811,7 @@
       "type": "press-key",
       "label": "Press Key",
       "category": "page",
-      "description": "Press a key or shortcut: Enter, Tab, Escape, Control+A…",
+      "description": "Press a key or shortcut (Enter, Tab, Escape, Control+A…), or insert text at the caret.",
       "canStart": true,
       "canTakeInput": true,
       "ports": [
@@ -821,16 +821,33 @@
       "realInput": true,
       "defaultConfig": {
         "tab": "main",
+        "mode": "key",
         "key": "Enter",
+        "text": "",
         "locator": ""
       },
       "fields": [
         {
+          "key": "mode",
+          "label": "Do",
+          "kind": "select",
+          "options": [
+            "key",
+            "text"
+          ]
+        },
+        {
           "key": "key",
           "label": "Key",
           "kind": "text",
-          "required": true,
-          "help": "Key names as on the keyboard: Enter, Tab, Escape, Backspace, ArrowDown, a, Control+A, Shift+Tab."
+          "help": "Key names as on the keyboard: Enter, Tab, Escape, Backspace, ArrowDown, a, Control+A, Shift+Tab, Control+Shift+K. ControlOrMeta+A is ⌘A on a Mac, Ctrl+A elsewhere."
+        },
+        {
+          "key": "text",
+          "label": "Text",
+          "kind": "text",
+          "templated": true,
+          "help": "For \"insert text\": typed at the caret in one go, like pasting."
         },
         {
           "key": "locator",
@@ -1631,6 +1648,13 @@
             "unchecked",
             "enabled",
             "disabled",
+            "focused",
+            "editable",
+            "in-viewport",
+            "class",
+            "css",
+            "accessible-name",
+            "accessible-description",
             "url",
             "title",
             "value"
@@ -1645,9 +1669,9 @@
         },
         {
           "key": "name",
-          "label": "Attribute name",
+          "label": "Attribute or CSS property",
           "kind": "text",
-          "help": "Only for \"attribute of an element\"."
+          "help": "The attribute name for \"attribute of an element\", the CSS property (color, display…) for \"CSS value\"."
         },
         {
           "key": "value",

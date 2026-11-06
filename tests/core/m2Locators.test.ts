@@ -140,7 +140,7 @@ describe('export to Playwright', () => {
 
 describe('Assert: new subjects', () => {
   type Config = Parameters<NonNullable<typeof assertBlock.validate>>[0];
-  const problems = (config: Partial<Config>) => assertBlock.validate!(withDefaults(assertBlock, config) as Config);
+  const problems = (config: Partial<Config>) => assertBlock.validate!(withDefaults(assertBlock, config) as unknown as Config);
 
   it('css needs the property in name; the yes/no ones need an element', () => {
     expect(problems({ subject: 'css', locator: '#a' })).toEqual([expect.objectContaining({ key: 'name', code: 'config.required' })]);
@@ -205,7 +205,7 @@ describe('Press Key', () => {
 
   it('validate: key for keys, text for text', () => {
     type Config = Parameters<NonNullable<typeof pressKeyBlock.validate>>[0];
-    const problems = (config: Partial<Config>) => pressKeyBlock.validate!(withDefaults(pressKeyBlock, config) as Config);
+    const problems = (config: Partial<Config>) => pressKeyBlock.validate!(withDefaults(pressKeyBlock, config) as unknown as Config);
     expect(problems({ key: ' ' })).toEqual([expect.objectContaining({ key: 'key' })]);
     expect(problems({ mode: 'text' })).toEqual([expect.objectContaining({ key: 'text' })]);
     expect(problems({ mode: 'text', text: 'x', key: '' })).toEqual([]);

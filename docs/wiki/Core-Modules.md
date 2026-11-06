@@ -291,7 +291,7 @@ Exports a workflow as a Playwright test. See
 | Export | Notes |
 | --- | --- |
 | `ExportOptions { registry, lookup?(id) }` | `lookup` resolves Run Workflow targets. |
-| `toPlaywrightLocator(locator, base)` | Per [locator step](#locatorsyntax): `css` → `.locator()` (`>>>` dropped, Playwright CSS pierces shadow roots), `xpath` → `.locator('xpath=…')`, `text/label/placeholder/alt/title` → `getByX` (quoted = `exact: true`, `/re/` = regex), `testid` → `getByTestId`, `frame` → `frameLocator`, `nth` → `first()/last()/nth()`, `role` → `getByRole` with `name`, `exact`, `checked`, `level`. |
+| `toPlaywrightLocator(locator, base)` | Per [locator step](#locatorsyntax): `css` → `.locator()` (`>>>` dropped, Playwright CSS pierces shadow roots), `xpath` → `.locator('xpath=…')`, `text/label/placeholder/alt/title` → `getByX` (quoted = `exact: true`, `/re/` = regex), `testid` → `getByTestId`, `frame` → `frameLocator`, `nth` → `first()/last()/nth()`, `role` → `getByRole` with `name`, `exact`, `checked`, `pressed`, `expanded`, `selected`, `disabled`, `level`, `includeHidden`; filters → `.filter({ hasText | hasNotText | has | hasNot | visible })` (`has` locators built from the page or the current `frameLocator`; quoted `has-text` → `/^…$/`); `A \|\| B` → `A.or(B)`. |
 | `workflowToPlaywright(workflow, options)` | Full `.spec.ts`: one `test()` with the `page`, `context` and `request` fixtures, a `tabs` map and a mutable `data` object; called workflows as functions; helper functions (`render`, `evaluate`, `listAt`, `compare`, `parseRows`, `urlPattern`, `retry`, `waitForResponse`, `waitForPopup`, `answerDialogs`, `fileFromUrl`, `setField`, `selectByText`, `read`, `peek`, `extractList`, `extractTable`…) and the inlined runtime appended. |
 
 How it walks: from every root, depth-first along edges (`Writer.walk`); a node already on the current path
@@ -369,8 +369,12 @@ Playwright exporter. No DOM.
 | --- | --- |
 | `class LocatorSyntaxError` | Empty or malformed locator. |
 | `LocatorStep { engine, body }` | |
-| `ENGINES` | `css`, `text`, `role`, `label`, `placeholder`, `testid`, `alt`, `title`, `xpath`, `nth`, `frame`. |
-| `parseLocatorSteps(source)` | Splits on `>>` outside quotes and brackets (leaves the shadow-piercing `>>>` alone). `engine=body` for known engines; else `//…` or `(//…` → xpath, a double-quoted string → text, anything else → css. |
+| `ENGINES` | `css`, `text`, `role`, `label`, `placeholder`, `testid`, `alt`, `title`, `xpath`, `nth`, `frame`, plus `FILTERS`. |
+| `FILTERS` | `has-text`, `has-not-text`, `has`, `has-not`, `visible`: steps that narrow the matches so far. |
+| `splitAlternatives(source)` / `parseLocatorAlternatives(source)` | `A \|\| B` split outside quotes and brackets (`\|\|` binds loosest); the second also parses each into steps. |
+| `parseLocatorSteps(source)` | One alternative. Splits on `>>` outside quotes and brackets (leaves the shadow-piercing `>>>` alone). `engine=body` for known engines; a bare `visible` → the visible filter; else `//…` or `(//…` → xpath, a double-quoted string → text, anything else → css. |
+| `nestedLocator(body)`, `visibleFilter(body)` | The inner locator of `has=`/`has-not=` (unquoted when fully quoted); `visible=` as a boolean (throws for anything but true/false). |
+| `ROLE_OPTIONS`, `ROLE_STATES`, `parseRoleSelector(body)`, `roleState(option)`, `unquoteValue(value)` | `role=` options parsed once for the resolver, the checker and the exporter: unknown options, bad state values and non-number levels throw `LocatorSyntaxError`. |
 
 ## See also
 
