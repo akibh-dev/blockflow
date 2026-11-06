@@ -106,7 +106,7 @@ the imported workflow.
 
 Import refuses a script with errors and names the place with a JSON Pointer (`/steps/2/true/0` is the
 first step of the `true` list of the third step), e.g.
-`Import failed: /steps/1/clik: Unknown block "clik". Did you mean "click"?`. The codes:
+`error node.type.unknown at /steps/1/clik: Unknown block "clik". Did you mean "click"?`. The codes:
 
 | Code | Cause |
 | --- | --- |

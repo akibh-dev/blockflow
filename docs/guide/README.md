@@ -89,9 +89,9 @@ A workflow as a list of steps. Import compiles it into blocks and connections an
   "each": [ … ] }`.
 - **Several scripts**: `{ "format": "blockflow-script", "version": 1, "scripts": [ { "id": "login",
   "name": "Log in", "steps": [ … ] }, … ] }`; Run Workflow names another script of the file by `id` or `name`.
-- Mistakes are refused at import with the step's JSON Pointer and a code, e.g. `/steps/1/clik: Unknown
-  block "clik". Did you mean "click"?` (`node.type.unknown`). All codes:
-  [Workflows as Scripts](../wiki/Workflows-as-Scripts.md#script-problems).
+- Mistakes are refused at import with a code and the JSON Pointer of the step, e.g. `error
+  node.type.unknown at /steps/1/clik: Unknown block "clik". Did you mean "click"?` or `error
+  config.key.unknown at /steps/2/click/locater`. All codes: [Repair](#repair-what-import-errors-mean).
 
 The editor's **Export as script** turns a workflow back into this format when it is a tree of steps.
 
@@ -455,6 +455,9 @@ Import reports every problem as `<level> <code> at <path>: <message> <hint>`, fo
 `error config.key.unknown at /workflows/0/nodes/1/config/locater: Block "go" (click) has no setting "locater". Did you mean "locator"?`.
 `path` is a JSON Pointer into the file as written: `/workflows/0/nodes/1/config/locater` is the key
 `locater` in the `config` of the second node of the first workflow (`/nodes/1/...` for a bare workflow).
+In a script, paths point at steps: `/steps/2/click/locater` is the `locater` setting of the third step (a
+Click), `/steps/1/true/0` the first step of the second step's `true` list, `/steps/0/open` a shorthand value,
+`/scripts/1/steps/…` a step of the second script in a file of several.
 **Errors** refuse the whole file, **warnings** import with a notice, **info** is a note. The codes are stable.
 
 | Code | Level | Meaning | Fix |
@@ -486,3 +489,17 @@ Import reports every problem as `<level> <code> at <path>: <message> <hint>`, fo
 | `page.no-tab` | warning | A page block whose tab (`tab`, default `main`) is not opened on every path to it. | Add an Open Tab (`open-url`) with that `tab` earlier on every path, or fix `tab`. Fine for a workflow called by Run Workflow from one that opened the tab. |
 | `workflow.call.missing` | error | Run Workflow's `workflow` is not the `id` of a workflow in the file or already saved. | Put the called workflow in the same file and use its `id` (not its name). |
 | `secret.unknown` | warning | `{{secret.x}}` names a secret the user has not created. | Create the secret (Secrets tab) before running, or fix the name. |
+
+Script files only:
+
+| Code | Level | Meaning | Fix |
+| --- | --- | --- | --- |
+| `script.shape` | error | Not an object, no `steps` list, `format` is not `blockflow-script`, or `"scripts": []`. | Follow the script format above. |
+| `script.version` | error | `version` other than `1`. | `"version": 1`. |
+| `script.empty` | warning | `"steps": []`. | Add steps. |
+| `step.shape` | error | A step that is not an object, has no block key or two of them, a bare value for a block without a shorthand, `step` or `onError` of the wrong type, an empty `id`. | One block key per step; settings as an object unless the block has a shorthand. |
+| `step.branch.next` | error | A list under the continue port (`out`, or `done` on loops). | Put those steps after this step instead. |
+| `step.onError.conflict` | error | An `onError` list on a step whose `step.onError` is `stop` or `continue`. | Drop `step.onError` (the list sets `"port"`), or the list. |
+
+`node.type.unknown`, `node.id.duplicate` and `edge.port.unknown` (a list under a key that is not one of
+the block's outputs, like `"ture"`) also apply to scripts, with step paths.
