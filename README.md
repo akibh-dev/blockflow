@@ -185,6 +185,8 @@ src/
     config.ts            defaults, templating and validation of block settings
     validate.ts          checks a whole workflow (used by the editor)
     library.ts           duplicate, export and import of workflows
+    script.ts            the script format (a list of steps): compile to a graph, decompile back
+    layout.ts            automatic left-to-right layout (scripts, imports, Tidy up)
     samples.ts           the example workflows seeded on first install
     ports.ts             block outputs (out / true / false / error) and routeTo()
     runs.ts              run and step records, secret masking

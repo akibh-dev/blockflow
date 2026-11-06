@@ -75,7 +75,9 @@ against real Chromium.
 | [core/report.test.ts](../../tests/core/report.test.ts) | JUnit / HTML report generation from run records |
 | [core/recordingSchedule.test.ts](../../tests/core/recordingSchedule.test.ts) | Schedule parsing, recorded actions → blocks |
 | [core/playwright.test.ts](../../tests/core/playwright.test.ts) | Locators and whole workflows → Playwright test source |
-| [core/guideExamples.test.ts](../../tests/core/guideExamples.test.ts) | Every `docs/guide/examples/*.blockflow.json` imports with `parseImport` and has no validation errors (one test per file) |
+| [core/guideExamples.test.ts](../../tests/core/guideExamples.test.ts) | Every `docs/guide/examples/*.blockflow.json` imports with `parseImport` and has no validation errors (one test per file); each graph survives graph → `decompile` → `compileScript` unchanged, and each `*.script.json` compiles to the same graph and imports cleanly |
+| [core/script.test.ts](../../tests/core/script.test.ts) | Script format: aliases, shorthands, If rejoin, loop and error branches, ids, issue codes and JSON Pointer paths, several scripts per file, `parseImport` of scripts, `decompile` (and when it returns null) |
+| [core/layout.test.ts](../../tests/core/layout.test.ts) | Auto-layout: chains in one row, If and loop port order, joins, several starts, cycles, no overlaps on a random DAG |
 | [browser/hybridScheduler.test.ts](../../tests/browser/hybridScheduler.test.ts) | Timers ≥ 30 s (alarms), < 30 s (in-memory + keep-alive), clearing, worker restart, end to end with the engine. Uses local `FakeClock`, `FakeAlarms`, `MemoryTimerStore`. See [Scheduling and Timers](Scheduling-and-Timers.md) |
 | [dom/agent.test.ts](../../tests/dom/agent.test.ts) | Page agent ops: click, fill/type, select/check/press, read/wait/detect-form, scraping, frames, upload and locate. See [Page Agent](Page-Agent.md) |
 | [dom/locator.test.ts](../../tests/dom/locator.test.ts) | `parseLocator`, `resolveLocator`, ARIA name/role, `locatorCandidates`. See [Locators](Locators.md) |
@@ -263,6 +265,8 @@ Scenarios by spec:
 | Phase E | `login.html`, `welcome.html`, `table.html` | Recorder → blocks and replay, Pick on page with alternatives, undo/redo/copy/paste, templates, `{{` autocomplete, Page Visited trigger |
 | **harder-pages** | | |
 | Phase F | `upload.html`, `popup.html`, `dialogs.html`, `/frames.html` + `frame-inner.html`, `api.html`, `trusted.html`, `login.html` | Upload File, Wait for Popup (`window.open`, `target=_blank`), Dialogs, same- and cross-origin iframes, Wait For response, real (trusted) input via debugger, background-tab screenshot, Run Script (passes or explains Chrome 135+), Playwright export run with `npx playwright test` |
+| **scripts** | | |
+| M1.2 | `table.html` + editor UI | Importing a `.script.json` through the Import button: blocks laid out (If rejoin), the run passes; Export as script enabled; Tidy up after a drag puts the blocks back on the grid, and Undo reverts it |
 | **blocks-coverage** | | |
 | Start | none | Starting values on Run; as a called workflow, the caller's value wins and the other default stays |
 | Timer | none | 3 s in-run delay; Stop (`bf:stop-run`) during a 30 s delay ends the run as `cancelled`; a repeating 2 s Timer in an enabled workflow starts runs counting `tick` |

@@ -1,8 +1,8 @@
 # Core Modules
 
 The pure helpers in `src/core` that are not the engine itself: settings validation, the template and
-expression languages, conditions, CSV, reports, workflow import/export, the Playwright exporter, the
-recorder converter, schedules, URLs, locator syntax and schema migrations. Read the section for the module you are about to
+expression languages, conditions, CSV, reports, workflow import/export, the script format and auto-layout,
+the Playwright exporter, the recorder converter, schedules, URLs, locator syntax and schema migrations. Read the section for the module you are about to
 use or change. All of them are browser-free and unit-tested in Node (`tests/core/`).
 
 **Source:** [config.ts](../../src/core/config.ts), [template.ts](../../src/core/template.ts),
@@ -12,7 +12,7 @@ use or change. All of them are browser-free and unit-tested in Node (`tests/core
 [playwright.ts](../../src/core/playwright.ts), [playwrightRuntime.ts](../../src/core/playwrightRuntime.ts), [recording.ts](../../src/core/recording.ts),
 [schedule.ts](../../src/core/schedule.ts), [url.ts](../../src/core/url.ts),
 [urlPattern.ts](../../src/core/urlPattern.ts), [locatorSyntax.ts](../../src/core/locatorSyntax.ts),
-[migrate.ts](../../src/core/migrate.ts)
+[migrate.ts](../../src/core/migrate.ts), [script.ts](../../src/core/script.ts), [layout.ts](../../src/core/layout.ts)
 
 ## config
 
@@ -130,12 +130,53 @@ Copy, export and import workflows.
 | `cloneWorkflow(source, name)` | Fresh ids for workflow, nodes and edges; disabled; config deep-copied. |
 | `duplicateWorkflow(source, existing)` | Clone named `"<name> copy"` (made unique). |
 | `exportWorkflows(workflows)` | `{ format: 'blockflow-workflows', version: 1, workflows }` JSON, all `enabled: false`. |
-| `parseImport(text, existing): ImportResult` | Accepts an export file or one bare workflow. Validates shape (duplicate node ids, connections to missing blocks, malformed edges are errors), renames old config keys (`migrateNode`), clones with new ids, disables, uniquifies names, and remaps `run-workflow` `config.workflow` ids to the imported copies. |
+| `parseImport(text, existing): ImportResult` | A script file (`isScriptFile`) goes to `parseScriptImport`: compiled by `compileScriptFile`, refused with the issues (`ImportResult.issues`, first three in `error`) when there are errors, else cloned like below; Run Workflow may name another script of the file by `id` or `name`. Otherwise accepts an export file or one bare workflow, laid out with `layoutWorkflow` when no node has a `position`. Validates shape (duplicate node ids, connections to missing blocks, malformed edges are errors), renames old config keys (`migrateNode`), clones with new ids, disables, uniquifies names, and remaps `run-workflow` `config.workflow` ids to the imported copies. |
 
 `cloneWorkflow` and `parseImport` keep `node.step` and `edge.sourcePort`, so branches and step settings
 survive duplicate and import (tested in `library.test.ts` and `guideExamples.test.ts`).
 
 Called by: `Editor.tsx` (duplicate, import, export, templates).
+
+## script
+
+The script format ([Workflows as Scripts](Workflows-as-Scripts.md#the-script-format)): a workflow as a
+list of steps, compiled to a graph and back. Needs a `BlockRegistry` (defaults to `createDefaultRegistry()`)
+for block types, ports and default configs.
+
+| Export | Notes |
+| --- | --- |
+| `compileScript(raw, registry?, base?): CompiledScript` | One script → `{ workflow?, issues, nodePaths, configPaths, scriptId? }`. Node ids are the steps' `id`s, else `s<N>` (Nth step top to bottom, skipping author ids); `origin` = node id. Configs are the defaults plus the author's keys (old keys moved by `migrateNode` first). Positions from `layoutWorkflow`. `workflow` is missing when there are errors. `nodePaths` / `configPaths`: node id → JSON Pointer of its step / its config value (`/steps/2/true/0`, `…/click`), so other checkers can point into the script. `base` prefixes every path. |
+| `compileScriptFile(raw, registry?)` | One script, or `{ format, version, scripts: [...] }` (paths under `/scripts/N`). |
+| `decompile(workflow, registry?): Script \| null` | The graph as a script when it is a tree in the format's sense (one start, no fan-out, joins only after an If, no cycles); verified by compiling back and comparing with `sameScriptGraph`. Uses aliases and shorthands, drops config values equal to the default, keeps `origin` ids (drops uuids and ids a compile would generate). |
+| `sameScriptGraph(a, b, registry, idOf?)` | Same blocks, configs (with defaults), step settings and wiring by port, nodes matched by id (or `idOf`). |
+| `isScriptFile(data)` | `format: "blockflow-script"`, or a `steps` array and no `nodes`. |
+| `continuePort(ports)` | `out`, else `done`, else undefined (If: its branches rejoin). |
+| `didYouMean(word, candidates)` | Closest candidate within Damerau-Levenshtein distance 2. |
+| `SCRIPT_ALIASES`, `SCRIPT_SHORTHAND` | Alias → block type; block type → the config key a bare value fills. |
+
+Wiring: a step connects to the next from its continue port; lists on other ports (`each`, `onError`) end
+where they end; a block without a continue port (If) connects the next step from the end of each branch
+list and from each port that has no list. Issue codes: `script.shape`, `script.version`, `script.empty`,
+`step.shape`, `node.type.unknown`, `node.id.duplicate`, `edge.port.unknown`, `step.branch.next`,
+`step.onError.conflict` (table in [Workflows as Scripts](Workflows-as-Scripts.md#script-problems)).
+
+Called by: `parseImport` (`library.ts`), the editor's **Export as script**, `scripts/scriptSchema.ts`
+(generates `docs/guide/script.schema.json`). Tests: `tests/core/script.test.ts`, and the guide examples
+round trip (graph → decompile → compile is the same graph; `*.script.json` compile to the `*.blockflow.json`
+graphs) in `guideExamples.test.ts`.
+
+## layout
+
+Automatic left-to-right layout, pure and deterministic.
+
+| Export | Notes |
+| --- | --- |
+| `layoutGraph(nodes, edges, portRank?)` | Map node id → `{x, y}`. Longest-path layers (edges closing a cycle ignored), then per column, left to right, nodes sorted by the average index of their parents plus a slot for the port they hang off (`portRank`), then rows: parents' average row (rounded up the page) when free, else the next free row. A chain is one row; branches open downwards; nothing overlaps. |
+| `layoutWorkflow(workflow, registry?)` | Every node placed. Ports ranked as the blocks declare them, or by `out, true, each, false, done, error` without a registry. |
+| `LAYOUT_X`, `LAYOUT_Y` | 260 and 140 px. |
+
+Called by: `compileScript`, `parseImport` (graph files without positions), the editor's **Tidy up**.
+Tests: `tests/core/layout.test.ts`.
 
 ## migrate
 

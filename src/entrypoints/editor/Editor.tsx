@@ -33,6 +33,8 @@ import { fromFlow, sameGraph, toFlow } from './flow/convert';
 import { useLogs, usePrompts, useRuns, useStorageValue } from './hooks';
 import { recordingIntoWorkflow } from '../../core/recording';
 import { workflowToPlaywright } from '../../core/playwright';
+import { layoutWorkflow } from '../../core/layout';
+import { decompile } from '../../core/script';
 import { STORAGE_KEYS } from '../../shared/keys';
 import type { RecordingState } from '../../browser/recording';
 import { PromptBanner } from './components/PromptBanner';
@@ -94,7 +96,7 @@ function portOfEdge(workflow: Workflow, edge: EdgeDef): string {
  * Run/Stop/Record talk to the background with `runtime.sendMessage`.
  */
 export function Editor() {
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
   const [workflows, setWorkflows] = useState<Workflow[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [nodes, setNodes] = useState<BlockFlowNode[]>([]);
@@ -181,6 +183,10 @@ export function Editor() {
   }, [nodes, edges, activeId, historyOf]);
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  const edgesRef = useRef(edges);
+  edgesRef.current = edges;
 
   const persist = useCallback((list: Workflow[]) => {
     synced.current = syncBase(list);
@@ -463,6 +469,24 @@ export function Editor() {
     downloadText(fileNameFor(workflow.name).replace('.blockflow.json', '.spec.ts'), spec, 'text/plain');
   }, []);
 
+  /** The open workflow as a script (script.ts), or null when its graph is not a tree of steps. */
+  const activeScript = useMemo(() => (active ? decompile(active, registry) : null), [active]);
+
+  const exportScript = useCallback(() => {
+    if (!active || !activeScript) return;
+    downloadText(fileNameFor(active.name).replace('.blockflow.json', '.script.json'), `${JSON.stringify(activeScript, null, 2)}\n`);
+  }, [active, activeScript]);
+
+  /** "Tidy up": lay the canvas out in columns (layout.ts). A canvas change like any other, so Undo reverts it. */
+  const tidyUp = useCallback(() => {
+    const base = latest.current?.find((workflow) => workflow.id === activeIdRef.current);
+    if (!base) return;
+    const laid = layoutWorkflow(fromFlow(base, nodesRef.current, edgesRef.current), registry);
+    const positions = new Map(laid.nodes.map((node) => [node.id, node.position]));
+    setNodes((current) => current.map((node) => ({ ...node, position: positions.get(node.id) ?? node.position })));
+    requestAnimationFrame(() => void fitView({ padding: 0.4, maxZoom: 1 }));
+  }, [fitView]);
+
   const createFromTemplate = useCallback(
     (text: string) => {
       const result = parseImport(text, latest.current ?? []);
@@ -640,8 +664,6 @@ export function Editor() {
     setEdges((current) => [...current, ...flow.edges]);
   }, [screenToFlowPosition]);
 
-  const nodesRef = useRef(nodes);
-  nodesRef.current = nodes;
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -805,6 +827,17 @@ export function Editor() {
           </button>
           <button type="button" onClick={redo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
             ↷
+          </button>
+          <button type="button" onClick={tidyUp} disabled={view !== 'canvas' || active.nodes.length === 0} title="Lay the blocks out in columns, left to right (Undo puts them back)">
+            Tidy up
+          </button>
+          <button
+            type="button"
+            onClick={exportScript}
+            disabled={!activeScript}
+            title={activeScript ? 'Download this workflow as a script (a list of steps)' : 'This workflow cannot be written as a list of steps (several start blocks, or an output feeding several blocks)'}
+          >
+            Export as script
           </button>
           {runningRun ? (
             <button type="button" className="bf-stop" onClick={stopRun} title="Stop the run that is going on">

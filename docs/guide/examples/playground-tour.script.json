@@ -1,0 +1,48 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Try it: playground tour",
+  "steps": [
+    {
+      "id": "open",
+      "open": {
+        "url": "http://localhost:7357/playground.html",
+        "where": "window"
+      }
+    },
+    {
+      "id": "add",
+      "click": "role=button[name=\"Add one\"]"
+    },
+    {
+      "id": "name",
+      "fill": {
+        "locator": "label=Your name",
+        "value": "BlockFlow"
+      }
+    },
+    {
+      "id": "colour",
+      "select": {
+        "locator": "label=Favourite colour",
+        "value": "Green"
+      }
+    },
+    {
+      "id": "hello",
+      "click": "role=button[name=\"Say hello\"]"
+    },
+    {
+      "id": "greeting",
+      "assert": {
+        "locator": "#greeting",
+        "expected": "Hello, BlockFlow! Green",
+        "message": "The page greets us by name"
+      }
+    },
+    {
+      "id": "log",
+      "log": "The playground said hello. Now try changing a block and pressing Run again."
+    }
+  ]
+}

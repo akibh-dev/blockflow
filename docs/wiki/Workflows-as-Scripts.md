@@ -1,17 +1,132 @@
 # Workflows as Scripts
 
 For people who would rather write a workflow as text than drag blocks, and for anyone asking an LLM
-(Claude, ChatGPT, a coding agent) to write one. Every workflow in BlockFlow is a JSON file; this page
-explains that file, how to get it in and out of the extension, and how it compares to a Playwright script.
+(Claude, ChatGPT, a coding agent) to write one. BlockFlow reads two file formats:
+
+- **Scripts** (`something.script.json`): a list of steps, like a Playwright test. The one to write by hand
+  or ask an LLM for. Import compiles it into blocks and lays them out.
+- **Graphs** (`something.blockflow.json`): blocks (`nodes`) and connections (`edges`), what the editor
+  saves and exports. Every workflow can be a graph; a workflow that is a tree of steps can also be
+  exported as a script.
 
 The canonical reference is the [usage guide](../guide/README.md). This page summarises it and adds the
 practical parts: a prompt template, the edit-run-fix loop, and a Playwright mapping.
 
-## The file format
+## The script format
 
-A workflow file is usually called `something.blockflow.json`. It holds one or more workflows, each a list
-of blocks (`nodes`) and connections (`edges`). This one opens a search page, types a query, presses Enter
-and checks that results appear:
+This script opens a search page, types a query, presses Enter and checks that results appear:
+
+```json
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Search shows results",
+  "steps": [
+    { "open": "https://example.com/search" },
+    { "fill": { "locator": "role=searchbox", "value": "blue shoes" } },
+    { "press": { "key": "Enter", "locator": "role=searchbox" } },
+    { "id": "results", "assert": { "subject": "count", "locator": ".result", "operator": "greater", "expected": "0" } }
+  ]
+}
+```
+
+A **step** is an object with exactly one **block key**: a block `type` from the
+[block reference](../guide/blocks.md) (or an alias, below). Its value is the block's settings (`config`);
+missing keys take the block's default. A step may also have:
+
+| Key | Meaning |
+| --- | --- |
+| `id` | Optional name of the step, unique in the script. Without one, the Nth step from the top of the file (nested steps count too) is `s<N>`. Import keeps it as the block's `origin`, so results can point back to the script. |
+| `step` | [Step settings](../guide/README.md#7-step-settings-every-block): `timeoutSeconds`, `retries`, `onError`, `screenshot`, `disabled`, `note`, `realInput`. |
+| `true`, `false` | If only: the steps for each answer. |
+| `each` | For Each, Repeat, Paginate: the steps run once per item / time / page. |
+| `onError` | Any block: the steps that run when it fails. Sets `step.onError` to `"port"` for you. |
+
+### How steps connect
+
+1. The steps of a list run in order. Each step connects to the next one from its **continue port**:
+   `out` for most blocks, `done` for the loops (For Each, Repeat, Paginate), so the step after a loop runs
+   once, when the loop is finished.
+2. `each` and `onError` lists **end where they end**: an `each` list is the loop body (the loop moves on
+   to the next item by itself), an `onError` list handles the failure and the run does not come back.
+3. **If rejoins.** The step after an If runs after whichever branch ran: it is connected from the last
+   step of `true` and of `false`. A missing (or empty) branch goes straight to the next step, so
+   "if without else" works as in code. This also holds for an If nested inside a branch.
+4. A list's last step connects to nothing, unless the list is an If branch (rule 3).
+
+```json
+{ "id": "big", "if": { "left": "{{count}}", "operator": "greater", "right": "100" },
+  "true": [ { "notify": "{{count}} orders waiting" } ] },
+{ "log": "checked" }
+```
+
+Here `log` runs in both cases: after the notification when the count is over 100, straight from If's
+`false` output otherwise.
+
+### Aliases and shorthands
+
+Every block works under its own `type`. A few common ones have shorter names, and some take a single value
+instead of a settings object:
+
+| Alias | Block |
+| --- | --- |
+| `open` | `open-url` |
+| `goto` | `navigate` |
+| `press` | `press-key` |
+| `select` | `select-option` |
+
+| Block | A bare value is its… | Example |
+| --- | --- | --- |
+| `open-url`, `navigate` | `url` | `{ "open": "https://example.com" }` |
+| `click`, `check`, `wait-for` | `locator` | `{ "click": "role=button[name=\"Save\"]" }` |
+| `press-key` | `key` | `{ "press": "Enter" }` |
+| `log`, `notify` | `message` | `{ "notify": "Price dropped to {{value}}" }` |
+| `run-script` | `code` | `{ "run-script": "return document.title" }` |
+| `run-workflow` | `workflow` | `{ "run-workflow": "login" }` |
+| `for-each` | `list` | `{ "for-each": "rows", "each": [ … ] }` |
+| `repeat` | `times` | `{ "repeat": 3, "each": [ … ] }` |
+
+Old setting names are accepted and moved, as for graphs (`selector` → `locator` on Read Element and Watch
+Element, `next` → `locator` on Paginate).
+
+### Several scripts in one file
+
+```json
+{ "format": "blockflow-script", "version": 1,
+  "scripts": [
+    { "id": "login", "name": "Log in", "steps": [ … ] },
+    { "name": "Checkout test", "steps": [ { "open": "https://shop.example.com" }, { "run-workflow": "login" } ] }
+  ] }
+```
+
+Run Workflow can name another script of the same file by its `id` (or its `name`); import points it at
+the imported workflow.
+
+### Script problems
+
+Import refuses a script with errors and names the place with a JSON Pointer (`/steps/2/true/0` is the
+first step of the `true` list of the third step), e.g.
+`Import failed: /steps/1/clik: Unknown block "clik". Did you mean "click"?`. The codes:
+
+| Code | Cause |
+| --- | --- |
+| `script.shape` | Not an object, no `steps` list, `format` is not `blockflow-script`, or `"scripts": []`. |
+| `script.version` | `version` other than `1`. |
+| `script.empty` (warning) | `"steps": []`. |
+| `step.shape` | A step that is not an object, has no block key or two of them, a bare value for a block without a shorthand, `step` or `onError` of the wrong type, an empty `id`. |
+| `node.type.unknown` | The block key is neither a type nor an alias. The hint suggests the closest one. |
+| `node.id.duplicate` | Two steps with the same `id`. |
+| `edge.port.unknown` | A list under a key that is not one of the block's outputs (`"ture"`, `"each"` on a Click). |
+| `step.branch.next` | A list under the continue port (`out`, `done`): put those steps after this step instead. |
+| `step.onError.conflict` | An `onError` list on a step whose `step.onError` is `stop` or `continue`. |
+
+Settings themselves (a misspelt config key, a wrong value) are checked after compiling, like a graph
+(see [How errors show up](#how-errors-show-up)).
+
+## The graph format
+
+What the editor saves. A file holds one or more workflows, each a list of blocks (`nodes`) and connections
+(`edges`). The same search test as a graph:
 
 ```json
 {
@@ -19,7 +134,7 @@ and checks that results appear:
   "version": 1,
   "workflows": [
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "search-test",
       "name": "Search shows results",
       "enabled": false,
@@ -52,16 +167,19 @@ What each part means:
 | `enabled` | Ignored on import: imported workflows always arrive **off**. |
 | `nodes[].type` | The block type, e.g. `open-url`, `click`, `assert`. Must exist in the [block reference](../guide/blocks.md). |
 | `nodes[].config` | The block's settings. Keys come from the block reference; missing keys take the default. |
-| `nodes[].position` | Where the block sits on the canvas. About 260 px apart left to right reads well. |
+| `nodes[].position` | Where the block sits on the canvas. About 260 px apart left to right reads well. Leave `position` out of every node and import lays the workflow out for you. |
 | `nodes[].step` | Optional per-block settings: `timeoutSeconds`, `retries`, `onError`, `screenshot`, `disabled`, `note`, `realInput`. See [step settings](../guide/README.md#7-step-settings-every-block). |
 | `edges` | Connections. `sourcePort` picks an output on blocks that have several: `"true"`/`"false"` on If, `"each"`/`"done"` on loops, `"error"` when the source has `"step": { "onError": "port" }`. |
 
-A block with no incoming edge is a **start block**. The first block here, Open Tab, runs once when you
-press ▶ Run. To run on a schedule, start with a `timer` or `schedule` block instead (see
-[Concepts](Concepts.md)).
+A graph can do what a script cannot: several start blocks, one output feeding several blocks, joins
+anywhere, loops back. A workflow like that has no script form ("Export as script" is greyed out).
 
-Data flows along edges as a JSON object. A block's settings can use earlier data with `{{name}}`, secrets
-with `{{secret.name}}`, and expressions with `{{ price * 1.1 }}`. Details:
+In both formats, a block with no incoming connection (the first step of a script) is a **start block**.
+Open Tab at the start runs once when you press ▶ Run. To run on a schedule, start with a `timer` or
+`schedule` block instead (see [Concepts](Concepts.md)).
+
+Data flows along connections as a JSON object. A block's settings can use earlier data with `{{name}}`,
+secrets with `{{secret.name}}`, and expressions with `{{ price * 1.1 }}`. Details:
 [data and templates](../guide/README.md#3-data-and-templates).
 
 ## Reference files (generated from the code)
@@ -73,24 +191,26 @@ the extension. Give them to an LLM rather than retyping them.
 | --- | --- |
 | [blocks.md](../guide/blocks.md) | Every block: `type`, every `config` key with type and default, outputs, default timeout. Human-readable. |
 | [blocks.json](../guide/blocks.json) | The same, machine-readable. |
-| [workflow.schema.json](../guide/workflow.schema.json) | JSON Schema of an import file, with every block's config. Use it in an editor (VS Code: `"$schema"`) or a validator. |
-| [examples/](../guide/examples) | Eight importable workflows. A test checks that each imports without errors. |
+| [script.schema.json](../guide/script.schema.json) | JSON Schema of a script file: every block and alias, its settings, its shorthand and its branch keys. Use it in an editor (VS Code: `"$schema"`) or a validator. |
+| [workflow.schema.json](../guide/workflow.schema.json) | JSON Schema of a graph file, with every block's config. |
+| [examples/](../guide/examples) | Eight importable workflows, each as a script (`*.script.json`) and a graph (`*.blockflow.json`). A test checks that both import, without errors, to the same graph. |
 | [llms.txt](../../llms.txt) | The short index an AI tool should read first. |
 
-The schema checks shapes and allowed values. It does **not** reject unknown config keys (they are
-silently ignored by BlockFlow too), so a typo like `"locater"` passes both. Check key names against
-`blocks.md`.
+The script schema rejects unknown config keys. The graph schema checks shapes and allowed values but
+does **not** reject unknown config keys (they are silently ignored by BlockFlow too), so a typo like
+`"locater"` passes it. Check key names against `blocks.md`.
 
 ## Rules an AI tool must follow
 
 The full list is in the guide: [Rules for AI tools](../guide/README.md#rules-for-ai-tools-generating-workflows-read-first).
 In short:
 
-1. Output the export format above.
-2. Use only block `type`s and `config` keys from [blocks.md](../guide/blocks.md).
+1. Output the script format above.
+2. Use only block `type`s (or the aliases) and `config` keys from [blocks.md](../guide/blocks.md).
 3. Every page block (Click, Fill, Assert on the page, Extract List…) needs an **Open Tab** earlier on the
    same path, with the same `tab` name (default `main`).
-4. Connect with `edges`; use `sourcePort` only on blocks with several outputs.
+4. Write steps in order; use `true`/`false`, `each` and `onError` lists for branches. Remember that the
+   step after an If runs after either branch.
 5. Prefer readable locators: `role=button[name="Sign in"]`, `label=Email`, `text=Welcome`, `testid=…`.
    Actions are strict: a locator that matches two elements fails. See [locators](../guide/README.md#4-elements-locators).
 6. Never put passwords or tokens in the file. Use `{{secret.name}}` and tell the user which secrets to create.
@@ -104,7 +224,7 @@ Copy this, fill in the bracketed parts, and attach (or paste) `docs/guide/README
 `docs/guide/blocks.md`. Models do best with both files in context.
 
 ```text
-You are writing a BlockFlow workflow file. BlockFlow is a browser extension that runs
+You are writing a BlockFlow script. BlockFlow is a browser extension that runs
 automations made of blocks inside my own browser. Attached are its usage guide
 (README.md) and its block reference (blocks.md). Follow the guide's
 "Rules for AI tools" section exactly.
@@ -117,8 +237,8 @@ How it should start: [by hand with Run / every N minutes / daily at 09:00 / when
 What should happen on failure: [fail the run / send a notification / continue]
 
 Output:
-1. One JSON file in the "blockflow-workflows" export format, nothing else in the code block.
-   Use only block types and config keys from blocks.md.
+1. One JSON file in the "blockflow-script" format, nothing else in the code block.
+   Use only block types, aliases and config keys from blocks.md and the guide.
 2. A list of secrets I must create (name and what goes in it).
 3. A list of locators you guessed, so I can check them with Pick on page.
 ```
@@ -128,23 +248,29 @@ Tips that make the first try more likely to work:
 - Give the model real labels and button texts from the page. Locators it has to guess are the most common
   reason a generated workflow fails.
 - Ask for one workflow at a time, short, ending in Asserts. Add branches once the straight path passes.
-- If the model writes `"locater"`, `"selector"` on a Click, or a type that does not exist, the file will
-  still import but the setting is ignored or the block is flagged. Compare against `blocks.md`.
+- Give the model `id`s to use for the steps you care about, so you can talk about "step `login`" when
+  something fails.
+- If the model writes `"locater"`, `"selector"` on a Click, or a type that does not exist, compare against
+  `blocks.md`. An unknown block type in a script is refused at import with a "Did you mean" hint.
 
 ## Import and export
 
-**Import** (sidebar top, or the **All workflows** page): pick one or more `.blockflow.json` files. Each
+**Import** (sidebar top, or the **All workflows** page): pick one or more `.json` files, scripts or graphs.
+A script is compiled into blocks and laid out in columns (as is a graph file without positions). Each
 workflow gets a fresh id, a unique name ("Login test 2" if the name is taken) and arrives **off**, so an
 import can never start something by surprise or overwrite a workflow.
 
 **Export**: hover a workflow in the sidebar → export, or select several on **All workflows** → Export.
-You get `<name>.blockflow.json` (several workflows: `blockflow-workflows.blockflow.json`). Exported
-workflows are always marked off. Secrets are never part of the file, only their `{{secret.name}}`
-references.
+You get `<name>.blockflow.json` (several workflows: `blockflow-workflows.blockflow.json`), a graph.
+**Export as script** in the canvas header downloads the open workflow as `<name>.script.json`, when it
+can be written as one (one start block, every output feeding at most one block, joins only after an If).
+The export uses aliases and shorthands, leaves out settings at their default and keeps your step ids.
+Exported workflows are always marked off. Secrets are never part of the file, only their
+`{{secret.name}}` references.
 
-**+ New ▾** offers the files in [examples/](../guide/examples) as templates.
+**+ New ▾** offers the graph files in [examples/](../guide/examples) as templates.
 
-Import keeps each block's `step` settings and each connection's `sourcePort`. It refuses a file whose
+Import keeps each block's `step` settings and each connection's `sourcePort`. It refuses a graph whose
 connections point at block ids that don't exist, or that uses the same block id twice, and the error names the id.
 
 ## How errors show up
@@ -162,6 +288,7 @@ There are two stages.
 | `Import failed: Two blocks in "<name>" have the id "<id>".` | Node ids must be unique within a workflow. |
 | `Import failed: A connection in "<name>" points at "<id>", which is not a block id.` | An edge's `source` or `target` names no node. |
 | `Import failed: A connection in "<name>" is malformed (it needs "source" and "target").` | An edge without string `source`/`target`. |
+| `Import failed: /steps/…: …` | A script problem; see [Script problems](#script-problems) for the codes. |
 
 **2. Checking the workflow.** After import the editor validates the workflow (the same check runs all the
 time while you edit):
@@ -203,7 +330,8 @@ To let an LLM fix its own workflow, give it the failing step's error text, or th
 together with the workflow file. Two things to tell it:
 
 - The run record names blocks by the **new ids** created on import, not the ids in its file. Match steps
-  by `blockType` and order, or export the workflow again (the export has the current ids).
+  by `blockType` and order, or export the workflow again (Export as script keeps the script's step ids,
+  which import stores as each block's `origin`).
 - Error texts are written for people but are specific: `role=button[name="Save"] matches 2 elements
   (button#save, button.save-2). Make it more specific, or add ">> nth=0" for the first one.` tells the
   model exactly what to change.
@@ -301,7 +429,7 @@ Chrome 135+) covers some of them.
 | `test.beforeEach` login, shared helpers | **Run Workflow** `run-workflow` calls another workflow in the same tab |
 | parameterised tests | **Data Table** → **For Each** (see [Recipes](Recipes.md#data-driven-test)) |
 | `test.retries` | per-block `"step": { "retries": 2 }` |
-| `try { … } catch` | `"step": { "onError": "port" }` and an edge with `"sourcePort": "error"` |
+| `try { … } catch` | an `onError` list in a script (in a graph: `"step": { "onError": "port" }` and an edge with `"sourcePort": "error"`) |
 | `page.pause()` | **Manual Step** `manual-step` |
 | `test.describe`, projects, parallel workers, headless, CI | no equivalent inside BlockFlow; export to Playwright for CI (below) |
 

@@ -1,0 +1,36 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Price drop alert",
+  "steps": [
+    {
+      "id": "every5min",
+      "timer": {
+        "seconds": 300
+      }
+    },
+    {
+      "id": "price",
+      "read-element": {
+        "url": "https://shop.example.com/item/42",
+        "locator": ".price"
+      }
+    },
+    {
+      "id": "dropped",
+      "if": {
+        "operator": "less",
+        "right": "{{previous}}"
+      },
+      "true": [
+        {
+          "id": "alert",
+          "notify": {
+            "title": "Price dropped",
+            "message": "{{previous}} → {{value}}"
+          }
+        }
+      ]
+    }
+  ]
+}

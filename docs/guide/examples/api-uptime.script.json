@@ -1,0 +1,38 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "API uptime check",
+  "steps": [
+    {
+      "id": "every",
+      "timer": {}
+    },
+    {
+      "id": "call",
+      "http-request": {
+        "url": "https://api.example.com/health",
+        "headers": "Authorization: Bearer {{secret.apiToken}}",
+        "failOnError": false
+      }
+    },
+    {
+      "id": "ok",
+      "assert": {
+        "subject": "value",
+        "value": "{{status}}",
+        "operator": "equals",
+        "expected": "200",
+        "message": "Health check returned {{status}}"
+      },
+      "onError": [
+        {
+          "id": "down",
+          "notify": {
+            "title": "API is down",
+            "message": "{{error}}"
+          }
+        }
+      ]
+    }
+  ]
+}
