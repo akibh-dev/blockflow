@@ -128,6 +128,7 @@ select or contenteditable, and while a dialog (`.bf-modal`) is open:
 | Edges | `defaultEdgeOptions`: `smoothstep`, closed arrow | Edges from a named port (`true`, `false`, `error`...) get a `label` and `className="port-<name>"` in `shownEdges` (display only, not stored). |
 | Connect | `onConnect` | Ignores self-loops and duplicates (same source, target and handle). New edge id from `uid()`. |
 | Add block | `addBlock(type, position?)` | Palette click: cascades at (120,100) + 36 px × (count mod 6). Drop: `screenToFlowPosition` of the cursor. Config starts as a copy of `def.defaultConfig`. |
+| Settings | `updateConfig` | Shallow-merges a patch into the node's config. For blocks with dynamic ports (Switch) it compares `nodePorts` before and after and runs `followPortChanges` on the edges: a renamed case keeps its connections, a removed case loses them. |
 | Step settings | `updateStep` | Drops values back at default (`''`, `false`, `0`, `'stop'`, `screenshot: 'error'`) so saved workflows stay small. Switching On error away from `port` also deletes edges leaving the `error` handle. |
 | Validation | `validateWorkflow(active, registry)` | `issuesByNode` feeds `IssuesContext`; error count shows in the header, disables Run, and blocks turning a workflow on. `errorCounts` does this for every workflow (manage page). |
 | Run status | `statusByNode` from the inspected run's steps | Feeds `RunStatusContext`, so blocks show ✓ ✕ ⏳. |
@@ -244,6 +245,7 @@ shapes, unit-tested in `tests/editor/convert.test.ts`.
 | `toFlow(workflow, portOf?)` | Workflow → `{ nodes, edges }`. Copies everything; every node gets `type: 'block'`; edge `sourceHandle = portOf(edge)`. |
 | `fromFlow(base, nodes, edges)` | Canvas → workflow, keeping `base`'s id, name, enabled, schemaVersion. Rounds positions; omits empty `step`; omits `sourcePort` when it is the default `out`. |
 | `sameGraph(a, b)` | `JSON.stringify([nodes, edges])` equality. Key order matters, which is fine because both sides come from `fromFlow`. |
+| `followPortChanges(edges, nodeId, before, after)` | After a settings change, with the node's ports before and after: one port gone and one new (a rename) → its edges move to the new name; ports gone otherwise → their edges are dropped. Returns the same array when nothing changes. Switch's stand-in `case<N>` for a nameless or half-typed case makes typing a name a chain of renames. |
 
 Invariant: `fromFlow(w, ...toFlow(w))` deep-equals `w`. Two things keep old workflows byte-stable: `out` is
 never written as `sourcePort`, and positions are integers.

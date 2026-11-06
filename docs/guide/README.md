@@ -84,8 +84,11 @@ A workflow as a list of steps. Import compiles it into blocks and connections an
   lists.
 - **Order and branches**: a step connects to the next one from `out` (loops: from `done`). Lists under
   `each` (For Each, Repeat, Paginate: the loop body) and `onError` (any block: runs when it fails, and sets
-  `step.onError: "port"`) end where they end. **If rejoins**: the step after an If runs after the last
-  step of `true` or of `false`; a missing branch goes straight to it.
+  `step.onError: "port"`) end where they end. **If and Switch rejoin**: the step after an If runs after the
+  last step of `true` or of `false`; a missing branch goes straight to it. A Switch's branch keys are its
+  case names (`"port"` of each row in `cases`) plus `default`, and rejoin the same way:
+  `{ "switch": { "value": "{{status}}", "cases": [ { "port": "ok", "operator": "equals", "value": "200" } ] },
+  "ok": [ … ], "default": [ … ] }`.
 - **Aliases**: `open` = `open-url`, `goto` = `navigate`, `press` = `press-key`, `select` = `select-option`.
 - **A bare value** instead of settings: `open-url`/`navigate` → `url`; `click`/`check`/`wait-for` →
   `locator`; `press-key` → `key`; `log`/`notify` → `message`; `run-script` → `code`; `run-workflow` →
@@ -299,7 +302,30 @@ be read. Long pages are cut at 1,500 lines with a note: snapshot one part with t
 ]
 ```
 
-If operators (also used by Assert): `equals`, `not-equals`, `contains`, `not-contains`,
+**Switch** goes one of several ways. `value` (templated) is compared with each row of `cases` in
+order, `{ "port": "<output name>", "operator": "…", "value": "…" }`; the first that holds sends the data
+out of the output named by its `port`, none sends it out of `default`. Each case is an output: connect
+with `"sourcePort": "<case name>"` (or `"default"`). Case names start with a letter or `_`, then letters,
+digits, `_`, `-`; unique; not `default`, `error`, `out`, `done`, `id`, `step`, `onError`, `switch`. An
+edge from a name the cases do not have is `edge.port.unknown`. In the editor, renaming a case keeps
+its connections, removing it removes them.
+
+```json
+{ "id": "route", "type": "switch", "config": { "value": "{{status}}", "cases": [
+    { "port": "ok", "operator": "equals", "value": "200" },
+    { "port": "server", "operator": "matches", "value": "/^5\\d\\d$/" } ] } }
+```
+
+**Repeat until / while** (loops, not branches, but the same conditions): Repeat's `mode` is `times`
+(default: `times` rounds), `until` (run a round, then stop once `left` `operator` `right` holds; at
+least one round) or `while` (check first, run while it holds; maybe none). The condition is rendered
+at each check against the data the last round **ended with** (so a block on `each` can produce what
+it tests, e.g. HTTP Request's `status`), with `{{iteration}}` = rounds run so far. `max` (default 100)
+caps the rounds; reaching it fails the step unless `failAtMax` is `false`. For until / while, `done`
+carries the data the last check saw plus `iterations`; for times, the input plus `iterations`.
+Example: [`api-status-router`](examples/api-status-router.blockflow.json).
+
+If, Switch and Repeat operators (also used by Assert): `equals`, `not-equals`, `contains`, `not-contains`,
 `starts-with`, `ends-with`, `matches` (regex, write `/…/flags`), `greater`, `greater-equal`, `less`,
 `less-equal` (numbers), `empty`, `not-empty`, `true`, `false` (`true`/`yes`/`on`/`1`).
 
@@ -497,6 +523,7 @@ Each example is in both formats: `<name>.script.json` (the script, start here) a
 | [`reusable-login`](examples/reusable-login.blockflow.json) | two workflows: a reusable login and a test that calls it |
 | [`price-watch`](examples/price-watch.blockflow.json) | monitoring with `{{previous}}` |
 | [`api-uptime`](examples/api-uptime.blockflow.json) | HTTP Request + Assert + error output |
+| [`api-status-router`](examples/api-status-router.blockflow.json) | Repeat until (retry while 5xx) + Switch on the status, branches rejoining |
 | [`dark-mode-watch`](examples/dark-mode-watch.blockflow.json) | reading a class on `<html>`, `{{changed}}` |
 | [`scrape-to-csv`](examples/scrape-to-csv.blockflow.json) | Paginate + Extract List + dataset + CSV download |
 | [`data-driven-login`](examples/data-driven-login.blockflow.json) | Data Table + For Each + soft Assert, a secret chosen by an expression |
@@ -553,7 +580,7 @@ Click), `/steps/1/true/0` the first step of the second step's `true` list, `/ste
 | `step.key.unknown` | error | A `step` key that does not exist. | `timeoutSeconds`, `retries`, `onError`, `disabled`, `note`, `screenshot`, `realInput` (section 7). |
 | `step.value` | error | A bad `step` value (`retries` above 5, `onError: "ignore"`…). | See section 7. |
 | `edge.endpoint.missing` | error | A connection's `source` or `target` is not a node id in that workflow. | Use the hinted id. |
-| `edge.port.unknown` | error | `sourcePort` names an output the block does not have, or `"error"` on a block without `step.onError: "port"`. | Use the hinted output (`true`/`false` on If, `each`/`done` on loops), or add `"step": {"onError": "port"}`. |
+| `edge.port.unknown` | error | `sourcePort` names an output the block does not have, or `"error"` on a block without `step.onError: "port"`. | Use the hinted output (`true`/`false` on If, `each`/`done` on loops, the case names and `default` on Switch), or add `"step": {"onError": "port"}`. |
 | `edge.target.no-input` | error | A connection into a block that only starts workflows (Schedule). | Remove the connection. |
 | `edge.duplicate` | warning | The same connection twice. | Remove one. |
 | `graph.no-start` | error | Every block has an incoming connection, so nothing starts the workflow (a warning for a workflow with no blocks). | Remove the connection into the first block. |

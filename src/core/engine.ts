@@ -627,11 +627,17 @@ export class WorkflowRunner {
       this.log('warn', node.id, `${what} ignored: this step already timed out`);
       throw new Error('This step already timed out');
     };
-    const emit = async (payload: Payload, port: string = DEFAULT_PORT): Promise<void> => {
+    const emit = async (payload: Payload, port: string = DEFAULT_PORT): Promise<Payload | undefined> => {
       refuseIfAbandoned('Output');
       if (run) {
+        // What reaches the end of a path under this emit (steps run one after another, so the
+        // run's lastOutput after it returns is that); the run keeps its earlier one otherwise.
+        const before = run.lastOutput;
+        run.lastOutput = undefined;
         await this.emitFrom(node.id, payload, port, run);
-        return;
+        const reached = run.lastOutput;
+        if (reached === undefined) run.lastOutput = before;
+        return reached;
       }
       await this.inRun(trigger, async (fresh) => {
         // The start block's firing is the run's first step, so the run shows what it sent.

@@ -27,7 +27,8 @@ For a file-by-file reference of the internals, see the [wiki](wiki/Home.md).
 - Blocks are nodes, connections are edges. A block's **output payload** is passed to every block connected
   to that output as its **input payload**. Each branch gets its own copy.
 - **Outputs (ports, `src/core/ports.ts`).** Most blocks have one output, `out`. A block can declare more
-  (`ports: ['true', 'false']` on If) and choose one by returning `routeTo(port, payload)`. An edge stores
+  (`ports: ['true', 'false']` on If) and choose one by returning `routeTo(port, payload)`. `ports` may also
+  be a function of the settings (Switch: one per case + `default`); everything reads them through `nodePorts`. An edge stores
   its `sourcePort`; edges saved before ports existed have none and belong to the block's first output.
 - A block with nothing connected to its input is a **root**. `start()` calls `def.start(ctx)` on each
   root, or `def.run(ctx, {})` once if the block has no `start`.

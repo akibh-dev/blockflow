@@ -356,11 +356,85 @@ describe('block mappings', () => {
         'data = { ...input, iteration };',
         'console.log(render("{{iteration}}", data));',
         '}',
-        'data = input;',
+        'data = { ...input, iterations: 2 };',
         '}',
         'console.log(render("{{count}}", data));',
       ].join('\n'),
     );
+  });
+
+  it('Repeat until / while: the condition sees the data each round ended with, capped by max', () => {
+    const until = body(
+      [
+        { id: 'r', type: 'repeat', config: { mode: 'until', left: '{{n}}', operator: 'greater-equal', right: '3', max: 5 } },
+        { id: 'inc', type: 'set-variable', config: { name: 'n', value: '{{iteration}}' } },
+        { id: 'end', type: 'log', config: { message: '{{iterations}}' } },
+      ],
+      [['r', 'inc', 'each'], ['r', 'end', 'done']],
+    );
+    expect(until).toContain(
+      [
+        'const input = data;',
+        'let iteration = 0;',
+        'data = { ...input, iteration };',
+        'for (;;) {',
+        'if (iteration >= 5) throw new Error("Repeat until: the condition was still false after 5 times");',
+        'iteration += 1;',
+        'data = { ...input, iteration };',
+      ].join('\n'),
+    );
+    expect(until).toContain(['data = { ...data, iteration };', 'if (compare(render("{{n}}", data), "greater-equal", "3")) break;', '}', 'data = { ...data, iterations: iteration };'].join('\n'));
+    const whileBody = body(
+      [
+        { id: 'r', type: 'repeat', config: { mode: 'while', left: '{{iteration}}', operator: 'less', right: '2', failAtMax: false } },
+        { id: 'l', type: 'log', config: { message: 'x' } },
+      ],
+      [['r', 'l', 'each']],
+    );
+    expect(whileBody).toContain(['for (;;) {', 'if (!compare(render("{{iteration}}", data), "less", "2")) break;', 'if (iteration >= 100) break;'].join('\n'));
+    // The whole spec is valid TypeScript.
+    transpile(exported([{ id: 'r', type: 'repeat', config: { mode: 'while', left: '{{iteration}}', operator: 'less', right: '2' } }, { id: 'l', type: 'log', config: { message: 'x' } }], [['r', 'l', 'each']]));
+  });
+
+  it('Switch is an if / else-if chain over the cases in order, then default', () => {
+    const nodes: Node[] = [
+      {
+        id: 's',
+        type: 'switch',
+        config: {
+          value: '{{status}}',
+          cases: [
+            { port: 'ok', operator: 'equals', value: '200' },
+            { port: 'missing', operator: 'equals', value: '404' },
+            { port: 'server', operator: 'matches', value: '/^5/' },
+          ],
+        },
+      },
+      { id: 'a', type: 'log', config: { message: 'ok' } },
+      { id: 'c', type: 'log', config: { message: 'server' } },
+      { id: 'd', type: 'log', config: { message: 'other' } },
+    ];
+    const code = body(nodes, [['s', 'a', 'ok'], ['s', 'c', 'server'], ['s', 'd', 'default']]);
+    expect(code).toBe(
+      [
+        'const switchValue1 = render("{{status}}", data);',
+        'if (compare(switchValue1, "equals", "200")) {',
+        '// case "ok"',
+        'console.log("ok");',
+        '}',
+        'else if (compare(switchValue1, "equals", "404")) {',
+        '// case "missing"',
+        '}',
+        'else if (compare(switchValue1, "matches", "/^5/")) {',
+        '// case "server"',
+        'console.log("server");',
+        '}',
+        'else {',
+        'console.log("other");',
+        '}',
+      ].join('\n'),
+    );
+    transpile(exported(nodes, [['s', 'a', 'ok'], ['s', 'c', 'server'], ['s', 'd', 'default']]));
   });
 
   it('If uses BlockFlow conditions on rendered values, with an else branch', () => {

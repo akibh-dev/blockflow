@@ -36,7 +36,7 @@ comes through `Host`.
 | --- | --- |
 | `type`, `label`, `description`, `icon`, `accent`, `category?` | Identity and editor look. `category` is set at registration (`BLOCK_GROUPS` in `blocks/index.ts`). |
 | `defaultConfig: C`, `fields: FieldSpec[]`, `outputs: OutputSpec[]`, `summary?(config)` | Settings and documentation shown in the editor and generated guide. |
-| `ports?: string[]` | Named outputs; default `['out']`. The engine appends `error` when the node's `onError` is `port`. |
+| `ports?: string[] \| ((config: C) => string[])` | Named outputs; default `['out']`. The engine appends `error` when the node's `onError` is `port`. A function makes them **dynamic** (Switch: one per case + `default`): it gets the config with defaults, not rendered, must not throw, and should keep names stable while a setting is being typed. Read ports only through `nodePorts(def, node)`. |
 | `timeoutSeconds?` | Default step timeout for this block type (page actions use 30). |
 | `permissions?` | Optional browser permissions (`debugger`, `userScripts`) the editor offers to grant. |
 | `start?(ctx)` | Root block started with the workflow: schedule timers, register watchers. Never called for non-roots. |
@@ -64,7 +64,7 @@ Built per call by the private `makeContext()`; do not keep it between calls.
 | `softFail(failure)` | Marks the step and run failed but lets the block return normally (soft Assert). `failure` is a message or an `Error`; a `CodedError` also records its code. Outside a run it only logs. |
 | `callWorkflow(id, input)` | Runs another workflow as a child run and resolves with its last output. Throws outside a run, when nested ≥ `MAX_CALL_DEPTH` (8), when the workflow is missing, or when the child did not pass. |
 | `host` | The `Host` (below). |
-| `emit(payload, port = 'out')` | Inside a run: runs the downstream subtree now and awaits it (loops use this with `each`). Outside a run (`start`/`onTimer`): starts a **new run** whose first step is this block, trigger `start` or `timer`. |
+| `emit(payload, port = 'out')` | Inside a run: runs the downstream subtree now and awaits it (loops use this with `each`), resolving with the data at the end of the last path it reached (the payload itself when nothing is connected; `undefined` when every path stopped). Repeat until/while tests its condition on that. Outside a run (`start`/`onTimer`): starts a **new run** whose first step is this block, trigger `start` or `timer`. |
 | `log(level, message)` | Masked log line tagged with the node. |
 | `timers.set(name, options, data?)` / `clear(name)` | `Host.scheduler` with key `makeTimerKey(workflowId, nodeId, name)`. |
 | `state.get(key)` / `set(key, value)` | `Host.state` with key `stateKey(workflowId, nodeId, key)`; survives worker restarts. |
@@ -254,10 +254,21 @@ block colours, the step inspector and reports ([Core Modules: report](Core-Modul
 | --- | --- |
 | `DEFAULT_PORT = 'out'`, `ERROR_PORT = 'error'` | |
 | `class Routed { port; payload }`, `routeTo(port, payload)` | Returned from `run` to choose an output. |
-| `nodePorts(def, node)` | `def.ports` (or `['out']`) plus `error` when `node.step.onError === 'port'`. |
+| `declaredPorts(def, config?)` | The block's own outputs: `def.ports`, or `def.ports(config)` with defaults filled in for dynamic ports; de-duplicated, empty names and `error` dropped, `['out']` when none (or when the function throws). |
+| `nodePorts(def, node)` | `declaredPorts(def, node.config)` plus `error` when `node.step.onError === 'port'`. Pass the node's `config` (a `NodeDef` already has it); without it a dynamic block shows its default config's ports. |
+| `hasDynamicPorts(def)` | `def.ports` is a function (the editor re-wires edges on setting changes, the script schema allows any branch key). |
 | `edgePort(edge, ports)` | `edge.sourcePort ?? 'out'`; a legacy `out` on a block without `out` maps to its first port. |
 
-Used by the engine, `validate.ts`, `playwright.ts` and the editor (`BlockNode`, `flow/convert.ts`).
+Used by the engine, `validate.ts`, `check.ts`, `script.ts`, `layout.ts`, `playwright.ts`, `scripts/guide.ts`,
+`scripts/scriptSchema.ts` and the editor (`BlockNode`, `Editor.tsx`'s `portOfEdge` and `updateConfig`).
+
+**Dynamic ports and dead edges.** An edge whose port a block no longer has never runs; the engine skips
+it, `validate.ts` warns ("The "x" output is not in use"), `check.ts` refuses it on import
+(`edge.port.unknown`, did-you-mean over the node's real ports). The editor keeps them from appearing:
+`updateConfig` calls `followPortChanges` (`flow/convert.ts`) with the outputs before and after a change,
+so when one output disappears and one appears (a case renamed) its edges move to the new name, and edges
+from outputs that disappear otherwise (a case removed) are deleted. Switch gives a nameless, invalid or
+repeated case a stand-in output `case<N>` so that typing a name over an old one is a chain of renames.
 
 ## Session tabs (`session.ts`)
 

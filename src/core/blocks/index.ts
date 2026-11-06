@@ -29,6 +29,7 @@ import { fillBlock } from './fill';
 import { fillFormBlock } from './fillForm';
 import { httpRequestBlock } from './httpRequest';
 import { ifBlock } from './ifBlock';
+import { switchBlock } from './switchBlock';
 import { logBlock } from './log';
 import { manualStepBlock } from './manualStep';
 import { navigateBlock } from './navigate';
@@ -79,6 +80,7 @@ export {
   selectOptionBlock,
   waitForBlock,
   ifBlock,
+  switchBlock,
   logBlock,
   manualStepBlock,
   notifyBlock,
@@ -101,7 +103,7 @@ export const BLOCK_GROUPS: { category: BlockCategory; blocks: AnyBlockDefinition
   { category: 'page', blocks: [clickBlock, fillBlock, fillFormBlock, selectOptionBlock, checkBlock, pressKeyBlock, uploadFileBlock, scrollBlock, dialogsBlock, waitForBlock, runScriptBlock] },
   { category: 'read', blocks: [readElementBlock, extractListBlock, extractTableBlock, paginateBlock, pageInfoBlock, pageSnapshotBlock] },
   { category: 'test', blocks: [assertBlock, manualStepBlock, stopBlock] },
-  { category: 'logic', blocks: [ifBlock, forEachBlock, repeatBlock, runWorkflowBlock] },
+  { category: 'logic', blocks: [ifBlock, switchBlock, forEachBlock, repeatBlock, runWorkflowBlock] },
   { category: 'data', blocks: [setVariableBlock, transformBlock, filterBlock, dataTableBlock, saveDatasetBlock, downloadBlock] },
   { category: 'output', blocks: [notifyBlock, httpRequestBlock, logBlock] },
 ];

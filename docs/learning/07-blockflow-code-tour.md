@@ -201,7 +201,9 @@ declare their own cross-field rules in `validate(config)`. Try it: import a copy
 2. **Notification block** (already built in `notify.ts`: read it, then add a different Host method, e.g. clipboard). Needs the `notifications` permission and a new `Host` method (`notify`). Touch
    `types.ts`, `fakeHost.ts`, `host.ts`, `wxt.config.ts`. This is how you extend the Host.
 3. **IF block** with two outputs: already built (`ifBlock.ts`, `ports.ts`). Read how `routeTo` and
-   `edgePort` work, then write a **Switch** block with one output per case.
+   `edgePort` work. Switch (one output per case) is built too (`switchBlock.ts`): its `ports` is a
+   function of the settings. Read how the editor keeps connections when a case is renamed
+   (`followPortChanges` in `flow/convert.ts`), then try a block whose outputs come from a number setting.
 4. **Hover-and-read block** using the page agent: add an op to `src/core/page.ts`, handle it in
    `src/dom/agent.ts` (test it in `tests/dom/agent.test.ts` first), then a block that calls it.
 5. **Cron-ish Timer** ("every day at 09:00"): already built as Schedule (`scheduleBlock.ts`,

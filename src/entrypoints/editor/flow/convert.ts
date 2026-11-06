@@ -103,3 +103,31 @@ export function fromFlow(base: Workflow, nodes: FlowNode[], edges: FlowEdge[]): 
 export function sameGraph(a: Workflow, b: Workflow): boolean {
   return JSON.stringify([a.nodes, a.edges]) === JSON.stringify([b.nodes, b.edges]);
 }
+
+/**
+ * Keeps a node's connections in step with outputs that depend on its settings (Switch cases). Called
+ * after a settings change with the node's outputs before and after it:
+ * - one output gone and one new (a case renamed): its connections move to the new name;
+ * - outputs gone otherwise (a case removed): their connections are removed, so no connection is left
+ *   on an output that is not drawn.
+ * Returns `edges` itself when nothing changes. (Switch gives a nameless or half-typed case a stand-in
+ * output `case<N>`, so typing a new name is a chain of renames and keeps the connections.)
+ */
+export function followPortChanges<E extends FlowEdge>(edges: E[], nodeId: string, before: string[], after: string[]): E[] {
+  const gone = before.filter((port) => !after.includes(port));
+  if (gone.length === 0) return edges;
+  const added = after.filter((port) => !before.includes(port));
+  const renamed = gone.length === 1 && added.length === 1 ? { from: gone[0], to: added[0] as string } : undefined;
+  let changed = false;
+  const next: E[] = [];
+  for (const edge of edges) {
+    const port = edge.sourceHandle ?? DEFAULT_PORT;
+    if (edge.source !== nodeId || !gone.includes(port)) {
+      next.push(edge);
+      continue;
+    }
+    changed = true;
+    if (renamed) next.push({ ...edge, sourceHandle: renamed.to });
+  }
+  return changed ? next : edges;
+}

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { fromFlow, sameGraph, toFlow } from '../../src/entrypoints/editor/flow/convert';
+import { followPortChanges, fromFlow, sameGraph, toFlow } from '../../src/entrypoints/editor/flow/convert';
+import { switchBlock } from '../../src/core/blocks/switchBlock';
+import { nodePorts } from '../../src/core/ports';
 import { sampleWorkflows } from '../../src/core/samples';
 import type { Workflow } from '../../src/core/types';
 
@@ -90,5 +92,47 @@ describe('ports and step settings', () => {
     const flowed = toFlow(workflow);
     expect(flowed.edges[0]?.sourceHandle).toBe('out');
     expect(sameGraph(workflow, fromFlow(workflow, flowed.nodes, flowed.edges))).toBe(true);
+  });
+
+  it('Switch: edges keep their case port through toFlow / fromFlow', () => {
+    const workflow: Workflow = {
+      schemaVersion: 2,
+      id: 'w',
+      name: 'W',
+      enabled: false,
+      nodes: [
+        { id: 'sw', type: 'switch', position: { x: 0, y: 0 }, config: { value: '{{v}}', cases: [{ port: 'ok', operator: 'equals', value: '1' }] } },
+        { id: 'a', type: 'log', position: { x: 1, y: 0 }, config: {} },
+        { id: 'b', type: 'log', position: { x: 1, y: 1 }, config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 'sw', target: 'a', sourcePort: 'ok' },
+        { id: 'e2', source: 'sw', target: 'b', sourcePort: 'default' },
+      ],
+    };
+    const flowed = toFlow(workflow);
+    expect(flowed.edges.map((edge) => edge.sourceHandle)).toEqual(['ok', 'default']);
+    expect(fromFlow(workflow, flowed.nodes, flowed.edges)).toEqual(workflow);
+  });
+
+  it('followPortChanges: a renamed case keeps its connections, a removed one loses them', () => {
+    const ports = (names: string[]) => nodePorts(switchBlock, { config: { cases: names.map((port) => ({ port, operator: 'equals', value: '' })) } });
+    const edges = [
+      { id: 'e1', source: 'sw', target: 'a', sourceHandle: 'ok' },
+      { id: 'e2', source: 'sw', target: 'b', sourceHandle: 'bad' },
+      { id: 'e3', source: 'sw', target: 'c', sourceHandle: 'default' },
+      { id: 'e4', source: 'other', target: 'd', sourceHandle: 'ok' },
+    ];
+    // Typing a new name: "ok" → "" (stand-in case1) → "g" → "good"; the connection follows every step.
+    let current = edges;
+    for (const [before, after] of [[['ok', 'bad'], ['', 'bad']], [['', 'bad'], ['g', 'bad']], [['g', 'bad'], ['good', 'bad']]] as const) {
+      current = followPortChanges(current, 'sw', ports([...before]), ports([...after]));
+    }
+    expect(current.map((edge) => `${edge.id}:${edge.sourceHandle}`)).toEqual(['e1:good', 'e2:bad', 'e3:default', 'e4:ok']);
+    // Removing the "bad" row removes its connection; other nodes are untouched.
+    const removed = followPortChanges(current, 'sw', ports(['good', 'bad']), ports(['good']));
+    expect(removed.map((edge) => edge.id)).toEqual(['e1', 'e3', 'e4']);
+    // Adding a case changes nothing (same array back).
+    expect(followPortChanges(removed, 'sw', ports(['good']), ports(['good', 'new']))).toBe(removed);
   });
 });

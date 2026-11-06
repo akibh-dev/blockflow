@@ -165,6 +165,8 @@ export interface RowsField extends FieldBase {
     /** Renders a "pick on page" button for this column. */
     locator?: boolean;
     templated?: boolean;
+    /** A fixed choice (the editor shows a select; a new row starts with the first option). */
+    options?: { value: string; label: string }[];
   }[];
   /** Shows a "Detect fields" button that fills the rows from a form picked on the page. */
   detectForm?: boolean;
@@ -232,8 +234,13 @@ export interface BlockContext<C extends object = BlockConfig> {
    */
   callWorkflow(workflowId: string, input: Payload): Promise<Payload>;
   host: Host;
-  /** Send a payload to every block connected to one of this block's outputs (default "out"). */
-  emit(payload: Payload, port?: string): Promise<void>;
+  /**
+   * Send a payload to every block connected to one of this block's outputs (default "out"). Inside a
+   * run it resolves, once everything downstream finished, with the data at the end of the last path
+   * it reached (the payload itself when nothing is connected; undefined when every path stopped or
+   * failed). Repeat's "until" condition reads it.
+   */
+  emit(payload: Payload, port?: string): Promise<Payload | undefined>;
   /** Writes a run-log line tagged with this block. */
   log(level: LogLevel, message: string): void;
   /** Timers scoped to this block (keyed by workflow, node and `name`). Fire `onTimer`. */
@@ -283,8 +290,11 @@ export interface BlockDefinition<C extends object = BlockConfig> {
   /**
    * Named outputs. Default ['out']. A block picks one by returning `routeTo(port, payload)`.
    * The engine adds an "error" output when the block's step settings ask for it.
+   * A function makes them depend on the settings (Switch: one per case); it receives the config with
+   * defaults applied but not rendered, must not throw, and should return names in a stable order.
+   * Always read ports through `nodePorts` (src/core/ports.ts), never `def.ports` directly.
    */
-  ports?: string[];
+  ports?: string[] | ((config: C) => string[]);
 
   /** Default timeout for this kind of block, in seconds (engine default: 60). Page actions use 30. */
   timeoutSeconds?: number;

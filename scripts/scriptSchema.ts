@@ -4,7 +4,7 @@
  * scripts/guide.ts (npm run guide:sync; guide:check verifies it).
  */
 import { ERROR_BRANCH, SCRIPT_ALIASES, SCRIPT_FORMAT, SCRIPT_SHORTHAND, SCRIPT_VERSION, continuePort } from '../src/core/script';
-import { ERROR_PORT, nodePorts } from '../src/core/ports';
+import { ERROR_PORT, hasDynamicPorts, nodePorts } from '../src/core/ports';
 import type { BlockRegistry } from '../src/core/registry';
 import type { AnyBlockDefinition, FieldSpec } from '../src/core/types';
 
@@ -24,7 +24,9 @@ function fieldSchema(field: FieldSpec): Record<string, unknown> {
         type: 'array',
         items: {
           type: 'object',
-          properties: Object.fromEntries(field.columns.map((column) => [column.key, { type: 'string', description: column.label }])),
+          properties: Object.fromEntries(
+            field.columns.map((column) => [column.key, column.options ? { enum: column.options.map((option) => option.value), description: column.label } : { type: 'string', description: column.label }]),
+          ),
           additionalProperties: false,
         },
       };
@@ -47,10 +49,12 @@ function configSchema(def: AnyBlockDefinition): Record<string, unknown> {
 function stepSchema(def: AnyBlockDefinition, key: string): Record<string, unknown> {
   const ports = nodePorts(def, {});
   const next = continuePort(ports);
+  // Dynamic outputs: name only the ones the block always has (its settings' lists left empty).
+  const fixed = hasDynamicPorts(def) ? nodePorts(def, { config: Object.fromEntries(def.fields.filter((field) => field.kind === 'rows').map((field) => [field.key, []])) }) : ports;
   const shorthand = SCRIPT_SHORTHAND[def.type];
   const shortField = shorthand ? def.fields.find((field) => field.key === shorthand) : undefined;
   const config = { $ref: `#/$defs/config/${def.type}` };
-  const branches = ports.filter((port) => port !== next && port !== ERROR_PORT);
+  const branches = fixed.filter((port) => port !== next && port !== ERROR_PORT);
   return {
     type: 'object',
     title: key === def.type ? def.label : `${def.label} (alias "${key}")`,
@@ -67,7 +71,10 @@ function stepSchema(def: AnyBlockDefinition, key: string): Record<string, unknow
       ),
       [ERROR_BRANCH]: { $ref: '#/$defs/steps', description: 'Steps on the error output (sets step.onError to "port").' },
     },
-    additionalProperties: false,
+    // Outputs named by the settings (Switch: one per case): any other key is a branch list.
+    additionalProperties: hasDynamicPorts(def)
+      ? { $ref: '#/$defs/steps', description: `Steps on the output of that name (a case's "port"); their end continues to the next step.` }
+      : false,
   };
 }
 

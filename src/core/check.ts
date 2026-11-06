@@ -516,7 +516,7 @@ class Checker {
       const target = nodes.get(raw.target as string) as CheckedNode;
       const port = typeof raw.sourcePort === 'string' && raw.sourcePort ? raw.sourcePort : undefined;
       if (source.def) {
-        const ports = nodePorts(source.def, { step: source.step });
+        const ports = nodePorts(source.def, { step: source.step, config: source.config });
         if (port !== undefined && !ports.includes(port)) {
           if (port === ERROR_PORT) {
             this.add('error', 'edge.port.unknown', `${path}${pointer('sourcePort')}`, `Block "${raw.source}" has no "error" output, so this connection never runs.`, 'Set "step": {"onError": "port"} on the source block.');
@@ -543,7 +543,7 @@ class Checker {
       const key = `${raw.source}\0${port ?? DEFAULT_PORT}\0${raw.target}`;
       if (seen.has(key)) this.add('warning', 'edge.duplicate', path, `The connection ${raw.source} → ${raw.target} is listed twice.`);
       seen.add(key);
-      edges.push({ index, source: raw.source as string, target: raw.target as string, port: port ?? (source.def ? nodePorts(source.def, { step: source.step })[0] ?? DEFAULT_PORT : DEFAULT_PORT) });
+      edges.push({ index, source: raw.source as string, target: raw.target as string, port: port ?? (source.def ? nodePorts(source.def, { step: source.step, config: source.config })[0] ?? DEFAULT_PORT : DEFAULT_PORT) });
     });
 
     if (nodes.size === 0) {
