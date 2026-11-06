@@ -1633,6 +1633,58 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "page-snapshot"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Outline of what is on the page (roles, names, a locator for each element), to write steps from or keep with the run.",
+                    "properties": {
+                      "locator": {
+                        "description": "Only this element and what is inside it. Empty = the whole page.",
+                        "type": "string"
+                      },
+                      "maxLines": {
+                        "description": "Long pages are cut here, with a note.",
+                        "type": "number",
+                        "minimum": 10,
+                        "maximum": 10000
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": []
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "assert"
                   },
                   "position": {

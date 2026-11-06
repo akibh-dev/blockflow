@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { CodedError } from '../core/errors';
 
 /**
  * Real mouse and keyboard input through the Chrome DevTools Protocol (`debugger` API, optional
@@ -25,7 +26,8 @@ export async function hasDebugger(): Promise<boolean> {
  */
 export async function withDebugger<T>(tabId: number, fn: (send: Send) => Promise<T>): Promise<T> {
   if (!(await hasDebugger()) || !browser.debugger) {
-    throw new Error(
+    throw new CodedError(
+      'permission.missing',
       'Real input needs the "debugger" permission (Chrome, Edge, Brave). Tick "Use real mouse and keyboard" in the step settings again to grant it.',
     );
   }

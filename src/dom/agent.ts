@@ -1,7 +1,10 @@
 import { accessibleName, checkedState, getRole } from './aria';
 import { FrameBoundaryError, LocatorError, describeElement, resolveLocator, textMatcher } from './locator';
 import { bestLocator } from './bestLocator';
+import { takeSnapshot } from './snapshot';
+import { SNAPSHOT_MAX_LINES } from '../core/page';
 import type { AgentCall, AgentRequest, AgentResponse, FormFieldRow } from '../core/page';
+import type { ErrorCode } from '../core/errors';
 
 /**
  * The page agent: runs inside a web page (injected by src/entrypoints/agent.content.ts) and
@@ -13,16 +16,36 @@ import type { AgentCall, AgentRequest, AgentResponse, FormFieldRow } from '../co
  * again until the step's timeout. Short calls keep working across page navigations, which destroy
  * the page's scripts (and this agent) mid-wait.
  *
- * Only `import type` from the extension: this file is bundled into the content script.
+ * Every `pending` / `error` answer carries an error code (src/core/errors.ts) and the page's URL, so a
+ * failed step can say what went wrong in a way a program can act on.
+ *
+ * Imports from the extension are pure modules only (src/core/page.ts constants, types): this file is
+ * bundled into the content script.
  */
 
 /** Pause between attempts while `run` keeps retrying inside its budget. */
 const RETRY_EVERY_MS = 50;
 
 /** Not possible yet (missing, hidden, disabled, moving, covered): retried, then answered as `pending`. */
-class Pending extends Error {}
+class Pending extends Error {
+  constructor(
+    message: string,
+    readonly code: ErrorCode = 'timeout',
+  ) {
+    super(message);
+  }
+}
 /** Will never work (bad locator, strict-mode violation, wrong element type): answered as `error` at once. */
-class Fatal extends Error {}
+class Fatal extends Error {
+  constructor(
+    message: string,
+    readonly code?: ErrorCode,
+    /** For `locator.strict`: the matching elements, described. */
+    readonly matches?: string[],
+  ) {
+    super(message);
+  }
+}
 
 /** The `result` of a `done` answer. Must stay structured-cloneable: it goes back through `executeScript`. */
 type Done = Record<string, unknown>;
@@ -60,7 +83,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       return resolveLocator(locator, doc);
     } catch (error) {
       if (error instanceof FrameBoundaryError) throw error;
-      if (error instanceof LocatorError) throw new Fatal(error.message);
+      if (error instanceof LocatorError) throw new Fatal(error.message, 'locator.invalid');
       throw error;
     }
   }
@@ -68,12 +91,14 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   /** Exactly one element, as Playwright's strict mode: two matches is a mistake worth knowing about. */
   function one(locator: string): Element {
     const found = all(locator);
-    if (found.length === 0) throw new Pending(`waiting for ${locator}: no element matches`);
+    if (found.length === 0) throw new Pending(`waiting for ${locator}: no element matches`, 'locator.not-found');
     if (found.length > 1) {
       const sample = found.slice(0, 3).map(describeElement).join(', ');
       throw new Fatal(
         `${locator} matches ${found.length} elements (${sample}${found.length > 3 ? ', …' : ''}). ` +
           'Make it more specific, or add ">> nth=0" for the first one.',
+        'locator.strict',
+        found.slice(0, 5).map(describeElement),
       );
     }
     return found[0] as Element;
@@ -190,9 +215,9 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   /** Throws Pending with the reason when the element is not ready yet. */
   function ready(element: Element, needs: { enabled?: boolean; editable?: boolean; hit?: boolean }): void {
-    if (!isVisible(element)) throw new Pending(`waiting for ${describeElement(element)} to be visible`);
-    if (needs.enabled && !isEnabled(element)) throw new Pending(`waiting for ${describeElement(element)} to be enabled`);
-    if (needs.editable && !isEditable(element)) throw new Pending(`waiting for ${describeElement(element)} to be editable (it is read-only)`);
+    if (!isVisible(element)) throw new Pending(`waiting for ${describeElement(element)} to be visible`, 'element.not-visible');
+    if (needs.enabled && !isEnabled(element)) throw new Pending(`waiting for ${describeElement(element)} to be enabled`, 'element.disabled');
+    if (needs.editable && !isEditable(element)) throw new Pending(`waiting for ${describeElement(element)} to be editable (it is read-only)`, 'element.not-editable');
     if (typeof (element as HTMLElement).scrollIntoView === 'function' && hasLayout()) {
       const rect = element.getBoundingClientRect();
       const view = element.ownerDocument.defaultView ?? win;
@@ -200,10 +225,10 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
         (element as HTMLElement).scrollIntoView({ block: 'center', inline: 'center' });
       }
     }
-    if (!isStable(element)) throw new Pending(`waiting for ${describeElement(element)} to stop moving`);
+    if (!isStable(element)) throw new Pending(`waiting for ${describeElement(element)} to stop moving`, 'element.unstable');
     if (needs.hit) {
       const cover = coveredBy(element);
-      if (cover) throw new Pending(`${describeElement(element)} is covered by ${describeElement(cover)}`);
+      if (cover) throw new Pending(`${describeElement(element)} is covered by ${describeElement(cover)}`, 'element.covered');
     }
   }
 
@@ -319,7 +344,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     const kind = textKind(element);
     if (!kind) {
       const type = element.localName === 'input' ? ` type=${(element as HTMLInputElement).type}` : '';
-      throw new Fatal(`${describeElement(element)}${type} cannot be typed into. Use Select Option, Check or Click instead.`);
+      throw new Fatal(`${describeElement(element)}${type} cannot be typed into. Use Select Option, Check or Click instead.`, 'element.wrong-type');
     }
     focus(element);
     if (kind === 'editable') {
@@ -361,19 +386,19 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   /** Picks options of a native `<select>` by value, label or text. A missing or disabled option is Pending. */
   function select(element: Element, values: string[]): Done {
-    if (element.localName !== 'select') throw new Fatal(`${describeElement(element)} is not a <select>. Use Click to open custom dropdowns.`);
+    if (element.localName !== 'select') throw new Fatal(`${describeElement(element)} is not a <select>. Use Click to open custom dropdowns.`, 'element.wrong-type');
     const field = element as HTMLSelectElement;
     const options = Array.from(field.options);
     const chosen = values.map((wanted) => {
       const option = options.find((candidate) => optionMatches(candidate, wanted));
       if (!option) {
         const known = options.slice(0, 8).map((candidate) => candidate.label || candidate.value).join(', ');
-        throw new Pending(`waiting for option "${wanted}" in ${describeElement(element)} (has: ${known})`);
+        throw new Pending(`waiting for option "${wanted}" in ${describeElement(element)} (has: ${known})`, 'option.not-found');
       }
-      if (option.disabled) throw new Pending(`option "${wanted}" is disabled`);
+      if (option.disabled) throw new Pending(`option "${wanted}" is disabled`, 'option.not-found');
       return option;
     });
-    if (chosen.length > 1 && !field.multiple) throw new Fatal(`${describeElement(element)} accepts one option, got ${chosen.length}`);
+    if (chosen.length > 1 && !field.multiple) throw new Fatal(`${describeElement(element)} accepts one option, got ${chosen.length}`, 'element.wrong-type');
     focus(field);
     if (field.multiple) {
       for (const option of options) option.selected = chosen.includes(option);
@@ -388,9 +413,9 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   /** Clicks a checkbox/radio/switch only when its state differs, then verifies the new state. */
   function check(element: Element, checked: boolean): Done {
     const before = checkedState(element);
-    if (before === null) throw new Fatal(`${describeElement(element)} is not a checkbox, radio or switch`);
+    if (before === null) throw new Fatal(`${describeElement(element)} is not a checkbox, radio or switch`, 'element.wrong-type');
     if (before === checked) return { changed: false, checked };
-    if (!checked && (element as HTMLInputElement).type === 'radio') throw new Fatal('A radio button cannot be unchecked; check another one instead');
+    if (!checked && (element as HTMLInputElement).type === 'radio') throw new Fatal('A radio button cannot be unchecked; check another one instead', 'element.wrong-type');
     click(element, 'click');
     if (checkedState(element) !== checked) throw new Fatal(`Clicking ${describeElement(element)} did not ${checked ? 'check' : 'uncheck'} it`);
     return { changed: true, checked };
@@ -407,7 +432,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       return check(element, TRUTHY.has(value.trim().toLowerCase()));
     }
     if (element.localName === 'input' && (element as HTMLInputElement).type === 'file') {
-      throw new Fatal('File inputs cannot be filled with text: use the Upload File block for <input type="file">');
+      throw new Fatal('File inputs cannot be filled with text: use the Upload File block for <input type="file">', 'element.wrong-type');
     }
     fill(element, value, 'fill');
     return { value };
@@ -504,7 +529,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     if (request.kind === 'visible') return { found: true, text: String(found.some(isVisible)), count };
     if (request.kind === 'checked') return { found: true, text: String(element ? checkedState(element) === true : false), count };
     if (request.kind === 'enabled') return { found: true, text: String(element ? isEnabled(element) && isVisible(element) : false), count };
-    if (!element) throw new Pending(`waiting for ${request.locator}: no element matches`);
+    if (!element) throw new Pending(`waiting for ${request.locator}: no element matches`, 'locator.not-found');
     const name = request.name ?? '';
     let text: string;
     if (request.kind === 'attribute') text = element.getAttribute(name) ?? '';
@@ -519,7 +544,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   function wait(request: Extract<AgentRequest, { op: 'wait' }>): Done {
     const { state, locator, text } = request;
     if (state === 'text' || state === 'no-text') {
-      if (!text) throw new Fatal('Wait For text needs the text to look for');
+      if (!text) throw new Fatal('Wait For text needs the text to look for', 'config.invalid');
       const scope = locator ? all(locator) : [doc.body];
       const matches = textMatcher(text);
       const present = scope.some((element) => element && matches((element as HTMLElement).innerText ?? element.textContent ?? ''));
@@ -528,24 +553,24 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       }
       return { state };
     }
-    if (!locator) throw new Fatal(`Wait For "${state}" needs an element`);
+    if (!locator) throw new Fatal(`Wait For "${state}" needs an element`, 'config.invalid');
     const found = all(locator);
     const visible = found.filter(isVisible);
     switch (state) {
       case 'attached':
-        if (found.length === 0) throw new Pending(`waiting for ${locator} to appear in the page`);
+        if (found.length === 0) throw new Pending(`waiting for ${locator} to appear in the page`, 'locator.not-found');
         break;
       case 'detached':
         if (found.length > 0) throw new Pending(`waiting for ${locator} to be removed`);
         break;
       case 'visible':
-        if (visible.length === 0) throw new Pending(`waiting for ${locator} to be visible`);
+        if (visible.length === 0) throw new Pending(`waiting for ${locator} to be visible`, found.length === 0 ? 'locator.not-found' : 'element.not-visible');
         break;
       case 'hidden':
         if (visible.length > 0) throw new Pending(`waiting for ${locator} to be hidden`);
         break;
       case 'enabled':
-        if (!visible.some(isEnabled)) throw new Pending(`waiting for ${locator} to be enabled`);
+        if (!visible.some(isEnabled)) throw new Pending(`waiting for ${locator} to be enabled`, found.length === 0 ? 'locator.not-found' : 'element.disabled');
         break;
     }
     return { state, count: found.length };
@@ -572,7 +597,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   function extract(request: Extract<AgentRequest, { op: 'extract' }>): Done {
     const items = all(request.locator);
-    if (items.length === 0) throw new Pending(`waiting for ${request.locator}: no element matches`);
+    if (items.length === 0) throw new Pending(`waiting for ${request.locator}: no element matches`, 'locator.not-found');
     const picked = request.limit && request.limit > 0 ? items.slice(0, request.limit) : items;
     const fields = request.fields.length > 0 ? request.fields : [{ name: 'text' }];
     const values = picked.map((item) =>
@@ -582,7 +607,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
           try {
             target = resolveLocator(field.locator, item)[0];
           } catch (error) {
-            throw new Fatal(`Field "${field.name}": ${error instanceof Error ? error.message : String(error)}`);
+            throw new Fatal(`Field "${field.name}": ${error instanceof Error ? error.message : String(error)}`, 'locator.invalid');
           }
         }
         return !target ? '' : field.attribute?.trim() ? attributeOf(target, field.attribute.trim()) : textOf(target);
@@ -596,7 +621,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   function table(locator: string): Done {
     const found = one(locator);
     const tableElement = found.localName === 'table' ? found : found.closest('table') ?? found.querySelector('table');
-    if (!tableElement) throw new Fatal(`${describeElement(found)} is not a table`);
+    if (!tableElement) throw new Fatal(`${describeElement(found)} is not a table`, 'element.wrong-type');
     const rows = Array.from((tableElement as HTMLTableElement).rows);
     const headerRow = (tableElement as HTMLTableElement).tHead?.rows[0] ?? rows.find((row) => row.querySelector('th')) ?? rows[0];
     if (!headerRow) return { columns: [], values: [], count: 0 };
@@ -661,7 +686,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   function scroll(request: Extract<AgentRequest, { op: 'scroll' }>): Done {
     const scroller = doc.scrollingElement ?? doc.documentElement;
     if (request.to === 'element') {
-      if (!request.locator) throw new Fatal('Scroll to an element needs the element');
+      if (!request.locator) throw new Fatal('Scroll to an element needs the element', 'config.invalid');
       const element = one(request.locator);
       (element as HTMLElement).scrollIntoView?.({ block: 'center' });
     } else {
@@ -677,9 +702,11 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   function upload(locator: string, files: { name: string; type: string; base64: string }[]): Done {
     const found = one(locator);
     const input = (found.localName === 'input' ? found : (found as HTMLLabelElement).control ?? found.querySelector('input[type="file"]')) as HTMLInputElement | null;
-    if (!input || input.localName !== 'input' || input.type !== 'file') throw new Fatal(`${describeElement(found)} is not a file input. Point at the <input type="file"> (it may be hidden).`);
-    if (!isEnabled(input)) throw new Pending(`waiting for ${describeElement(input)} to be enabled`);
-    if (files.length > 1 && !input.multiple) throw new Fatal(`${describeElement(input)} takes one file, got ${files.length}`);
+    if (!input || input.localName !== 'input' || input.type !== 'file') {
+      throw new Fatal(`${describeElement(found)} is not a file input. Point at the <input type="file"> (it may be hidden).`, 'element.wrong-type');
+    }
+    if (!isEnabled(input)) throw new Pending(`waiting for ${describeElement(input)} to be enabled`, 'element.disabled');
+    if (files.length > 1 && !input.multiple) throw new Fatal(`${describeElement(input)} takes one file, got ${files.length}`, 'element.wrong-type');
     if (typeof win.DataTransfer !== 'function') throw new Fatal('This page cannot receive files (no DataTransfer)');
     const transfer = new win.DataTransfer();
     for (const file of files) {
@@ -715,6 +742,14 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return { x: x + origin.x, y: y + origin.y, kind };
   }
 
+  /** The page (or the part under `locator`) as an outline, see src/dom/snapshot.ts. */
+  function snapshot(request: Extract<AgentRequest, { op: 'snapshot' }>): Done {
+    const root = request.locator ? all(request.locator)[0] : (doc.body ?? doc.documentElement);
+    if (!root) throw new Pending(`waiting for ${request.locator}: no element matches`, 'locator.not-found');
+    const result = takeSnapshot(root, { maxLines: request.maxLines ?? SNAPSHOT_MAX_LINES });
+    return { ...result, url: doc.URL, title: doc.title };
+  }
+
   // --- forms ----------------------------------------------------------------
 
   /** "Email · email", "Country · select: BD, US", for the Fill Form editor. */
@@ -735,7 +770,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   /** The fields of the form around the picked element, for Fill Form's "Detect fields". */
   function detectForm(locator: string): Done {
     const picked = all(locator)[0];
-    if (!picked) throw new Pending(`waiting for ${locator}`);
+    if (!picked) throw new Pending(`waiting for ${locator}`, 'locator.not-found');
     const root = picked.closest('form') ?? picked;
     const skip = new Set(['hidden', 'submit', 'button', 'reset', 'image', 'file']);
     const fields: FormFieldRow[] = Array.from(root.querySelectorAll('input, select, textarea, [contenteditable=""], [contenteditable="true"], [role="switch"], [role="checkbox"]'))
@@ -808,6 +843,8 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
         return upload(request.locator, request.files);
       case 'locate':
         return locate(request);
+      case 'snapshot':
+        return snapshot(request);
     }
   }
 
@@ -822,11 +859,14 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
             const offset = request.op === 'locate' && error.frame ? frameOffset(error.frame) : undefined;
             return { status: 'frame', src: error.src, rest: error.rest, ...(offset ? { offset } : {}) };
           }
-          if (error instanceof Fatal) return { status: 'error', message: error.message };
-          if (!(error instanceof Pending)) {
-            return { status: 'error', message: error instanceof Error ? error.message : String(error) };
+          const url = doc.URL;
+          if (error instanceof Fatal) {
+            return { status: 'error', message: error.message, url, ...(error.code ? { code: error.code } : {}), ...(error.matches ? { matches: error.matches } : {}) };
           }
-          if (Date.now() >= deadline) return { status: 'pending', reason: error.message };
+          if (!(error instanceof Pending)) {
+            return { status: 'error', message: error instanceof Error ? error.message : String(error), url };
+          }
+          if (Date.now() >= deadline) return { status: 'pending', reason: error.message, code: error.code, url };
         }
         await sleep(RETRY_EVERY_MS);
       }

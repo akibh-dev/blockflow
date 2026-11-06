@@ -1,3 +1,4 @@
+import { CodedError } from './errors';
 import type { Payload } from './types';
 
 /**
@@ -34,7 +35,7 @@ export function requireSessionTab(payload: Payload, name: string): number {
   const tab = name.trim() || DEFAULT_TAB;
   const id = sessionTab(payload, tab);
   if (id === undefined) {
-    throw new Error(`No tab named "${tab}" in this run. Put an Open Tab block (tab name "${tab}") before this block.`);
+    throw new CodedError('tab.missing', `No tab named "${tab}" in this run. Put an Open Tab block (tab name "${tab}") before this block.`);
   }
   return id;
 }

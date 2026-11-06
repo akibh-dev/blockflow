@@ -176,14 +176,14 @@ function queryRole(body: string, scope: ParentNode): Element[] {
   const query = parseRole(body);
   return allElements(scope).filter((element) => {
     if (getRole(element) !== query.role) return false;
-    if (!query.includeHidden && isHiddenForAria(element)) return false;
     if (query.name && !query.name(accessibleName(element))) return false;
     if (query.checked !== undefined && checkedState(element) !== query.checked) return false;
     if (query.level !== undefined) {
       const level = Number(element.getAttribute('aria-level') ?? /^h([1-6])$/.exec(element.localName)?.[1]);
       if (level !== query.level) return false;
     }
-    return true;
+    // Last: it reads computed styles up the tree, the most expensive test.
+    return query.includeHidden || !isHiddenForAria(element);
   });
 }
 

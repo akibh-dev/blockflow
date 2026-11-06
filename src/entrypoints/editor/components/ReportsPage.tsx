@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { loadScreenshot } from '../../../browser/blobStore';
-import { durationOf, summarize, toHtmlReport, toJUnitXml } from '../../../core/report';
+import { durationOf, summarize, toHtmlReport, toJsonReport, toJUnitXml } from '../../../core/report';
 import { TRIGGER_LABELS } from '../../../core/runs';
 import type { RunRecord } from '../../../core/runs';
 import { downloadText } from '../files';
 import { registry } from '../registry';
-import { formatMs } from './ConfigPanel';
+import { ErrorDetails, formatMs } from './ConfigPanel';
 import { Screenshot } from './Screenshot';
 
 interface ReportsPageProps {
@@ -35,7 +35,7 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
 
   const exportAs = async (kind: 'json' | 'junit' | 'html') => {
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    if (kind === 'json') return downloadText(`blockflow-runs-${stamp}.json`, JSON.stringify(shown, null, 2));
+    if (kind === 'json') return downloadText(`blockflow-runs-${stamp}.json`, JSON.stringify(toJsonReport(shown), null, 2));
     if (kind === 'junit') return downloadText(`blockflow-junit-${stamp}.xml`, toJUnitXml(shown, { blockLabel }), 'application/xml');
     const screenshots: Record<string, string> = {};
     for (const run of shown) {
@@ -131,6 +131,7 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
                     </button>
                   )}
                   {step.error && <div className="bf-error">{step.error}</div>}
+                  <ErrorDetails step={step} />
                   {step.screenshot && <Screenshot id={step.screenshot} />}
                 </li>
               ))}

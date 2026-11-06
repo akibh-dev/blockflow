@@ -88,7 +88,10 @@ Select one block to see, from top to bottom:
    - Tables (Fill Form fields, Extract List fields, Start values…) have **+ Add row**, ✕ per row, 🎯 per
      locator cell, and on Fill Form, **🎯 Detect fields**.
    - Run Workflow has a list of your other workflows.
-5. **Last run**: status, duration, attempts, which output it took, the error, a screenshot if one was taken,
+   - Open Tab has **📸 Snapshot page** ([below](#snapshot-page)).
+5. **Last run**: status, duration, attempts, which output it took, the error with its small **error code**
+   (`locator.strict`, `assert.failed`…, listed in the [usage guide](../guide/README.md#error-codes)) and,
+   when a locator matched several elements, which ones, a screenshot if one was taken,
    and the full **Input** and **Output** data. Shows the run you picked in the Runs tab, or the latest.
 6. **Step settings**: On error, Retries, Timeout, Screenshot of the tab, Use real mouse and keyboard
    (debugger; only on blocks that act on the page: Click, Fill, Fill Form, Select Option, Check, Press Key,
@@ -117,6 +120,19 @@ when the text changes. **Other ways to find it** lists alternatives; click one t
 hint. Fill in the values you need; empty ones are skipped.
 
 The page agent and picker are injected only when you use them; nothing runs in your pages otherwise.
+
+## Snapshot page
+
+**📸 Snapshot page** on an Open Tab block copies an outline of the page to the clipboard: every heading,
+link, field and button with its name, state and a locator that finds exactly it, e.g.
+`- button "Sign in" [ref=e12] locator=role=button[name="Sign in"]`. Paste it into a chat with a model and
+ask for a workflow: the locators can be used as they are.
+
+It opens the block's URL in the picker's tab (or reuses that tab when it already shows the page; with no
+URL, the web tab you used last), takes the snapshot, and brings you back to the editor with a toast saying
+how many lines were copied. Long pages are cut at 1,500 lines with a note; to see one part only, or to keep
+a snapshot with a run, use the **Page Snapshot** block (it has a "Part of the page" locator). Format:
+[Page Protocol: The snapshot op](Page-Protocol.md#the-snapshot-op).
 
 ## Recorder
 
@@ -198,10 +214,12 @@ When a **Manual Step** is waiting, a banner across the top says "*Workflow* is w
 
 Header → **Reports**: the last 40 runs of all workflows. Filter by workflow and result; the line on top
 totals runs, passed, failed and time. Click a run for its steps (status, duration, attempts, output taken,
-error, screenshot), **open called run** for Run Workflow steps, and **show on canvas**.
+error and error code, screenshot), **open called run** for Run Workflow steps, and **show on canvas**.
 
 **Export HTML** (one self-contained file with screenshots), **Export JUnit XML** (for CI dashboards) and
-**Export JSON** export the runs currently shown. **Clear** deletes the history.
+**Export JSON** export the runs currently shown. The JSON is versioned (`schemaVersion: 1`) and described
+by [report.schema.json](../guide/report.schema.json): each step has its `code`, `locator`, page `url`,
+`matches` and `sourceId` (the block's id in the file you imported). **Clear** deletes the history.
 
 ## Data
 

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { createDefaultRegistry } from '../src/core/blocks';
 import { DEFAULT_TIMEOUT_SECONDS } from '../src/core/engine';
 import { nodePorts } from '../src/core/ports';
+import { reportSchemaFiles } from './reportSchema';
 import { CATEGORY_LABELS } from '../src/core/types';
 import type { AnyBlockDefinition, BlockCategory, FieldSpec } from '../src/core/types';
 
@@ -222,6 +223,7 @@ const files: Record<string, string> = {
   ].join('\n'),
   'blocks.json': `${JSON.stringify({ generatedBy: 'scripts/guide.ts', blocks: blocks.map(blockJson) }, null, 2)}\n`,
   'workflow.schema.json': `${JSON.stringify(schema(), null, 2)}\n`,
+  ...reportSchemaFiles(),
 };
 
 const check = process.argv.includes('--check');

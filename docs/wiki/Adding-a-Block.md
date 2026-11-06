@@ -238,8 +238,11 @@ How the agent answers:
 | In the op | Agent answer | Driver (`src/browser/pageDriver.ts`) does |
 | --- | --- | --- |
 | return an object | `{status: 'done', result}` | resolves `act()` with `result` |
-| `throw new Pending(reason)` | `{status: 'pending', reason}` | asks again (every ≤ 2 s) until the timeout, then `Timed out after Ns: <reason>` |
-| `throw new Fatal(message)` / locator syntax error | `{status: 'error', message}` | rejects at once, no retry |
+| `throw new Pending(reason, code)` | `{status: 'pending', reason, code, url}` | asks again (every ≤ 2 s) until the timeout, then `CodedError(code, 'Timed out after Ns: <reason>')` |
+| `throw new Fatal(message, code?, matches?)` / locator syntax error | `{status: 'error', message, code?, url, matches?}` | rejects at once with a `CodedError`, no retry |
+
+Pick the code from [errors.ts](../../src/core/errors.ts) that tells a reader (or a model) what to fix; see
+[Page Protocol: Error codes](Page-Protocol.md#error-codes).
 
 Results must be JSON-friendly, and Chrome sorts object keys in `executeScript` results; return
 `{columns, values}` when key order matters (see `tableToObjects`). The same agent also runs on fetched HTML
@@ -274,7 +277,9 @@ and a `defaultConfig` with `tab: 'main'`. `inPage` finds the tab with `requireSe
 - [ ] `src/core/blocks/<name>.ts`: `BlockDefinition<Config>` with TSDoc on the config and the block
 - [ ] unique, final `type` (stored in saved workflows; never rename later)
 - [ ] every field key has a value in `defaultConfig`; `templated` only on string fields meant for `{{…}}`
-- [ ] `run` returns `{ ...input, … }`, `routeTo(…)`, or `null` deliberately; errors are user-readable
+- [ ] `run` returns `{ ...input, … }`, `routeTo(…)`, or `null` deliberately; errors are user-readable, and
+      failures with a known cause throw `CodedError(code, message)` (src/core/errors.ts) so the step
+      records a [code](Core-Engine.md#error-codes-errorsts) other than `step.failed`
 - [ ] timing via `ctx.timers` / `ctx.host.sleep`, memory via `ctx.state`, all values JSON
 - [ ] registered in `index.ts`: import, `export { … }`, `BLOCK_GROUPS`
 - [ ] tests with `harness()` / `FakeHost` (and a jsdom agent test for a new op)

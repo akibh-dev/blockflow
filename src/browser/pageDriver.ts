@@ -1,7 +1,9 @@
 import { browser } from 'wxt/browser';
 import { mouseClick, pressKey, typeInto, withDebugger } from './cdp';
 import { sleep, tabExists } from './tabs';
-import type { AgentCall, AgentRequest, AgentResponse } from '../core/page';
+import { CodedError } from '../core/errors';
+import type { AgentCall, AgentErrorInfo, AgentRequest, AgentResponse } from '../core/page';
+import type { ErrorCode } from '../core/errors';
 
 /**
  * Sends one request to the page agent (src/dom/agent.ts) in a tab, and keeps asking until it is
@@ -64,6 +66,16 @@ function restricted(message: string): boolean {
   return /cannot access|cannot be scripted|extensions gallery|chrome:\/\/|about:|missing host permission/i.test(message);
 }
 
+/** A restricted page because the extension lacks host access (fixable), or one no extension may script. */
+function restrictedCode(message: string): ErrorCode {
+  return /permission/i.test(message) ? 'permission.missing' : 'page.restricted';
+}
+
+/** The locator of a request, for error details. */
+function locatorOf(request: AgentRequest): string | undefined {
+  return 'locator' in request && typeof request.locator === 'string' && request.locator ? request.locator : undefined;
+}
+
 /**
  * Real (debugger) input: the agent still waits for the element and says where it is; the mouse and
  * keyboard events then come from the browser itself. Selects and other non-typing fields use the
@@ -124,6 +136,9 @@ export async function act(tabId: number, request: AgentRequest, timeoutMs: numbe
 export async function actInTab(tabId: number, original: AgentRequest, timeoutMs: number): Promise<Record<string, unknown>> {
   const deadline = Date.now() + Math.max(timeoutMs, 0);
   let reason = 'the page did not answer';
+  // What the last `pending` answer said, so a timeout reports why (locator.not-found, element.covered...).
+  let last: AgentErrorInfo = { code: 'timeout' };
+  const locator = locatorOf(original);
   // Changes when the locator crosses into a cross-origin iframe.
   let request = original;
   let frameId: number | undefined;
@@ -136,14 +151,16 @@ export async function actInTab(tabId: number, original: AgentRequest, timeoutMs:
       outcome = await callAgent(tabId, { request, budgetMs }, frameId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (!(await tabExists(tabId))) throw new Error('The tab was closed');
-      if (restricted(message)) throw new Error(`The browser does not let extensions work on this page: ${message}`);
+      if (!(await tabExists(tabId))) throw new CodedError('tab.closed', 'The tab was closed', { locator });
+      if (restricted(message)) throw new CodedError(restrictedCode(message), `The browser does not let extensions work on this page: ${message}`, { locator });
       reason = `the page was busy loading (${message})`;
+      last = { code: 'navigation.failed' };
     }
     if (outcome?.status === 'frame') {
       const inner = await frameShowing(tabId, outcome.src, frameId ?? 0);
       if (inner === undefined) {
         reason = `waiting for the frame ${outcome.src} to load`;
+        last = { code: 'frame.unreachable' };
       } else {
         frameId = inner;
         request = { ...request, locator: outcome.rest } as AgentRequest;
@@ -159,15 +176,23 @@ export async function actInTab(tabId: number, original: AgentRequest, timeoutMs:
       }
       return outcome.result;
     }
-    if (outcome?.status === 'error') throw new Error(outcome.message);
-    if (outcome?.status === 'pending') reason = outcome.reason;
+    if (outcome?.status === 'error') {
+      throw new CodedError(outcome.code ?? 'step.failed', outcome.message, { locator: locatorOf(request) ?? locator, url: outcome.url, matches: outcome.matches });
+    }
+    if (outcome?.status === 'pending') {
+      reason = outcome.reason;
+      last = { code: outcome.code ?? 'timeout', url: outcome.url };
+    }
     if (outcome?.status === 'vanished') {
       // The page navigated while the agent was answering. An action has then almost certainly
       // happened (and caused the navigation); repeating it could submit a form twice.
       if (ACTIONS.has(request.op)) return { navigated: true };
       reason = 'the page navigated';
+      last = { code: 'timeout' };
     }
-    if (Date.now() >= deadline) throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s: ${reason}`);
+    if (Date.now() >= deadline) {
+      throw new CodedError(last.code ?? 'timeout', `Timed out after ${Math.round(timeoutMs / 1000)}s: ${reason}`, { locator, url: last.url });
+    }
     if (outcome?.status !== 'pending') await sleep(250);
   }
 }

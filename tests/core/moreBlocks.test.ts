@@ -100,6 +100,29 @@ describe('Page Info', () => {
   });
 });
 
+describe('Page Snapshot', () => {
+  it('asks for a snapshot (of a part, capped) and outputs the outline and the elements', async () => {
+    const host = new FakeHost();
+    const elements = [{ ref: 'e1', role: 'button', name: 'Go', tag: 'button', locator: 'role=button[name="Go"]' }];
+    host.agent = async (_tab, request) =>
+      request.op === 'snapshot' ? { snapshot: '- button "Go" [ref=e1] locator=role=button[name="Go"]', elements, url: 'https://shop.test/', title: 'Shop', lines: 1, truncated: false } : {};
+    const h = harness(
+      chain(
+        { id: 'all', type: 'page-snapshot', config: {} },
+        { id: 'part', type: 'page-snapshot', config: { locator: ' role=main ', maxLines: 20 } },
+      ),
+      host,
+    );
+    const run = await h.runner.runOnce();
+    expect(run.status).toBe('passed');
+    expect(requests(host)).toEqual([
+      { op: 'snapshot', maxLines: 1500 },
+      { op: 'snapshot', locator: 'role=main', maxLines: 20 },
+    ]);
+    expect(run.steps.find((s) => s.nodeId === 'all')?.output).toMatchObject({ snapshot: expect.stringContaining('- button "Go"'), elements });
+  });
+});
+
 describe('Context Menu', () => {
   it('config → menu item: id names the workflow and node, title falls back to the workflow name', () => {
     expect(menuItemFor({ id: 'wf1', name: 'Save it' }, 'm', { title: 'Save this product', contexts: 'link' })).toEqual({

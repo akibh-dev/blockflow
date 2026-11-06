@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { createAgent } from '../dom/agent';
 import type { PageWindow } from '../dom/agent';
+import { CodedError } from '../core/errors';
 import type { AgentRequest } from '../core/page';
 
 /**
@@ -15,9 +16,9 @@ export async function runOnHtml(html: string, baseUrl: string, request: AgentReq
   const doc = new DOMParser().parseFromString(base + html, 'text/html');
   const response = await createAgent(window as PageWindow, doc).run({ request, budgetMs: 0 });
   if (response.status === 'done') return response.result;
-  if (response.status === 'error') throw new Error(response.message);
+  if (response.status === 'error') throw new CodedError(response.code ?? 'step.failed', response.message, { matches: response.matches });
   if (response.status === 'frame') throw new Error('Frames cannot be read from HTML in the data; open the page in a tab instead');
-  throw new Error(response.reason.replace(/^waiting for /, 'Nothing matches: '));
+  throw new CodedError(response.code ?? 'locator.not-found', response.reason.replace(/^waiting for /, 'Nothing matches: '));
 }
 
 const OFFSCREEN_URL = '/offscreen.html';

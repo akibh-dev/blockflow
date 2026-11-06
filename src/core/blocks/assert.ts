@@ -1,3 +1,4 @@
+import { CodedError } from '../errors';
 import { OPERATOR_OPTIONS, operatorLabel, testClause } from '../condition';
 import { requireSessionTab } from '../session';
 import { truncate } from '../text';
@@ -156,10 +157,11 @@ export const assertBlock: BlockDefinition<AssertConfig> = {
     }
     const got = found === null ? 'no matching element' : `"${truncate(found, 120)}"`;
     const message = ctx.config.message.trim() || `Expected ${describe(ctx.config)}, got ${got}`;
+    const failure = new CodedError('assert.failed', message, locator.trim() && subject !== 'value' && subject !== 'url' && subject !== 'title' ? { locator: locator.trim() } : {});
     if (ctx.config.soft) {
-      ctx.softFail(message);
+      ctx.softFail(failure);
       return { ...input, actual: found };
     }
-    throw new Error(message);
+    throw failure;
   },
 };

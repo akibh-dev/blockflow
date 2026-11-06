@@ -223,9 +223,9 @@ export interface BlockContext<C extends object = BlockConfig> {
   aborted(): boolean;
   /**
    * Marks this step and the run as failed but keeps going (a "soft" assertion). The block still
-   * returns its output normally.
+   * returns its output normally. Pass a `CodedError` (src/core/errors.ts) to record its code.
    */
-  softFail(message: string): void;
+  softFail(failure: string | Error): void;
   /**
    * Runs another saved workflow with `input` as its data, like calling a function, and resolves
    * with the data its last block produced. Throws when that run fails.

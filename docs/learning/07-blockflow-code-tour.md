@@ -103,8 +103,18 @@ Page blocks (Click, Fill, Fill Form, Wait For…) never touch a page themselves.
    a navigation wipes it) and calls it with `scripting.executeScript` (lesson 3).
 2. `src/dom/agent.ts` finds the element with `src/dom/locator.ts` (CSS, `text=`, `role=`, `label=`…),
    waits until it is visible, enabled, not moving and not covered, then dispatches the events a real user
-   would cause. It answers `done`, `error`, or `pending` + the reason.
+   would cause. It answers `done`, `error`, or `pending` + the reason, with an error code such as
+   `locator.strict` (`src/core/errors.ts`): like an API returning `{ error: { code, message } }` instead of
+   only a message, so a program (or a model) can react without parsing English.
 3. The driver asks again until the timeout. Short calls survive navigations and keep the worker awake.
+   It then throws a `CodedError`, and the engine copies the code onto the step record (`StepRecord.code`).
+
+The same agent also answers `{ op: 'snapshot' }` (`src/dom/snapshot.ts`): an outline of the page's
+accessibility tree with a locator per element, the text a model needs to write steps. The editor's
+**📸 Snapshot page** button asks the background for it (`bf:snapshot-page`) and copies it with
+`navigator.clipboard.writeText`. One extension detail: the clipboard only works in a focused page, so the
+background switches back to the editor tab before it answers (`snapshotForEditor` in
+`src/browser/picking.ts`).
 
 Two web-dev ideas you already know show up here. **Controlled inputs**: React ignores `input.value = x`
 from its own JavaScript world, so the agent sets the value through the prototype's setter and fires `input`.

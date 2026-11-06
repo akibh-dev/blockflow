@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser';
 import { createExtensionHost } from '../browser/host';
 import { createBrowserScheduler } from '../browser/scheduler';
-import { cancelPicking, finishPicking, relayPickerSync, startPicking } from '../browser/picking';
+import { cancelPicking, finishPicking, relayPickerSync, snapshotForEditor, startPicking } from '../browser/picking';
 import { answerPrompt, clearStalePrompts, promptRunId } from '../browser/prompts';
 import { migrateWorkflow, migrateWorkflows } from '../core/migrate';
 import { appendLog, clearWorkflowState, loadWorkflows, migrateStoredWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
@@ -301,6 +301,9 @@ export default defineBackground(() => {
       case 'bf:pick-error':
         // Only a picker in a page sends this here (the editor shows it too): end the pick.
         if (sender.tab?.id !== undefined) void cancelPicking(sender.tab.id).catch(report('cancel picking'));
+        break;
+      case 'bf:snapshot-page':
+        void snapshotForEditor(sender.tab?.id, message.url).catch(report('snapshot'));
         break;
       case 'bf:picker-sync':
         void relayPickerSync(message, sender.tab?.id).catch(report('picker'));

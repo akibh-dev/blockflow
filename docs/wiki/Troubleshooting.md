@@ -24,6 +24,34 @@ Where messages come from: the page agent ([src/dom/agent.ts](../../src/dom/agent
 Screenshots are taken when a step fails (step setting `screenshot`, default `error`), of the run's tab,
 and only while that tab is showing in its window. Use Open Tab with `"where": "window"` for tests.
 
+## Error codes
+
+Every failed step has an error code next to its message (in the settings panel's Last run, in Reports, and
+as `code` in the JSON export, with the step's `locator`, page `url` and, for strict-mode errors, `matches`).
+The code says what kind of failure it was; the message says the details. Defined in
+[errors.ts](../../src/core/errors.ts).
+
+| Code | What to do | Section |
+| --- | --- | --- |
+| `locator.not-found` | Check the locator against a **Page Snapshot** of that page; wait for the page or element first | [Element not found](#element-not-found) |
+| `locator.strict` | Make it more specific (the `matches` say what it found) or add `>> nth=0` | [Locator matches several elements](#locator-matches-several-elements) |
+| `locator.invalid` | Fix the syntax | [Invalid locator](#invalid-locator) |
+| `element.not-visible`, `element.disabled`, `element.not-editable`, `element.covered`, `element.unstable` | Do what reveals, enables or uncovers it first | [Element found but not actionable](#element-found-but-not-actionable) |
+| `element.wrong-type` | Use the block that fits the element (Select Option for `<select>`, Check for checkboxes, Upload File for file inputs) | [Element found but not actionable](#element-found-but-not-actionable) |
+| `option.not-found` | Use one of the options the message lists | [Element found but not actionable](#element-found-but-not-actionable) |
+| `timeout` | Raise the step timeout or wait for the right thing (text, URL, response, popup) | [Timeouts](#timeouts) |
+| `assert.failed` | The page is not what the test expects: fix the expectation or the steps before it | [Where to see what happened](#where-to-see-what-happened) |
+| `http.status`, `http.network` | Check URL, method, headers, body, and the host permission | [Other messages](#other-messages) |
+| `navigation.failed` | Check the URL; raise the timeout for slow pages | [Timeouts](#timeouts) |
+| `tab.missing`, `tab.closed` | Open the tab (Open Tab with that name) before the step; do not close it mid-run | [No tab named "main"](#no-tab-named-main-in-this-run) |
+| `frame.unreachable` | Check the `frame=` part; the frame may not have loaded | [Iframes](#iframes) |
+| `page.restricted` | Use a normal web page (not chrome://, the web store, about:) | [Permissions](#permissions) |
+| `permission.missing` | Grant the permission on the block or in the extension settings | [Permissions](#permissions) |
+| `script.error` | Fix the Run Script code | [Other messages](#other-messages) |
+| `config.invalid` | Fix the setting the message names | [Importing a file fails](#importing-a-file-fails) |
+| `workflow.failed` | Open the called run and fix its failing step | [Other messages](#other-messages) |
+| `step.failed` | Anything else: read the message | |
+
 ## Element not found
 
 > `Timed out after 30s: waiting for <locator>: no element matches`

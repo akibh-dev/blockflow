@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Fixture: snapshot</title>
+<style>.sr-gone { display: none; } #big li { padding: 1px; }</style>
+</head>
+<body>
+  <!-- Page Snapshot and error codes (tests/e2e/specs/snapshot-codes.mjs). -->
+  <header><h1>Snapshot shop</h1><nav aria-label="Main"><a href="/table.html">Prices</a> <a href="/login.html">Log in</a></nav></header>
+  <main>
+    <form id="search" aria-label="Search">
+      <label>Query <input id="q" placeholder="Find things" value="lamps"></label>
+      <select id="sort" aria-label="Sort"><option>Newest</option><option selected>Cheapest</option></select>
+      <label><input type="checkbox" id="stock" checked> In stock only</label>
+      <button type="button" id="go">Search</button>
+      <button type="button" disabled>Reset</button>
+    </form>
+    <h2>Results</h2>
+    <ul id="results">
+      <li>Lamp <button type="button">Add to cart</button></li>
+      <li>Desk lamp <button type="button">Add to cart</button></li>
+    </ul>
+    <p class="sr-gone">Hidden promo <button>Secret deal</button></p>
+    <div hidden><button>Also hidden</button></div>
+    <shop-badge></shop-badge>
+    <iframe id="pay" title="Payment" src="/frame-inner.html" style="width:400px;height:120px"></iframe>
+    <p id="greeting">Hello, shopper!</p>
+    <ul id="big"></ul>
+  </main>
+  <script>
+    customElements.define('shop-badge', class extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: 'open' }).innerHTML = '<button type="button">Badge action</button>';
+      }
+    });
+    // Enough elements that a slow snapshot would show (timed by the spec).
+    document.getElementById('big').innerHTML = Array.from({ length: 600 }, (_, i) => `<li><a href="#p${i}">Product ${i}</a> <button type="button">Buy</button></li>`).join('');
+  </script>
+</body></html>

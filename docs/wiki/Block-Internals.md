@@ -213,12 +213,13 @@ block's default step timeout (60 = engine default). Page ops are the `AgentReque
 | Extract Table (`extract-table`) | [extractTable.ts](../../src/core/blocks/extractTable.ts) | `table` via `inSource` | none | 30 | Adds `[into]` and `count`. |
 | Paginate (`paginate`) · ports `each`, `done` | [paginate.ts](../../src/core/blocks/paginate.ts) | `read` (kind `enabled`), `click` (`next >> nth=0`); `host.sleep(150)`, `tabs.waitForLoad('networkidle')` | none | 1800 | Emits `each` with `page`, then stops when Next is missing/disabled (`enabled` answers `false` for a missing element instead of waiting) or at `maxPages`. Returns `routeTo('done', {pages})`. |
 | Page Info (`page-info`) | [pageInfo.ts](../../src/core/blocks/pageInfo.ts) | `page-info` or `storage` | none | 30 | Adds `page` or `value`. |
+| Page Snapshot (`page-snapshot`) | [pageSnapshot.ts](../../src/core/blocks/pageSnapshot.ts) | `snapshot` (with `locator` when set, `maxLines` at least 10) | none | 30 | Adds `snapshot` (the outline text) and `elements`; logs a warning when the outline was cut. Playwright export: `ariaSnapshot()` of the body or the locator. The editor's 📸 Snapshot page button on Open Tab uses the same op, not this block. |
 
 ### Test (`test`)
 
 | Block (`type`) | File | Host / page ops | Timeout | Implementation notes |
 | --- | --- | --- | --- | --- |
-| Assert (`assert`) | [assert.ts](../../src/core/blocks/assert.ts) | `read` via `page.act` (300 ms each), `tabs.info`, `host.sleep(250)` | 10 | Page subjects retry a number of *attempts* computed from `pageWaitMs` (no wall clock). Yes/no subjects (`STATES`) compare with a fixed answer; others use `testClause` from `condition.ts`. `soft` → `ctx.softFail`. Adds `actual`. |
+| Assert (`assert`) | [assert.ts](../../src/core/blocks/assert.ts) | `read` via `page.act` (300 ms each), `tabs.info`, `host.sleep(250)` | 10 | Page subjects retry a number of *attempts* computed from `pageWaitMs` (no wall clock). Yes/no subjects (`STATES`) compare with a fixed answer; others use `testClause` from `condition.ts`. A failure is a `CodedError('assert.failed')` with the element's locator (page subjects); `soft` passes it to `ctx.softFail`. Adds `actual`. |
 | Manual Step (`manual-step`) | [manualStep.ts](../../src/core/blocks/manualStep.ts) | `prompt.ask` | 600 | `false` from the user throws. Pass-through. |
 | Stop (`stop`) | [stopRun.ts](../../src/core/blocks/stopRun.ts) | none | 60 | `fail` throws `message`; `pass` logs and returns `null`. `outputs: []`. |
 
