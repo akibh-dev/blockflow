@@ -3,7 +3,7 @@
   "version": 1,
   "workflows": [
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "scrape",
       "name": "Scrape all pages to CSV",
       "enabled": false,
@@ -42,7 +42,7 @@
             "y": 0
           },
           "config": {
-            "next": "role=link[name=\"Next\"]",
+            "locator": "role=link[name=\"Next\"]",
             "maxPages": 20
           }
         },

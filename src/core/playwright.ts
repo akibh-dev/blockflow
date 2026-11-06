@@ -262,7 +262,7 @@ class Writer {
           this.block(`for (; pageNumber <= ${Number(c.maxPages) || 10}; pageNumber += 1) {`, () => {
             this.line('data = { ...input, page: pageNumber };');
             continueWith('each');
-            this.line(`const next = ${toPlaywrightLocator(String(c.next), tab(c))}.first();`);
+            this.line(`const next = ${toPlaywrightLocator(String(c.locator), tab(c))}.first();`);
             this.line('if (!(await next.isVisible()) || !(await next.isEnabled())) break;');
             this.line('await next.click();');
             this.line(`await ${tab(c)}.waitForLoadState('networkidle');`);
@@ -329,8 +329,8 @@ class Writer {
         break;
       case 'read-element':
         if (c.url) {
-          this.line(`{ const reader = await newTab(context); await reader.goto(${template(c.url)}); data = { ...data, value: await read(${toPlaywrightLocator(String(c.selector), 'reader')}, ${js(c.read)}, ${js(c.name)}) }; await reader.close(); }`);
-        } else this.line(`data = { ...data, value: await read(${toPlaywrightLocator(String(c.selector), tab(c))}, ${js(c.read)}, ${js(c.name)}) };`);
+          this.line(`{ const reader = await newTab(context); await reader.goto(${template(c.url)}); data = { ...data, value: await read(${toPlaywrightLocator(String(c.locator), 'reader')}, ${js(c.read)}, ${js(c.name)}) }; await reader.close(); }`);
+        } else this.line(`data = { ...data, value: await read(${toPlaywrightLocator(String(c.locator), tab(c))}, ${js(c.read)}, ${js(c.name)}) };`);
         break;
       case 'assert':
         this.assert(c, loc);

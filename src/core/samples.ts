@@ -9,7 +9,7 @@ export function sampleWorkflows(): Workflow[] {
   const timerId = uid();
   const openId = uid();
   const timerFlow: Workflow = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: uid(),
     name: 'Example: open a page every 5 minutes',
     enabled: false,
@@ -34,7 +34,7 @@ export function sampleWorkflows(): Workflow[] {
   const watchId = uid();
   const openChangedId = uid();
   const watchFlow: Workflow = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: uid(),
     name: 'Example: open the page when part of it changes',
     enabled: false,
@@ -45,7 +45,7 @@ export function sampleWorkflows(): Workflow[] {
         position: { x: 60, y: 120 },
         config: {
           url: 'https://example.com',
-          selector: 'h1',
+          locator: 'h1',
           intervalSeconds: 60,
           reload: true,
           emitOnFirstRead: false,

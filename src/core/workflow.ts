@@ -5,7 +5,7 @@ import { uid } from './id';
 
 /** A new empty, disabled workflow with a fresh id. */
 export function createWorkflow(name = 'Untitled workflow'): Workflow {
-  return { schemaVersion: 1, id: uid(), name, enabled: false, nodes: [], edges: [] };
+  return { schemaVersion: 2, id: uid(), name, enabled: false, nodes: [], edges: [] };
 }
 
 /**

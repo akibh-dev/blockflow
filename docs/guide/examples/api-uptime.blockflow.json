@@ -3,7 +3,7 @@
   "version": 1,
   "workflows": [
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "api-uptime",
       "name": "API uptime check",
       "enabled": false,

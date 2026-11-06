@@ -69,6 +69,8 @@ export function toFlow(
  * so `fromFlow(w, ...toFlow(w))` equals `w` (tested in `tests/editor/convert.test.ts`).
  */
 export function fromFlow(base: Workflow, nodes: FlowNode[], edges: FlowEdge[]): Workflow {
+  // The author's ids from an imported file (NodeDef.origin) are not on the canvas: keep them by node id.
+  const origins = new Map(base.nodes.flatMap((node) => (node.origin ? [[node.id, node.origin] as const] : [])));
   return {
     ...base,
     nodes: nodes.map(
@@ -78,6 +80,7 @@ export function fromFlow(base: Workflow, nodes: FlowNode[], edges: FlowEdge[]): 
         position: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
         config: { ...node.data.config },
         ...(node.data.step && Object.keys(node.data.step).length > 0 ? { step: { ...node.data.step } } : {}),
+        ...(origins.has(node.id) ? { origin: origins.get(node.id) } : {}),
       }),
     ),
     edges: edges.map(

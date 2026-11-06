@@ -55,7 +55,7 @@ describe('workflow ⇄ canvas conversion', () => {
 describe('ports and step settings', () => {
   it('round-trips the output an edge leaves from and the step settings', () => {
     const workflow: Workflow = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: 'w',
       name: 'W',
       enabled: false,
@@ -77,7 +77,7 @@ describe('ports and step settings', () => {
 
   it('does not write the default "out" port, so old workflows stay identical', () => {
     const workflow: Workflow = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: 'w',
       name: 'W',
       enabled: false,

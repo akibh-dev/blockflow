@@ -160,7 +160,7 @@ describe('Read Element on the run\'s tab, Navigate, Close Tab', () => {
     host.agent = async () => ({ text: '  Order #42 placed  ', count: 1 });
     const h = harness(
       chain(
-        { id: 'r', type: 'read-element', config: { selector: '.status', url: '' } },
+        { id: 'r', type: 'read-element', config: { locator: '.status', url: '' } },
         { id: 'i', type: 'if', config: { left: '{{value}}', operator: 'matches', right: '/order #\\d+/i' } },
       ),
       host,

@@ -57,6 +57,11 @@ export interface NodeDef {
   position: { x: number; y: number };
   config: Record<string, unknown>;
   step?: StepSettings;
+  /**
+   * The node's id in the file it was imported from (import gives every node a fresh id). Run reports
+   * carry it as `StepRecord.sourceId`, so a result maps back to the author's script.
+   */
+  origin?: string;
 }
 
 /** A connection: the output of `source` feeds the input of `target`. */
@@ -70,7 +75,8 @@ export interface EdgeDef {
 
 /** A saved workflow: a graph of blocks and connections. Stored as a list under `bf:workflows`. */
 export interface Workflow {
-  schemaVersion: 1;
+  /** See migrate.ts. Loaded and imported workflows are migrated to the current version. */
+  schemaVersion: 2;
   id: string;
   name: string;
   /** Enabled workflows run in the background. */

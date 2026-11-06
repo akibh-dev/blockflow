@@ -6,7 +6,7 @@ import type { BlockContext, BlockDefinition } from '../types';
 /** Paginate settings: the Next control and a page cap. */
 export interface PaginateConfig {
   tab: string;
-  next: string;
+  locator: string;
   maxPages: number;
 }
 
@@ -21,15 +21,15 @@ export const paginateBlock: BlockDefinition<PaginateConfig> = {
   icon: '📄',
   accent: PAGE_ACCENT,
   ports: ['each', 'done'],
-  defaultConfig: { tab: DEFAULT_TAB, next: 'role=link[name="Next"]', maxPages: 10 },
+  defaultConfig: { tab: DEFAULT_TAB, locator: 'role=link[name="Next"]', maxPages: 10 },
   realInput: true,
   timeoutSeconds: 1800,
   fields: [
-    { ...locatorField('next', 'Next button'), placeholder: 'role=link[name="Next"]  ·  .pagination .next' },
+    { ...locatorField('locator', 'Next button'), placeholder: 'role=link[name="Next"]  ·  .pagination .next' },
     { key: 'maxPages', label: 'At most (pages)', kind: 'number', min: 1, step: 1 },
     tabField,
   ],
-  summary: (config) => `up to ${config.maxPages} pages via ${config.next}`,
+  summary: (config) => `up to ${config.maxPages} pages via ${config.locator}`,
   outputs: [
     { key: 'page', description: 'On "each": the page number, from 1.' },
     { key: 'pages', description: 'On "done": how many pages were visited.' },
@@ -41,9 +41,9 @@ export const paginateBlock: BlockDefinition<PaginateConfig> = {
     for (;;) {
       await ctx.emit({ ...input, page }, 'each');
       if (page >= ctx.config.maxPages) break;
-      const { result } = await inPage(ctx, input, { op: 'read', locator: ctx.config.next, kind: 'enabled' });
+      const { result } = await inPage(ctx, input, { op: 'read', locator: ctx.config.locator, kind: 'enabled' });
       if (result.text !== 'true') break;
-      await inPage(ctx, input, { op: 'click', locator: `${ctx.config.next} >> nth=0`, action: 'click' });
+      await inPage(ctx, input, { op: 'click', locator: `${ctx.config.locator} >> nth=0`, action: 'click' });
       // A full page load or a single-page app fetching the next page: both end with a quiet network.
       await ctx.host.sleep(150);
       await ctx.host.tabs.waitForLoad(tabId, 'networkidle', Math.min(pageWaitMs(ctx as BlockContext<object>), 30_000));

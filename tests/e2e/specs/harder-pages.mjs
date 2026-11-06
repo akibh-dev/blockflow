@@ -9,7 +9,7 @@ export default async function (h) {
     const upload = await run(workflow('upload', [
       { id: 'open', type: 'open-url', config: { url: `${base}/upload.html`, active: false } },
       { id: 'up', type: 'upload-file', config: { locator: 'label=Upload CV', content: 'name,city\nAkib,Dhaka', filename: 'cv.csv', mime: 'text/csv' } },
-      { id: 'read', type: 'read-element', config: { selector: '#out', url: '' } },
+      { id: 'read', type: 'read-element', config: { locator: '#out', url: '' } },
       { id: 'close', type: 'close-tab' },
     ]));
     check('Upload File set a file on a hidden input', step(upload, 'read')?.output?.value === 'cv.csv|text/csv|name,city Akib,Dhaka', JSON.stringify(step(upload, 'read')?.output?.value ?? summary(upload)));
@@ -18,7 +18,7 @@ export default async function (h) {
       { id: 'open', type: 'open-url', config: { url: `${base}/popup.html`, active: false } },
       { id: 'click', type: 'click', config: { locator: 'role=button[name="Open help"]' } },
       { id: 'catch', type: 'wait-for-popup', config: { name: 'help' } },
-      { id: 'read', type: 'read-element', config: { selector: 'h1', url: '', tab: 'help' } },
+      { id: 'read', type: 'read-element', config: { locator: 'h1', url: '', tab: 'help' } },
       { id: 'link', type: 'click', config: { locator: 'text=Feed in a new tab' } },
       { id: 'catch2', type: 'wait-for-popup', config: { name: 'feed' } },
       { id: 'close1', type: 'close-tab', config: { tab: 'help' } },
@@ -44,10 +44,10 @@ export default async function (h) {
       { id: 'open', type: 'open-url', config: { url: `${base}/frames.html`, active: false } },
       { id: 'f1', type: 'fill', config: { locator: 'frame=#same >> label=Card number', value: '1111' } },
       { id: 'p1', type: 'click', config: { locator: 'frame=#same >> role=button[name="Pay"]' } },
-      { id: 'r1', type: 'read-element', config: { selector: 'frame=#same >> #paid', url: '' } },
+      { id: 'r1', type: 'read-element', config: { locator: 'frame=#same >> #paid', url: '' } },
       { id: 'f2', type: 'fill', config: { locator: 'frame=#other >> label=Card number', value: '4242' } },
       { id: 'p2', type: 'click', config: { locator: 'frame=#other >> role=button[name="Pay"]' } },
-      { id: 'r2', type: 'read-element', config: { selector: 'frame=#other >> #paid', url: '' } },
+      { id: 'r2', type: 'read-element', config: { locator: 'frame=#other >> #paid', url: '' } },
       { id: 'close', type: 'close-tab' },
     ]));
     const port = server.address().port;
@@ -65,11 +65,11 @@ export default async function (h) {
     const trusted = await run(workflow('trusted', [
       { id: 'open', type: 'open-url', config: { url: `${base}/trusted.html`, active: false } },
       { id: 'fake', type: 'click', config: { locator: '#press' } },
-      { id: 'r1', type: 'read-element', config: { selector: '#result', url: '' } },
+      { id: 'r1', type: 'read-element', config: { locator: '#result', url: '' } },
       { id: 'real', type: 'click', config: { locator: '#press' }, step: { realInput: true } },
-      { id: 'r2', type: 'read-element', config: { selector: '#result', url: '' } },
+      { id: 'r2', type: 'read-element', config: { locator: '#result', url: '' } },
       { id: 'type', type: 'fill', config: { locator: 'label=Name', value: 'Akib' }, step: { realInput: true } },
-      { id: 'r3', type: 'read-element', config: { selector: 'label=Name', url: '', read: 'attribute', name: 'data-trusted' } },
+      { id: 'r3', type: 'read-element', config: { locator: 'label=Name', url: '', read: 'attribute', name: 'data-trusted' } },
       { id: 'v', type: 'assert', config: { subject: 'input', locator: 'label=Name', operator: 'equals', expected: 'Akib' } },
       { id: 'shot', type: 'assert', config: { subject: 'text', locator: '#result', operator: 'equals', expected: 'nope' }, step: { timeoutSeconds: 2, onError: 'continue' } },
       { id: 'close', type: 'close-tab' },
@@ -92,7 +92,7 @@ export default async function (h) {
       { id: 'form', type: 'fill-form', config: { fields: [{ locator: 'label=Email', value: 'pw@test.dev' }, { locator: 'label=Password', value: '{{secret.loginPassword}}' }, { locator: 'label=Country', value: 'Bangladesh' }, { locator: 'label="Remember me"', value: 'true' }], submit: 'role=button[name="Sign in"]' } },
       { id: 'url', type: 'wait-for', config: { mode: 'url', url: '/welcome' } },
       { id: 'hi', type: 'assert', config: { subject: 'text', locator: '#greeting', operator: 'equals', expected: 'Welcome, pw!' } },
-      { id: 'more', type: 'read-element', config: { selector: 'text=Country', url: '' } },
+      { id: 'more', type: 'read-element', config: { locator: 'text=Country', url: '' } },
       { id: 'bd', type: 'if', config: { left: '{{value}}', operator: 'contains', right: 'bd' } },
       { id: 'log', type: 'log', config: { message: 'country ok' } },
     ]);

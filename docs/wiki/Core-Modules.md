@@ -2,7 +2,7 @@
 
 The pure helpers in `src/core` that are not the engine itself: settings validation, the template and
 expression languages, conditions, CSV, reports, workflow import/export, the Playwright exporter, the
-recorder converter, schedules, URLs and locator syntax. Read the section for the module you are about to
+recorder converter, schedules, URLs, locator syntax and schema migrations. Read the section for the module you are about to
 use or change. All of them are browser-free and unit-tested in Node (`tests/core/`).
 
 **Source:** [config.ts](../../src/core/config.ts), [template.ts](../../src/core/template.ts),
@@ -11,7 +11,8 @@ use or change. All of them are browser-free and unit-tested in Node (`tests/core
 [library.ts](../../src/core/library.ts), [samples.ts](../../src/core/samples.ts),
 [playwright.ts](../../src/core/playwright.ts), [playwrightRuntime.ts](../../src/core/playwrightRuntime.ts), [recording.ts](../../src/core/recording.ts),
 [schedule.ts](../../src/core/schedule.ts), [url.ts](../../src/core/url.ts),
-[urlPattern.ts](../../src/core/urlPattern.ts), [locatorSyntax.ts](../../src/core/locatorSyntax.ts)
+[urlPattern.ts](../../src/core/urlPattern.ts), [locatorSyntax.ts](../../src/core/locatorSyntax.ts),
+[migrate.ts](../../src/core/migrate.ts)
 
 ## config
 
@@ -129,13 +130,31 @@ Copy, export and import workflows.
 | `cloneWorkflow(source, name)` | Fresh ids for workflow, nodes and edges; disabled; config deep-copied. |
 | `duplicateWorkflow(source, existing)` | Clone named `"<name> copy"` (made unique). |
 | `exportWorkflows(workflows)` | `{ format: 'blockflow-workflows', version: 1, workflows }` JSON, all `enabled: false`. |
-| `parseImport(text, existing): ImportResult` | Accepts an export file or one bare workflow. Validates shape, clones with new ids, disables, uniquifies names, and remaps `run-workflow` `config.workflow` ids to the imported copies. |
+| `parseImport(text, existing): ImportResult` | Accepts an export file or one bare workflow. Validates shape (duplicate node ids, connections to missing blocks, malformed edges are errors), renames old config keys (`migrateNode`), clones with new ids, disables, uniquifies names, and remaps `run-workflow` `config.workflow` ids to the imported copies. |
 
-Gotcha (looks like a bug): `cloneWorkflow` and `parseImport` rebuild nodes and edges without
-`node.step` and `edge.sourcePort`, so a duplicated or imported workflow loses its step settings and every
-connection falls back to the source's first output (an If's `false` branch becomes `true`).
+`cloneWorkflow` and `parseImport` keep `node.step` and `edge.sourcePort`, so branches and step settings
+survive duplicate and import (tested in `library.test.ts` and `guideExamples.test.ts`).
 
 Called by: `Editor.tsx` (duplicate, import, export, templates).
+
+## migrate
+
+Workflow schema versions (`Workflow.schemaVersion`) and the steps between them. Version 2 (v0.3) calls
+every element setting `locator`: Read Element and Watch Element used `selector`, Paginate used `next`.
+
+| Export | Notes |
+| --- | --- |
+| `CURRENT_SCHEMA_VERSION` | `2`. |
+| `RENAMED_KEYS` | Per block type, old config key → new key. Also read by `check.ts` to report `config.key.renamed`. |
+| `migrateNode(node, renames?)` | Moves renamed keys (the new key wins when both exist). Same object back when nothing changed. Applied to every imported node whatever the file's version, so old key names are always accepted. |
+| `migrateWorkflow(workflow, renames?)` | Brings an older workflow to the current version; no-op (same object) when current. |
+| `migrateWorkflows(list)` | `{ workflows, changed }`. |
+
+Called by: `loadWorkflows` (`src/browser/stores.ts`, every read is migrated), `migrateStoredWorkflows`
+(the background's `onInstalled` rewrites `bf:workflows` once after an update), the background's
+`bf:run-workflow` handler and storage-change diff (both sides migrated, so the rewrite restarts nothing),
+the editor's storage listener, and `parseImport`. Adding a version: bump the constant, add the step in
+`migrateWorkflow`, add v(n-1) fixtures to `tests/core/migrate.test.ts`.
 
 ## samples
 

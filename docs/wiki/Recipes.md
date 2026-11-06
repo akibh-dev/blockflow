@@ -46,7 +46,7 @@ One Fill Form block handles text inputs, selects (by option text or value) and c
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "contact",
   "name": "Contact form",
   "nodes": [
@@ -99,12 +99,12 @@ Simplest monitor: fire whenever an element's text changes, no comparison needed.
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "stock-watch",
   "name": "Back in stock",
   "nodes": [
     { "id": "watch", "type": "watch-element", "position": { "x": 0, "y": 0 },
-      "config": { "url": "https://shop.example.com/item/42", "selector": "#availability", "intervalSeconds": 300 } },
+      "config": { "url": "https://shop.example.com/item/42", "locator": "#availability", "intervalSeconds": 300 } },
     { "id": "tell", "type": "notify", "position": { "x": 260, "y": 0 },
       "config": { "title": "Stock changed", "message": "{{previous}} → {{value}}" } }
   ],
@@ -112,7 +112,7 @@ Simplest monitor: fire whenever an element's text changes, no comparison needed.
 }
 ```
 
-- Blocks: `watch-element` (note the key is `selector`, not `locator`), `notify`.
+- Blocks: `watch-element` (older files used the key `selector`; it is still accepted and renamed on import), `notify`.
 - The first read only records the starting value (`emitOnFirstRead: true` changes that).
 - Intervals under 30 seconds keep the background worker awake (costs battery); see
   [Troubleshooting](Troubleshooting.md#short-timers-pause-or-fire-late).
@@ -151,7 +151,7 @@ Open Tab ─▶ Save to Dataset (replace with []) ─▶ Paginate ─each─▶ 
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "table-csv",
   "name": "Table to CSV",
   "nodes": [
@@ -225,7 +225,7 @@ Click a "Sign in with…" button that opens a new window, fill the form there, t
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "popup-login",
   "name": "Sign in with popup",
   "nodes": [
@@ -264,7 +264,7 @@ that opens one, then read what it said.
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "delete-item",
   "name": "Delete with confirm",
   "nodes": [
@@ -298,7 +298,7 @@ Fill a file input without the file dialog, submit, and wait for the API call to 
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "upload",
   "name": "Upload a CSV",
   "nodes": [

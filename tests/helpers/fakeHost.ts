@@ -389,7 +389,7 @@ export function flow(
 ): Workflow {
   counter += 1;
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: `wf${counter}`,
     name: `Test flow ${counter}`,
     enabled: true,

@@ -72,7 +72,7 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
   "version": 1,
   "workflows": [
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "any-unique-string",
       "name": "Login test",
       "enabled": false,

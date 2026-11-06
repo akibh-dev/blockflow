@@ -68,7 +68,7 @@ describe('Run button (runOnce)', () => {
     const h = harness(
       flow(
         [
-          { id: 'w', type: 'watch-element', config: { url: 'https://a.test', selector: '#x' } },
+          { id: 'w', type: 'watch-element', config: { url: 'https://a.test', locator: '#x' } },
           { id: 's', type: 'set-variable', config: { name: 'got', value: '{{value}}' } },
         ],
         [['w', 's']],

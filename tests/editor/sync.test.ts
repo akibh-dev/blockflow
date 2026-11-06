@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mergeStoredWorkflows, sameData, syncBase } from '../../src/entrypoints/editor/sync';
 import type { Workflow } from '../../src/core/types';
 
-const wf = (id: string, name = id): Workflow => ({ schemaVersion: 1, id, name, enabled: false, nodes: [], edges: [] });
+const wf = (id: string, name = id): Workflow => ({ schemaVersion: 2, id, name, enabled: false, nodes: [], edges: [] });
 
 describe('mergeStoredWorkflows (two editor tabs)', () => {
   it("takes the other tab's version of workflows this tab did not touch", () => {
@@ -30,7 +30,7 @@ describe('mergeStoredWorkflows (two editor tabs)', () => {
 
   it('ignores key order: storage does not keep it', () => {
     const local = wf('a');
-    const stored = { edges: [], nodes: [], enabled: false, name: 'a', id: 'a', schemaVersion: 1 } as Workflow;
+    const stored = { edges: [], nodes: [], enabled: false, name: 'a', id: 'a', schemaVersion: 2 } as Workflow;
     expect(sameData(local, stored)).toBe(true);
     // Not edited here, so the stored copy wins, and it is the same data.
     expect(mergeStoredWorkflows([local], syncBase([local]), [stored])).toEqual([stored]);

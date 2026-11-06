@@ -96,7 +96,7 @@ describe('Read Element → If → Notify (state tracking)', () => {
     flow(
       [
         { id: 't', type: 'timer', config: { seconds: 1, repeat: true } },
-        { id: 'r', type: 'read-element', config: { url: 'https://akibh.dev', selector: 'html', ...read } },
+        { id: 'r', type: 'read-element', config: { url: 'https://akibh.dev', locator: 'html', ...read } },
         { id: 'i', type: 'if', config: ifConfig },
         { id: 'n', type: 'notify', config: { title: 'Site', message: '{{previous}} → {{value}}' } },
       ],
@@ -125,7 +125,7 @@ describe('Read Element → If → Notify (state tracking)', () => {
     const host = new FakeHost();
     readsText(host, '3', '3', '4');
     const h = harness(
-      wf({ read: 'count', selector: 'a.post' }, { left: '{{value}}', operator: 'greater', right: '{{previous}}' }),
+      wf({ read: 'count', locator: 'a.post' }, { left: '{{value}}', operator: 'greater', right: '{{previous}}' }),
       host,
     );
     await h.runner.start();

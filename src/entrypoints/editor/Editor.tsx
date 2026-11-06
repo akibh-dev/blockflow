@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { browser } from 'wxt/browser';
 import { clearLogs, clearRuns, loadWorkflows, saveWorkflows } from '../../browser/stores';
+import { migrateWorkflows } from '../../core/migrate';
 import { edgePort, nodePorts } from '../../core/ports';
 import type { StepStatus } from '../../core/runs';
 import { validateWorkflow } from '../../core/validate';
@@ -198,7 +199,7 @@ export function Editor() {
     const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
       const change = changes[STORAGE_KEYS.workflows];
       if (area !== 'local' || !change) return;
-      const theirs = (change.newValue as Workflow[] | undefined) ?? [];
+      const theirs = migrateWorkflows((change.newValue as Workflow[] | undefined) ?? []).workflows;
       const ours = latest.current;
       if (!ours || sameData(theirs, ours)) {
         synced.current = syncBase(theirs);

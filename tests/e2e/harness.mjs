@@ -111,7 +111,7 @@ export async function launch() {
     counter += 1;
     const lines = edges ?? nodes.slice(1).map((node, index) => [nodes[index].id, node.id]);
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: `e2e-${counter}`,
       name,
       enabled: false,

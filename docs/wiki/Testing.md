@@ -178,7 +178,7 @@ expect(h.host.opened[0].url).toBe('https://example.com/1');
 | `fire(name)` | Fires the first scheduled timer whose name starts with `name`; throws if none |
 | `messages(level?)` | Logged messages, optionally filtered by level |
 
-`flow()` gives each workflow a unique id (`wf1`, `wf2`, …), `enabled: true`, `schemaVersion: 1`, positions
+`flow()` gives each workflow a unique id (`wf1`, `wf2`, …), `enabled: true`, `schemaVersion: 2`, positions
 along x, and edge ids `source-port-target`. Node `step` settings pass through. `harness(wf, host, maxSteps)`
 passes `maxSteps` to the runner (loop guard tests).
 

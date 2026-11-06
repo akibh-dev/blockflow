@@ -1,4 +1,5 @@
 import { uid } from './id';
+import { migrateNode } from './migrate';
 import type { EdgeDef, NodeDef, StepSettings, Workflow } from './types';
 
 /**
@@ -31,6 +32,7 @@ export function cloneWorkflow(source: Workflow, name: string): Workflow {
       config: JSON.parse(JSON.stringify(node.config)) as Record<string, unknown>,
     };
     if (node.step) copy.step = JSON.parse(JSON.stringify(node.step)) as StepSettings;
+    if (node.origin) copy.origin = node.origin;
     return copy;
   });
   const edges: EdgeDef[] = source.edges.flatMap((edge) => {
@@ -41,7 +43,7 @@ export function cloneWorkflow(source: Workflow, name: string): Workflow {
     if (edge.sourcePort) copy.sourcePort = edge.sourcePort;
     return [copy];
   });
-  return { schemaVersion: 1, id: uid(), name, enabled: false, nodes, edges };
+  return { schemaVersion: 2, id: uid(), name, enabled: false, nodes, edges };
 }
 
 /** A disabled copy named "<name> copy" (numbered when taken). */
@@ -83,6 +85,8 @@ function readNode(raw: unknown): NodeDef | null {
     config: isObject(raw.config) ? raw.config : {},
   };
   if (isObject(raw.step)) node.step = raw.step as StepSettings;
+  // The author's id, kept through the fresh-id clone (see NodeDef.origin).
+  node.origin = raw.id;
   return node;
 }
 
@@ -106,7 +110,8 @@ export function parseImport(text: string, existing: Workflow[]): ImportResult {
     if (!isObject(raw) || !Array.isArray(raw.nodes) || !Array.isArray(raw.edges)) {
       return { ok: false, error: 'This file does not look like a BlockFlow workflow.' };
     }
-    const nodes = raw.nodes.map(readNode);
+    // Old key names (v1 files, or a script written from older docs) are accepted and moved (migrate.ts).
+    const nodes = raw.nodes.map(readNode).map((node) => node && migrateNode(node));
     if (nodes.some((node) => node === null)) {
       return { ok: false, error: 'A block in this file is malformed.' };
     }
@@ -155,5 +160,5 @@ export function parseImport(text: string, existing: Workflow[]): ImportResult {
 
 /** `cloneWorkflow` over loose parts (fresh ids, disabled). */
 function cloneWorkflowFromParts(name: string, nodes: NodeDef[], edges: EdgeDef[]): Workflow {
-  return cloneWorkflow({ schemaVersion: 1, id: '', name, enabled: false, nodes, edges }, name);
+  return cloneWorkflow({ schemaVersion: 2, id: '', name, enabled: false, nodes, edges }, name);
 }

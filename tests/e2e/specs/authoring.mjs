@@ -96,7 +96,7 @@ export default async function (h) {
     // Page Visited: an enabled workflow starts when a matching page opens in any tab.
     const visited = workflow('on visit', [
       { id: 'p', type: 'page-visited', config: { url: '/table.html', when: 'load' } },
-      { id: 'r', type: 'read-element', config: { selector: 'h1', url: '' } },
+      { id: 'r', type: 'read-element', config: { locator: 'h1', url: '' } },
     ]);
     visited.enabled = true;
     await seedWorkflows([visited]);

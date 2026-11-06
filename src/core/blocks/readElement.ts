@@ -9,7 +9,7 @@ export interface ReadElementConfig {
   url: string;
   /** Read from this tab of the run (Open Tab) instead of BlockFlow's own background tab for `url`. */
   tab: string;
-  selector: string;
+  locator: string;
   read: ReadKind;
   name: string;
   reload: boolean;
@@ -35,10 +35,10 @@ export const readElementBlock: BlockDefinition<ReadElementConfig> = {
   description: 'Read a value from a page: text, attribute, class, whether it exists, or how many.',
   icon: '🔎',
   accent: '#0ea5e9',
-  defaultConfig: { url: '', tab: '', selector: '', read: 'text', name: '', reload: true },
+  defaultConfig: { url: '', tab: '', locator: '', read: 'text', name: '', reload: true },
   fields: [
     {
-      key: 'selector',
+      key: 'locator',
       label: 'Element',
       kind: 'locator',
       required: true,
@@ -83,17 +83,18 @@ export const readElementBlock: BlockDefinition<ReadElementConfig> = {
     },
     { key: 'reload', label: 'Reload page before reading', kind: 'boolean' },
   ],
-  summary: (config) => `${config.read}: ${config.selector || 'pick an element'}`,
+  summary: (config) => `${config.read}: ${config.locator || 'pick an element'}`,
   outputs: [
     { key: 'value', description: 'What was read ("true"/"false" for class and exists).' },
     { key: 'previous', description: 'The value from the last run (empty on the first run).' },
     { key: 'changed', description: 'True when value differs from previous (false on the first run).' },
-    { key: 'count', description: 'How many elements matched the selector.' },
+    { key: 'count', description: 'How many elements matched the locator.' },
     { key: 'url', description: 'The page that was read.' },
+    { key: 'locator', description: 'The locator that was read (also as `selector`, its name before v0.3).' },
   ],
 
   async run(ctx, input) {
-    const { selector, read, name, reload } = ctx.config;
+    const { locator, read, name, reload } = ctx.config;
     if (NEEDS_NAME.includes(read) && !name.trim()) throw new Error('Attribute / class name is required');
 
     let url: string;
@@ -102,13 +103,13 @@ export const readElementBlock: BlockDefinition<ReadElementConfig> = {
       const normalized = normalizeHttpUrl(ctx.config.url);
       if (!normalized) throw new Error(`"${ctx.config.url}" is not a valid http(s) URL`);
       url = normalized;
-      result = await ctx.host.page.readElement({ url, selector, reload, read: { kind: read, name: name.trim() } });
+      result = await ctx.host.page.readElement({ url, selector: locator, reload, read: { kind: read, name: name.trim() } });
     } else {
       // The run's own tab, as it is right now (after the Click / Fill blocks before this one).
       const tabId = requireSessionTab(input, ctx.config.tab || DEFAULT_TAB);
       url = (await ctx.host.tabs.info(tabId))?.url ?? '';
       try {
-        const reading = await ctx.host.page.act(tabId, { op: 'read', locator: selector, kind: read, name: name.trim() }, Math.min(pageWaitMs(ctx), 5_000));
+        const reading = await ctx.host.page.act(tabId, { op: 'read', locator, kind: read, name: name.trim() }, Math.min(pageWaitMs(ctx), 5_000));
         result = { found: true, text: String(reading.text ?? ''), count: Number(reading.count ?? 0) };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -118,18 +119,18 @@ export const readElementBlock: BlockDefinition<ReadElementConfig> = {
     }
     if (result.error) throw new Error(result.error);
     if (!result.found) {
-      ctx.log('warn', `Element not found on the page: ${selector}`);
+      ctx.log('warn', `Element not found on the page: ${locator}`);
       return null;
     }
 
     const value = read === 'text' ? normalizeText(result.text) : result.text;
-    const signature = `${url}|${selector}|${read}|${name}`;
+    const signature = `${url}|${locator}|${read}|${name}`;
     const last = await ctx.state.get<LastRead>('last');
     await ctx.state.set('last', { signature, value } satisfies LastRead);
     const previous = last && last.signature === signature ? last.value : null;
     const changed = previous !== null && previous !== value;
 
     ctx.log('info', `Read ${read}: "${value}"${previous === null ? ' (first read)' : changed ? ` (was "${previous}")` : ' (unchanged)'}`);
-    return { ...input, value, previous, changed, count: result.count ?? 0, url, selector };
+    return { ...input, value, previous, changed, count: result.count ?? 0, url, locator, selector: locator };
   },
 };

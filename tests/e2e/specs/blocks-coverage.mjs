@@ -121,8 +121,8 @@ export default async function (h) {
     console.log('Context Menu: the item exists; choosing it runs the flow on that tab');
     const menu = { ...workflow('menu', [
       { id: 'm', type: 'context-menu', config: { title: 'Save this product', contexts: 'all' } },
-      { id: 'r', type: 'read-element', config: { selector: 'h1', url: '' } },
-    ]), enabled: true };
+      { id: 'r', type: 'read-element', config: { selector: 'h1', url: '' } }, // the v1 key name: migrated on load (core/migrate.ts)
+    ]), schemaVersion: 1, enabled: true };
     await seedWorkflows([menu]);
     const itemId = `bf-menu::${menu.id}::m`;
     const exists = await waitUntil(() => menuItemExists(itemId), 10_000);
@@ -148,7 +148,7 @@ export default async function (h) {
   {
     console.log('Watch Element: notices a change on a page that updates itself');
     const watch = { ...workflow('watch ticker', [
-      { id: 'w', type: 'watch-element', config: { selector: '#price', url: `${base}/ticker.html`, intervalSeconds: 2, reload: false } },
+      { id: 'w', type: 'watch-element', config: { locator: '#price', url: `${base}/ticker.html`, intervalSeconds: 2, reload: false } },
       { id: 'l', type: 'log', config: { message: '{{previous}} → {{value}}' } },
     ]), enabled: true };
     await seedWorkflows([watch]);
@@ -185,10 +185,10 @@ export default async function (h) {
       { id: 'type', type: 'fill', config: { locator: 'label=Search', value: 'blue mug' } },
       { id: 'all', type: 'press-key', config: { key: 'Control+A', locator: 'label=Search' } },
       { id: 'sel', type: 'wait-for', config: { mode: 'text', text: 'selected 8 of 8' }, step: { timeoutSeconds: 5, onError: 'continue' } },
-      { id: 'read1', type: 'read-element', config: { selector: '#status', url: '' } },
+      { id: 'read1', type: 'read-element', config: { locator: '#status', url: '' } },
       { id: 'enter', type: 'press-key', config: { key: 'Enter', locator: 'label=Search' } },
       { id: 'sub', type: 'wait-for', config: { mode: 'text', text: 'submitted: blue mug' }, step: { timeoutSeconds: 5, onError: 'continue' } },
-      { id: 'read2', type: 'read-element', config: { selector: '#status', url: '' } },
+      { id: 'read2', type: 'read-element', config: { locator: '#status', url: '' } },
       { id: 'close', type: 'close-tab' },
     ]));
     check('Control+A selected the whole field', step(record, 'sel')?.status === 'passed', String(step(record, 'read1')?.output?.value));

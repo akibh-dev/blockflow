@@ -8,7 +8,7 @@ export default async function (h) {
     console.log('Phase D: scraping, loops, datasets, downloads');
     const scrape = workflow('scrape products', [
       { id: 'open', type: 'open-url', config: { url: `${base}/products?page=1`, active: false } },
-      { id: 'pages', type: 'paginate', config: { next: 'a.next', maxPages: 10 } },
+      { id: 'pages', type: 'paginate', config: { locator: 'a.next', maxPages: 10 } },
       { id: 'cards', type: 'extract-list', config: { locator: 'li.card', fields: [{ name: 'title', locator: 'h2', attribute: '' }, { name: 'price', locator: '.price', attribute: '' }, { name: 'link', locator: 'a', attribute: 'href' }] } },
       { id: 'save', type: 'save-dataset', config: { dataset: 'e2e-products', value: 'items', mode: 'append' } },
       { id: 'file', type: 'download', config: { from: 'dataset', dataset: 'e2e-products', format: 'csv', filename: 'e2e-products.csv' } },
@@ -62,7 +62,7 @@ export default async function (h) {
       { id: 'open', type: 'open-url', config: { url: `${base}/login.html`, active: false } },
       { id: 'form', type: 'fill-form', config: { fields: [{ locator: 'label=Email', value: '{{row.email}}' }, { locator: 'label=Password', value: '{{row.password}}' }], submit: 'role=button[name="Sign in"]' } },
       { id: 'settle', type: 'wait-for', config: { mode: 'load' } },
-      { id: 'heading', type: 'read-element', config: { selector: 'h1', url: '' } },
+      { id: 'heading', type: 'read-element', config: { locator: 'h1', url: '' } },
     ]);
     dataDriven.nodes.push(
       { id: 'shape', type: 'set-variable', position: { x: 1800, y: 0 }, config: { name: 'outcome', value: '{{row.email}} → {{value}}' } },

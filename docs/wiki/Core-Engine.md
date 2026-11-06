@@ -20,7 +20,7 @@ comes through `Host`.
 | Type | Shape / meaning |
 | --- | --- |
 | `Payload` | `Record<string, unknown>`; the data passed between blocks. Must stay JSON-serialisable (stored with timers and run records). |
-| `Workflow` | `{ schemaVersion: 1, id, name, enabled, nodes: NodeDef[], edges: EdgeDef[] }`. Stored as a list (see [Storage Keys](Storage-Keys.md)). |
+| `Workflow` | `{ schemaVersion: 2, id, name, enabled, nodes: NodeDef[], edges: EdgeDef[] }`. Stored as a list (see [Storage Keys](Storage-Keys.md)). Older versions are migrated on load and import by `migrate.ts` ([Core Modules](Core-Modules.md#migrate)). |
 | `NodeDef` | `{ id, type, position, config, step? }`. `type` is looked up in the `BlockRegistry`. |
 | `EdgeDef` | `{ id, source, target, sourcePort? }`. Missing `sourcePort` = the source's first output. |
 | `StepSettings` | Engine-applied per-node settings: `timeoutSeconds`, `retries` (0..5), `onError` (`stop` / `continue` / `port`), `disabled`, `note`, `screenshot` (`error` default / `always` / `never`), `realInput`. |

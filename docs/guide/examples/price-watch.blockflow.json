@@ -3,7 +3,7 @@
   "version": 1,
   "workflows": [
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "price-watch",
       "name": "Price drop alert",
       "enabled": false,
@@ -29,7 +29,7 @@
           },
           "config": {
             "url": "https://shop.example.com/item/42",
-            "selector": ".price",
+            "locator": ".price",
             "read": "text",
             "name": "",
             "reload": true

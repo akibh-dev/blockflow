@@ -264,7 +264,7 @@
       ],
       "timeoutSeconds": 60,
       "defaultConfig": {
-        "selector": "",
+        "locator": "",
         "url": "",
         "intervalSeconds": 60,
         "reload": true,
@@ -272,7 +272,7 @@
       },
       "fields": [
         {
-          "key": "selector",
+          "key": "locator",
           "label": "Element",
           "kind": "locator",
           "required": true
@@ -318,8 +318,8 @@
           "description": "The page that was watched."
         },
         {
-          "key": "selector",
-          "description": "The element selector."
+          "key": "locator",
+          "description": "The element locator (also as `selector`, its name before v0.3)."
         },
         {
           "key": "changedAt",
@@ -1185,14 +1185,14 @@
       "defaultConfig": {
         "url": "",
         "tab": "",
-        "selector": "",
+        "locator": "",
         "read": "text",
         "name": "",
         "reload": true
       },
       "fields": [
         {
-          "key": "selector",
+          "key": "locator",
           "label": "Element",
           "kind": "locator",
           "required": true,
@@ -1251,11 +1251,15 @@
         },
         {
           "key": "count",
-          "description": "How many elements matched the selector."
+          "description": "How many elements matched the locator."
         },
         {
           "key": "url",
           "description": "The page that was read."
+        },
+        {
+          "key": "locator",
+          "description": "The locator that was read (also as `selector`, its name before v0.3)."
         }
       ]
     },
@@ -1450,12 +1454,12 @@
       "realInput": true,
       "defaultConfig": {
         "tab": "main",
-        "next": "role=link[name=\"Next\"]",
+        "locator": "role=link[name=\"Next\"]",
         "maxPages": 10
       },
       "fields": [
         {
-          "key": "next",
+          "key": "locator",
           "label": "Next button",
           "kind": "locator",
           "required": true,

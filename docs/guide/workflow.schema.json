@@ -358,7 +358,7 @@
                     "type": "object",
                     "description": "Fire when the text of a part of a web page changes.",
                     "properties": {
-                      "selector": {
+                      "locator": {
                         "description": "Element",
                         "type": "string"
                       },
@@ -381,7 +381,7 @@
                       }
                     },
                     "required": [
-                      "selector",
+                      "locator",
                       "url"
                     ]
                   },
@@ -1311,7 +1311,7 @@
                     "type": "object",
                     "description": "Read a value from a page: text, attribute, class, whether it exists, or how many.",
                     "properties": {
-                      "selector": {
+                      "locator": {
                         "description": "Element",
                         "type": "string"
                       },
@@ -1344,7 +1344,7 @@
                       }
                     },
                     "required": [
-                      "selector"
+                      "locator"
                     ]
                   },
                   "step": {
@@ -1542,7 +1542,7 @@
                     "type": "object",
                     "description": "Run \"each\" on every page of a paged list, clicking Next in between.",
                     "properties": {
-                      "next": {
+                      "locator": {
                         "description": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick.",
                         "type": "string"
                       },
@@ -1557,7 +1557,7 @@
                       }
                     },
                     "required": [
-                      "next"
+                      "locator"
                     ]
                   },
                   "step": {

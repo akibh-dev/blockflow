@@ -100,13 +100,13 @@ Fire when the text of a part of a web page changes.
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `selector` (Element) | locator | `""` | required |
+| `locator` (Element) | locator | `""` | required |
 | `url` (Page URL) | url | `""` | required, supports `{{…}}` |
 | `intervalSeconds` (Check every (seconds)) | number | `60` | Only used when this block starts the flow. After a Timer, the Timer decides. Under 30 seconds keeps the background worker awake. |
 | `reload` (Reload page before checking) | boolean | `true` | Needed to see server-side changes. Turn off for pages that update themselves. |
 | `emitOnFirstRead` (Fire on the first read too) | boolean | `false` | Off = the first read just records the starting value. |
 
-Adds to the data: `value` (The new text of the element.); `previous` (The text before the change (null on the first read).); `url` (The page that was watched.); `selector` (The element selector.); `changedAt` (ISO time the change was noticed.)
+Adds to the data: `value` (The new text of the element.); `previous` (The text before the change (null on the first read).); `url` (The page that was watched.); `locator` (The element locator (also as `selector`, its name before v0.3).); `changedAt` (ISO time the change was noticed.)
 
 ## 🔗 Open Tab — `open-url`
 
@@ -376,14 +376,14 @@ Read a value from a page: text, attribute, class, whether it exists, or how many
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `selector` (Element) | locator | `""` | required, supports `{{…}}` |
+| `locator` (Element) | locator | `""` | required, supports `{{…}}` |
 | `url` (Page URL) | url | `""` | supports `{{…}}`. BlockFlow opens it in its own background tab. Leave empty to read the run's tab instead (see Tab). |
 | `tab` (Tab) | text | `""` | Used when Page URL is empty: read from this tab of the run (from Open Tab), as it is now, without reloading. |
 | `read` (Read) | one of `text`, `value`, `attribute`, `has-class`, `exists`, `count` | `"text"` |  |
 | `name` (Attribute / class name) | text | `""` | Only for "an attribute" and "has a class". |
 | `reload` (Reload page before reading) | boolean | `true` |  |
 
-Adds to the data: `value` (What was read ("true"/"false" for class and exists).); `previous` (The value from the last run (empty on the first run).); `changed` (True when value differs from previous (false on the first run).); `count` (How many elements matched the selector.); `url` (The page that was read.)
+Adds to the data: `value` (What was read ("true"/"false" for class and exists).); `previous` (The value from the last run (empty on the first run).); `changed` (True when value differs from previous (false on the first run).); `count` (How many elements matched the locator.); `url` (The page that was read.); `locator` (The locator that was read (also as `selector`, its name before v0.3).)
 
 ## 🧺 Extract List — `extract-list`
 
@@ -436,7 +436,7 @@ Run "each" on every page of a paged list, clicking Next in between.
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `next` (Next button) | locator | `"role=link[name=\"Next\"]"` | required, supports `{{…}}`. CSS, or text=…, role=…[name="…"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick. |
+| `locator` (Next button) | locator | `"role=link[name=\"Next\"]"` | required, supports `{{…}}`. CSS, or text=…, role=…[name="…"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick. |
 | `maxPages` (At most (pages)) | number | `10` |  |
 | `tab` (Tab) | text | `"main"` | The name an Open Tab block gave the tab earlier in this run. Usually "main". |
 
