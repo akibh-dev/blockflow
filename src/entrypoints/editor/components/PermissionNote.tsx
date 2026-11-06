@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { toast } from './Dialogs';
+import type { OptionalPermission } from '../../../core/types';
 
-type Permission = 'debugger' | 'userScripts';
+type Permission = OptionalPermission;
 
 const WHY: Record<Permission, string> = {
   debugger: 'real mouse and keyboard input (the browser shows a "debugging" bar while it is used)',
   userScripts: 'running your own scripts. In chrome://extensions, also switch on "Allow User Scripts" for BlockFlow',
+  cookies: "reading and changing the browser's cookies (HttpOnly ones too)",
 };
 
 /** Asks for an optional permission when a block needs it. Must be a click: browsers only ask then. */
@@ -14,7 +16,7 @@ export async function requestPermission(permission: Permission): Promise<boolean
   try {
     return await browser.permissions.request({ permissions: [permission] });
   } catch {
-    toast(`This browser does not offer the "${permission}" permission. It works in Chrome, Edge and Brave.`, 'error');
+    toast(`This browser does not offer the "${permission}" permission.${permission === 'cookies' ? '' : ' It works in Chrome, Edge and Brave.'}`, 'error');
     return false;
   }
 }
@@ -36,7 +38,9 @@ export function PermissionNote({ permissions }: { permissions: Permission[] }) {
     return () => {
       alive = false;
     };
-  }, [permissions]);
+    // By value: a block's permission list may be a new array on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissions.join(',')]);
 
   if (missing.length === 0) return null;
   return (

@@ -380,6 +380,9 @@ Chrome 135+) covers some of them.
 | `page.frameLocator('#pay').getByLabel('Card')` | locator `frame=#pay >> label=Card` |
 | `page.setViewportSize`, `emulateMedia`, geolocation, locale | no equivalent yet |
 | new browser context per test, `storageState` | no equivalent yet (runs share your browser profile) |
+| `context.cookies()`, `addCookies`, `clearCookies` | **Cookies & Storage** `cookies-storage`, `area: "cookies"`, `action` `get` / `set` / `delete` / `clear` |
+| `page.evaluate(() => localStorage.setItem(…))` | **Cookies & Storage** `area: "local"` / `"session"` |
+| `page.screenshot({ fullPage })`, `locator.screenshot()` | **Screenshot** `screenshot`, `area` `visible` / `full` / `element` |
 
 ### Locators
 
@@ -420,9 +423,9 @@ Chrome 135+) covers some of them.
 | `locator.waitFor({ state })` | **Wait For** `wait-for`, `mode`: `visible` / `hidden` / `attached` / `detached` / `enabled` |
 | `page.waitForURL(pattern)` | **Wait For** `mode: "url"` (contains, `*`/`**` globs, `/regex/`) |
 | `page.waitForLoadState('load' \| 'networkidle')` | **Wait For** `mode: "load"` / `"networkidle"` |
-| `page.waitForResponse(url)` | **Wait For** `mode: "response"`, `url`, `status` (`201`, `2xx`). Status only, no body |
-| `page.waitForRequest` | no equivalent yet |
-| `page.waitForEvent('download')` | no equivalent yet |
+| `page.waitForResponse(url)` | **Wait For** `mode: "response"`, `url`, `status` (`201`, `2xx`), `method`. `captureBody: true` adds `response.body` (Chromium) |
+| `page.waitForRequest` | **Wait For** `mode: "request"`, `url`, `method`; `request.postData` |
+| `page.waitForEvent('download')` | **Wait for Download** `wait-for-download` (`url` pattern; `read` csv / json / text) |
 | `page.waitForTimeout(ms)` | **Timer** after a block delays the flow (exported back as `page.waitForTimeout`) |
 
 ### Reading and assertions
@@ -486,7 +489,16 @@ What it does:
 - Wait For `mode: "response"` → `waitForResponse(tab, pattern, status)`: a matching response of that tab
   from the last 10 s (usually triggered by the click before) or the next one, through
   `page.waitForResponse`; the pattern works like BlockFlow's (contains, `*`/`**` globs, `/regex/`) and
-  `status` accepts `201`, `2xx`, `200,201`. `data.response` gets `{ url, status, method }`.
+  `status` accepts `201`, `2xx`, `200,201`. `data.response` gets `{ url, status, method }` (and `body`
+  with `captureBody`, from `response.text()`). `method` filters too. Wait For `mode: "request"` →
+  `waitForRequest(tab, pattern, method)`, the same with `context.on('request')` / `page.waitForRequest`.
+- Wait for Download → `waitForDownload(tab, pattern, read)`: a `download` event of that page from the last
+  15 s, or `page.waitForEvent('download')`; `read` reads the saved file (`download.path()`). Saving rows to a
+  dataset becomes a comment.
+- Screenshot → `page.screenshot({ fullPage })` / `locator.first().screenshot()`, attached to the test
+  report with `test.info().attach`.
+- Cookies & Storage → `cookies(context, url, action, name, cookie)` (`context.cookies(url)`, `addCookies`,
+  `clearCookies` per matching cookie) and `pageStorage(page, area, action, key, value)` (`page.evaluate`).
 - Open Tab: `where: "current"` / `"workflow"` reuse the test's `page`; `"new"` / `"window"` open
   `context.newPage()`.
 - Dialogs → one `page.on('dialog')` handler per page that answers with the latest Dialogs choice and

@@ -21,6 +21,9 @@ import { dialogsBlock } from './dialogs';
 import { runScriptBlock } from './runScript';
 import { uploadFileBlock } from './uploadFile';
 import { waitForPopupBlock } from './waitForPopup';
+import { waitForDownloadBlock } from './waitForDownload';
+import { screenshotBlock } from './screenshot';
+import { cookiesStorageBlock } from './cookiesStorage';
 import { assertBlock } from './assert';
 import { checkBlock } from './check';
 import { clickBlock } from './click';
@@ -46,6 +49,9 @@ import { watchElementBlock } from './watchElement';
 
 /** Every built-in block definition, re-exported so tests and tools can use one block directly. */
 export {
+  waitForDownloadBlock,
+  screenshotBlock,
+  cookiesStorageBlock,
   dialogsBlock,
   runScriptBlock,
   uploadFileBlock,
@@ -97,9 +103,9 @@ export {
  */
 export const BLOCK_GROUPS: { category: BlockCategory; blocks: AnyBlockDefinition[] }[] = [
   { category: 'start', blocks: [manualStartBlock, timerBlock, scheduleBlock, pageVisitedBlock, contextMenuBlock, watchElementBlock] },
-  { category: 'browser', blocks: [openUrlBlock, navigateBlock, waitForPopupBlock, closeTabBlock] },
+  { category: 'browser', blocks: [openUrlBlock, navigateBlock, waitForPopupBlock, waitForDownloadBlock, cookiesStorageBlock, closeTabBlock] },
   { category: 'page', blocks: [clickBlock, fillBlock, fillFormBlock, selectOptionBlock, checkBlock, pressKeyBlock, uploadFileBlock, scrollBlock, dialogsBlock, waitForBlock, runScriptBlock] },
-  { category: 'read', blocks: [readElementBlock, extractListBlock, extractTableBlock, paginateBlock, pageInfoBlock, pageSnapshotBlock] },
+  { category: 'read', blocks: [readElementBlock, extractListBlock, extractTableBlock, paginateBlock, pageInfoBlock, pageSnapshotBlock, screenshotBlock] },
   { category: 'test', blocks: [assertBlock, manualStepBlock, stopBlock] },
   { category: 'logic', blocks: [ifBlock, forEachBlock, repeatBlock, runWorkflowBlock] },
   { category: 'data', blocks: [setVariableBlock, transformBlock, filterBlock, dataTableBlock, saveDatasetBlock, downloadBlock] },

@@ -291,6 +291,59 @@ try {
   }
 
   {
+    // M2: downloads, screenshots (tabs.captureTab), cookies and storage, requests.
+    const downloads = await run(workflow('downloads', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/m2.html`, active: false } },
+      { id: 'csv', type: 'click', config: { locator: 'text=Export CSV' } },
+      { id: 'wait', type: 'wait-for-download', config: { url: 'export.csv', read: 'csv' } },
+      { id: 'blob', type: 'click', config: { locator: '#blob' } },
+      { id: 'json', type: 'wait-for-download', config: { url: '*.json', read: 'json' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    const csv = step(downloads, 'wait')?.output;
+    check('Wait for Download: CSV (file name, size, rows)', csv?.download?.filename === 'export.csv' && csv?.download?.size === 21 && csv?.rows?.[1]?.name === 'cup', JSON.stringify(csv ?? summary(downloads)).slice(0, 600));
+    check('Wait for Download: a blob: file read as JSON', step(downloads, 'json')?.output?.download?.filename === 'orders.json' && step(downloads, 'json')?.output?.data?.[1]?.name === 'cup', JSON.stringify(step(downloads, 'json')?.output ?? summary(downloads)).slice(0, 600));
+
+    const shots = await run(workflow('screenshots', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/m2.html`, active: false } },
+      { id: 'visible', type: 'screenshot', config: {} },
+      { id: 'full', type: 'screenshot', config: { area: 'full' } },
+      { id: 'element', type: 'screenshot', config: { area: 'element', locator: '#card', format: 'jpeg' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    const size = (id) => step(shots, id)?.output?.screenshot;
+    const ratio = size('element') ? size('element').width / 300 : 0;
+    check('Screenshot: visible area of a background tab (captureTab)', size('visible')?.width > 0 && Boolean(step(shots, 'visible')?.screenshot), JSON.stringify(size('visible') ?? summary(shots)));
+    check('Screenshot: full page (captureTab rect)', size('full')?.height > 2600 && size('full').height > size('visible')?.height, JSON.stringify(size('full') ?? summary(shots)));
+    check('Screenshot: element (captureTab rect)', ratio > 0 && Math.abs(size('element').height / ratio - 120) <= 2, JSON.stringify(size('element') ?? summary(shots)));
+
+    const cookies = await run(workflow('cookies', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/login-cookie`, active: false } },
+      { id: 'sid', type: 'cookies-storage', config: { action: 'get', name: 'sid' } },
+      { id: 'set', type: 'cookies-storage', config: { action: 'set', name: 'theme', value: 'dark' } },
+      { id: 'go', type: 'navigate', config: { action: 'goto', url: `${base}/whoami` } },
+      { id: 'sent', type: 'read-element', config: { locator: 'body', url: '' } },
+      { id: 'clear', type: 'cookies-storage', config: { action: 'clear' } },
+      { id: 'all', type: 'cookies-storage', config: { action: 'get' } },
+      { id: 'lset', type: 'cookies-storage', config: { area: 'local', action: 'set', name: 'token', value: 'abc' } },
+      { id: 'lget', type: 'cookies-storage', config: { area: 'local', action: 'get', name: 'token' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    check('Cookies: HttpOnly read, set is sent, clear', step(cookies, 'sid')?.output?.value === 's3cret' && /theme=dark/.test(String(step(cookies, 'sent')?.output?.value)) && JSON.stringify(step(cookies, 'all')?.output?.value) === '{}', summary(cookies));
+    check('Storage: localStorage set and get', step(cookies, 'lget')?.output?.value === 'abc', summary(cookies));
+
+    const network = await run(workflow('requests', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/m2.html`, active: false } },
+      { id: 'send', type: 'click', config: { locator: '#send' } },
+      { id: 'req', type: 'wait-for', config: { mode: 'request', url: '/api/save', method: 'POST' } },
+      { id: 'body', type: 'wait-for', config: { mode: 'response', url: '/api/save', captureBody: true }, step: { timeoutSeconds: 5 } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    check('Wait For request: POST with its body (webRequest)', JSON.parse(step(network, 'req')?.output?.request?.postData ?? '{}').item === 'mug', summary(network));
+    check('Wait For response body explains it needs Chromium', step(network, 'body')?.code === 'permission.missing' && /Chrome/.test(step(network, 'body')?.error ?? ''), summary(network));
+  }
+
+  {
     const record = await run(workflow('notify', [{ id: 'n', type: 'notify', config: { title: 'BlockFlow e2e', message: 'hello' } }]));
     check('Notify', record.status === 'passed', summary(record));
   }

@@ -1,16 +1,17 @@
 import { browser } from 'wxt/browser';
-import { uid } from '../core/id';
 import { CodedError } from '../core/errors';
 import { STORAGE_KEYS } from '../shared/keys';
-import { readDataset, saveScreenshot, writeDataset } from './blobStore';
+import { readDataset, writeDataset } from './blobStore';
 import { actOnHtml } from './htmlParse';
-import { tabInfo, waitForLoad, waitForResponse, waitForUrl, watchNetwork } from './navigation';
+import { tabInfo, waitForLoad, waitForRequest, waitForResponse, waitForUrl, watchNetwork } from './navigation';
 import { addOwnTab } from './ownTabs';
 import { askUser } from './prompts';
 import { loadWorkflows } from './stores';
 import { act } from './pageDriver';
-import { captureWithDebugger } from './cdp';
 import { waitForPopup } from './popups';
+import { capture, take } from './screenshots';
+import { getCookies, removeCookies, setCookie } from './cookies';
+import { readDownloadText, waitForDownload } from './downloads';
 import { readElement } from './pageReader';
 import { requireTabId, sleep } from './tabs';
 import type { Host, HttpRequestOptions, HttpResult, NavigateOptions, NotifyOptions, OpenTabOptions, TabInfo, Scheduler, StateStore } from '../core/types';
@@ -108,21 +109,6 @@ async function notify({ title, message }: NotifyOptions): Promise<void> {
     title,
     message,
   });
-}
-
-/** `Host.screenshots.capture`: JPEG of the tab saved in IndexedDB; returns its id, or null when it cannot be taken. */
-async function capture(tabId: number, runId: string): Promise<string | null> {
-  const tab = await browser.tabs.get(tabId);
-  // captureVisibleTab only sees the tab that is showing in its window. A background tab needs the
-  // debugger permission (granted for real input); without it there is no screenshot.
-  const dataUrl =
-    tab.active && tab.windowId !== undefined
-      ? await browser.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 60 })
-      : await captureWithDebugger(tabId).catch(() => null);
-  if (!dataUrl) return null;
-  const id = uid();
-  await saveScreenshot({ id, runId, ts: Date.now(), dataUrl });
-  return id;
 }
 
 /** `Host.secrets.all`: the `bf:secrets` map. */
@@ -239,19 +225,21 @@ export function createExtensionHost(scheduler: Scheduler): Host {
       waitForUrl,
       waitForPopup,
       waitForResponse,
+      waitForRequest,
     },
     page: { readElement, act, dialogs, runScript },
     scheduler,
     state: new StorageState(),
     workflows: { get: async (id) => (await loadWorkflows()).find((workflow) => workflow.id === id) },
     secrets: { all: allSecrets },
-    screenshots: { capture },
+    screenshots: { capture, take },
+    cookies: { get: getCookies, set: setCookie, remove: removeCookies },
     prompt: { ask: askUser },
     datasets: {
       read: async (name) => (await readDataset(name))?.rows ?? [],
       write: writeDataset,
     },
-    downloads: { save: saveDownload },
+    downloads: { save: saveDownload, waitFor: waitForDownload, readText: readDownloadText },
     html: { act: actOnHtml },
     now: () => new Date(),
   };

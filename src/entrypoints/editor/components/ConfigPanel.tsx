@@ -187,7 +187,12 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
       </h2>
       <p className="bf-muted">{def.description}</p>
 
-      {def.permissions && <PermissionNote permissions={def.permissions} />}
+      {(() => {
+        const listed = typeof def.permissions === 'function' ? def.permissions(config) : def.permissions;
+        // Firefox has no debugger API: blocks that use it there take another path or explain at run time.
+        const needed = import.meta.env.FIREFOX ? listed?.filter((permission) => permission !== 'debugger') : listed;
+        return needed && needed.length > 0 ? <PermissionNote permissions={needed} /> : null;
+      })()}
 
       {problems.length > 0 && (
         <ul className="bf-problems">

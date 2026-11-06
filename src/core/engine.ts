@@ -360,6 +360,8 @@ export class WorkflowRunner {
       await this.handleFailure(run, step, node, def, input, `sent data to an output it does not have: "${port}"`, ports, { code: 'step.failed' });
       return;
     }
+    // A block that took a picture itself (Screenshot) shows it on its step.
+    if (typeof payload.screenshotId === 'string' && payload.screenshotId !== input.screenshotId) step.screenshot = payload.screenshotId;
     this.endStep(run, step, outcome.softError ? 'failed' : 'passed', { output: payload, port, ...soft });
     await this.afterStep(run, step, node, payload, Boolean(outcome.softError));
     await this.emitFrom(node.id, payload, port, run);
@@ -474,7 +476,7 @@ export class WorkflowRunner {
   /** Screenshot of the step's tab, by its step setting (default: only when something went wrong). */
   private async afterStep(run: ActiveRun, step: StepRecord, node: NodeDef, payload: Payload, wentWrong: boolean): Promise<void> {
     const when = node.step?.screenshot ?? 'error';
-    if (when === 'never' || (when === 'error' && !wentWrong)) return;
+    if (when === 'never' || (when === 'error' && !wentWrong) || step.screenshot) return;
     const tabName = typeof node.config.tab === 'string' && node.config.tab.trim() ? node.config.tab : 'main';
     const tabId = sessionTab(payload, tabName);
     if (tabId === undefined) return;

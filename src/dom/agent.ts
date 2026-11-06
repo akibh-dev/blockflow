@@ -659,6 +659,24 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   /** localStorage / sessionStorage / `document.cookie` (HttpOnly cookies are invisible here). */
   function storage(request: Extract<AgentRequest, { op: 'storage' }>): Done {
+    const action = request.action ?? 'get';
+    if (action !== 'get') {
+      if (request.area === 'cookies') throw new Fatal('Cookies are changed through the browser (Cookies & Storage block), not the page', 'config.invalid');
+      const store = request.area === 'local' ? win.localStorage : win.sessionStorage;
+      if (action === 'clear') {
+        const cleared = store.length;
+        store.clear();
+        return { cleared };
+      }
+      if (!request.key) throw new Fatal(`A key is needed to ${action} an entry`, 'config.invalid');
+      if (action === 'set') {
+        store.setItem(request.key, request.value ?? '');
+        return { value: request.value ?? '' };
+      }
+      const existed = store.getItem(request.key) !== null;
+      store.removeItem(request.key);
+      return { deleted: existed ? 1 : 0 };
+    }
     if (request.area === 'cookies') {
       // Cookies the page can see (not HttpOnly ones).
       const cookies = Object.fromEntries(
@@ -740,6 +758,33 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     const { x, y } = center(element);
     const origin = documentOrigin(element.ownerDocument);
     return { x: x + origin.x, y: y + origin.y, kind };
+  }
+
+  /** Element box in the tab's viewport (after scrolling it into view), or the page's size and scroll. */
+  function measure(request: Extract<AgentRequest, { op: 'measure' }>): Done {
+    if (!request.locator) {
+      const scroller = doc.scrollingElement ?? doc.documentElement;
+      return {
+        scrollX: win.scrollX,
+        scrollY: win.scrollY,
+        viewportWidth: win.innerWidth,
+        viewportHeight: win.innerHeight,
+        pageWidth: Math.max(scroller.scrollWidth, win.innerWidth),
+        pageHeight: Math.max(scroller.scrollHeight, win.innerHeight),
+        devicePixelRatio: win.devicePixelRatio || 1,
+      };
+    }
+    const element = one(request.locator);
+    ready(element, {});
+    for (let owner = element.ownerDocument; owner !== doc; ) {
+      const frame = owner.defaultView?.frameElement;
+      if (!frame) break;
+      frameOffset(frame);
+      owner = frame.ownerDocument;
+    }
+    const rect = element.getBoundingClientRect();
+    const origin = documentOrigin(element.ownerDocument);
+    return { x: rect.left + origin.x, y: rect.top + origin.y, width: rect.width, height: rect.height };
   }
 
   /** The page (or the part under `locator`) as an outline, see src/dom/snapshot.ts. */
@@ -845,6 +890,8 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
         return locate(request);
       case 'snapshot':
         return snapshot(request);
+      case 'measure':
+        return measure(request);
     }
   }
 
@@ -856,7 +903,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
           return { status: 'done', result: attempt(request) };
         } catch (error) {
           if (error instanceof FrameBoundaryError) {
-            const offset = request.op === 'locate' && error.frame ? frameOffset(error.frame) : undefined;
+            const offset = (request.op === 'locate' || request.op === 'measure') && error.frame ? frameOffset(error.frame) : undefined;
             return { status: 'frame', src: error.src, rest: error.rest, ...(offset ? { offset } : {}) };
           }
           const url = doc.URL;

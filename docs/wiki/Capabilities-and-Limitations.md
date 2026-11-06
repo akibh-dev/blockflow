@@ -31,7 +31,9 @@ and Brave, using the optional `debugger` permission.
 | Capability | Status | How |
 | --- | --- | --- |
 | Auto-wait for visible, enabled, stable, not covered | ✅ | every action |
-| Wait for element, text, URL, load, network idle, API response | ✅ | Wait For |
+| Wait for element, text, URL, load, network idle, API response or request (method, request body) | ✅ | Wait For |
+| Read an API response's body | 🟡 | Wait For `captureBody`, Chromium only; only responses that start after the Wait For starts |
+| Screenshots on demand: visible area, full page, element | ✅ | Screenshot (Chromium: full page and tabs not showing need `debugger`; Firefox: all without extra permissions) |
 | Assert text, value, attribute, count, visible/hidden, enabled, checked, URL, title | ✅ | Assert (retries like `expect`) |
 | Soft asserts | ✅ | `soft: true` |
 | Assert class, CSS, focus, in-viewport | ❌ | planned |
@@ -46,9 +48,10 @@ and Brave, using the optional `debugger` permission.
 | HTTP requests (APIs, static pages) | ✅ | HTTP Request |
 | Expressions, loops, filters, CSV/JSON input | ✅ | Transform, For Each, Filter, Data Table |
 | Keep results, download CSV/JSON | ✅ | Save to Dataset, Download, the Data page |
-| Read page storage and cookies | ✅ | Page Info |
-| Set or clear cookies and storage | ❌ | planned |
-| Wait for a file the page downloads | ❌ | planned |
+| Read page storage and cookies | ✅ | Page Info, Cookies & Storage (HttpOnly cookies too) |
+| Set or clear cookies and storage | ✅ | Cookies & Storage (optional `cookies` permission for cookies) |
+| Wait for a file the page downloads | ✅ | Wait for Download: name, size, type; `read` CSV / JSON / text by fetching its address again |
+| Open a downloaded file from disk | ⛔ | extensions cannot read files; `read` re-fetches the URL (a one-time or POST download cannot be read) |
 
 ## Running
 
@@ -83,7 +86,7 @@ and Brave, using the optional `debugger` permission.
 | Browser | Status |
 | --- | --- |
 | Chrome, Brave, Edge | ✅ main target. End-to-end tests run in Chromium 131 and Brave; Chrome and Edge use the same build |
-| Firefox | ✅ verified with `npm run e2e:firefox` (Firefox 159): page actions, forms, scraping, datasets, uploads, popups, dialogs, screenshots. No `realInput`, no Run Script (Chromium only) |
+| Firefox | ✅ verified with `npm run e2e:firefox` (Firefox 159): page actions, forms, scraping, datasets, uploads, popups, dialogs, screenshots (all three areas, `tabs.captureTab`), Wait for Download, Cookies & Storage, Wait For request. No `realInput`, no Run Script, no response bodies (Chromium only) |
 | Safari | 🟡 builds; never converted or run |
 
 ## Things no extension can do

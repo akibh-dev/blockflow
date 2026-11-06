@@ -392,6 +392,24 @@ describe('block mappings', () => {
     );
   });
 
+  it('M2 browser blocks: screenshot, download, cookies and storage, request and response body', () => {
+    expect(body([{ id: 's', type: 'screenshot', config: { area: 'full', format: 'jpeg', quality: 60 } }])).toBe(
+      '{ const shot = await tabs["main"].screenshot({ fullPage: true, type: \'jpeg\', quality: 60 }); await test.info().attach("Screenshot", { body: shot, contentType: "image/jpeg" }); data = { ...data, screenshotId: "s" }; }',
+    );
+    expect(body([{ id: 's', type: 'screenshot', config: { area: 'element', locator: '#card' } }])).toContain('await tabs["main"].locator("#card").first().screenshot();');
+    expect(body([{ id: 'd', type: 'wait-for-download', config: { url: 'export.csv', read: 'csv' }, step: { timeoutSeconds: 9 } }])).toBe(
+      'data = { ...data, ...(await waitForDownload(tabs["main"], "export.csv", "csv", 9000)) };',
+    );
+    expect(body([{ id: 'c', type: 'cookies-storage', config: { action: 'set', name: 'session', value: '{{token}}', maxAgeSeconds: 60, httpOnly: true } }])).toBe(
+      'data = { ...data, ...(await cookies(context, tabs["main"].url(), "set", "session", { name: "session", value: render("{{token}}", data), url: tabs["main"].url(), expires: Math.round(Date.now() / 1000) + 60, httpOnly: true })) };',
+    );
+    expect(body([{ id: 'c', type: 'cookies-storage', config: { action: 'clear', url: 'https://shop.test' } }])).toBe('data = { ...data, ...(await cookies(context, "https://shop.test", "clear", "")) };');
+    expect(body([{ id: 'c', type: 'cookies-storage', config: { area: 'local', action: 'get', name: 'theme' } }])).toBe('data = { ...data, ...(await pageStorage(tabs["main"], "local", "get", "theme", "")) };');
+    expect(body([{ id: 'w', type: 'wait-for', config: { mode: 'request', url: '/api/save', method: 'POST' } }])).toBe('data = { ...data, request: await waitForRequest(tabs["main"], "/api/save", "POST") };');
+    expect(body([{ id: 'w', type: 'wait-for', config: { mode: 'response', url: '/api', captureBody: true } }])).toBe('data = { ...data, response: await waitForResponse(tabs["main"], "/api", "", undefined, "", true) };');
+    expect(body([{ id: 'w', type: 'wait-for', config: { mode: 'response', url: '/api' } }])).toBe('data = { ...data, response: await waitForResponse(tabs["main"], "/api", "") };');
+  });
+
   it('what has no Playwright equivalent is a marked comment', () => {
     expect(body([{ id: 's', type: 'save-dataset', config: {} }])).toMatch(/^\/\/ BlockFlow-only: .+ has no Playwright equivalent, skipped\.$/);
   });

@@ -409,6 +409,7 @@ describe('with the workflow engine', () => {
       workflows: base.workflows,
       secrets: base.secrets,
       screenshots: base.screenshots,
+      cookies: base.cookies,
       prompt: base.prompt,
       datasets: base.datasets,
       downloads: base.downloads,

@@ -286,7 +286,9 @@ be read. Long pages are cut at 1,500 lines with a note: snapshot one part with t
 - **Assert** on the page retries until it passes or the timeout ends, like Playwright's `expect`.
 - **Wait For** modes: `visible`, `hidden`, `attached`, `detached`, `enabled` (need `locator`);
   `text`, `no-text` (need `text`; `locator` optional to look only inside it); `url` (needs `url`
-  pattern); `load`; `networkidle`.
+  pattern); `load`; `networkidle`; `response` (a request finishes: `url` pattern, optional `status`,
+  `method`; `captureBody: true` also returns `response.body`, Chromium only); `request` (the page
+  sends a request: `url` pattern, optional `method`; returns `request.postData`).
 - URL patterns: plain text = "URL contains"; `*` = any characters except `/`, `**` = anything;
   `/regex/flags`.
 
@@ -379,6 +381,7 @@ Every failed step has a `code`. Fix by the code, then the message:
 | `page.restricted` | The browser does not let extensions script this page. | Use a normal web page. |
 | `permission.missing` | An optional permission is not granted. | Grant it on the block or in the extension settings. |
 | `script.error` | Run Script code threw. | Fix the script. |
+| `download.failed` | A download was interrupted, or its content cannot be read (Wait for Download). | Check the link works in a normal tab; to read the file its address must still be reachable. |
 | `config.invalid` | A setting is missing or invalid. | Fix the setting the message names. |
 | `workflow.failed` | A workflow called by Run Workflow failed. | Fix the failing step of the called run (`childRunId`). |
 | `step.failed` | Any other failure. | Read the message. |
@@ -441,9 +444,13 @@ profile's extension storage.
 | "Sign in with…" popup, `target=_blank` link | Click, then **Wait for Popup** (`name: "popup"`), then blocks with `"tab": "popup"` |
 | `alert` / `confirm` / `prompt` | **Dialogs** (`accept` + prompt `text`, or `dismiss`) **before** the click that opens them; `read` returns `{{dialogs}}` / `{{lastDialog}}` |
 | File chooser | **Upload File** on the `<input type="file">` (hidden ones too, or its label): text you write, or a file from a URL |
-| Wait for an API call instead of the UI | **Wait For** `mode: "response"`, `url` pattern, optional `status` (`201`, `2xx`). A response that finished during the previous block counts |
+| Wait for an API call instead of the UI | **Wait For** `mode: "response"`, `url` pattern, optional `status` (`201`, `2xx`) and `method`. A response that finished during the previous block counts. `mode: "request"` waits for the request itself (`{{request.postData}}` is what the page sent) |
+| Read an API response's body | **Wait For** `mode: "response"` with `captureBody: true` → `{{response.body}}` (Chrome, Edge, Brave; debugger permission, Grant button). Only responses that **start after** the Wait For starts can be read, so it suits slow or later requests (polling, a request a timer sends); for a response that comes right after a Click, call the API with HTTP Request instead |
+| "Export" button or link that downloads a file | Click, then **Wait for Download** (`url`: part of the address or file name). `{{download.filename}}`, `.size`, `.mime`, `.url`. `read: "csv"` / `"json"` / `"text"` fetches the file again from its address (extensions cannot open files on disk) → `{{rows}}` / `{{data}}` / `{{content}}`, optionally into a `dataset`. Files the page builds itself (blob: links) are read in the page, while it still has them |
+| A picture of the page or one element | **Screenshot** (`area`: `visible`, `full`, `element` + `locator`; `png` or `jpeg`). Shown on the step and in the report; `{{screenshotId}}`. Chromium: full page, elements of a tab that is not showing, and any tab that is not showing need the debugger permission (Grant button); without it, an element of the showing tab is cut from the visible area. Firefox: all three work without extra permissions |
+| Log in by cookie, reset state between tests | **Cookies & Storage**: `action` `get` / `set` / `delete` / `clear` on `area` `cookies` (the browser's cookie jar, HttpOnly ones too; optional "cookies" permission, Grant button; `url` = whose cookies, default the tab's page; set: `domain`, `path`, `maxAgeSeconds`, `httpOnly`, `secure`, `sameSite`) or `local` / `session` (the page's storage, by `name` = key) |
 | Anything no block does | **Run Script**: async JS body, sees `data`, `return` a JSON value. Needs Chrome 135+, the userScripts permission (Grant button) and "Allow User Scripts" / developer mode for BlockFlow |
-| Run the same test in CI | 🎭 **Playwright** export (sidebar row or All workflows): a `.spec.ts` for `npx playwright test`. Templates, expressions and the data blocks (Data Table, Transform, Filter, Set Variable, For Each, Repeat, If) behave as in BlockFlow, because the spec carries BlockFlow's own template/expression/CSV code. Asserts retry (`toHaveText`, `toHaveURL`, `expect.poll` for the other operators; soft → `expect.soft`); Wait For response, Dialogs, Upload File, Wait for Popup, Run Script and Timer delays map to Playwright; step timeouts, retries and error handling (`continue`, error output) are kept. Secrets become environment variables (`{{secret.loginPassword}}` → `LOGINPASSWORD`); Run Workflow calls become functions; what has no equivalent (Notify, Save to Dataset, Download) becomes a `// BlockFlow-only:` comment. Details: [wiki](../wiki/Workflows-as-Scripts.md#export-to-playwright) |
+| Run the same test in CI | 🎭 **Playwright** export (sidebar row or All workflows): a `.spec.ts` for `npx playwright test`. Templates, expressions and the data blocks (Data Table, Transform, Filter, Set Variable, For Each, Repeat, If) behave as in BlockFlow, because the spec carries BlockFlow's own template/expression/CSV code. Asserts retry (`toHaveText`, `toHaveURL`, `expect.poll` for the other operators; soft → `expect.soft`); Wait For response / request, Dialogs, Upload File, Wait for Popup, Wait for Download (`waitForEvent('download')`), Screenshot (`screenshot()`, attached to the test report), Cookies & Storage (`context.cookies` / `addCookies` / `clearCookies`, `localStorage` in the page), Run Script and Timer delays map to Playwright; step timeouts, retries and error handling (`continue`, error output) are kept. Secrets become environment variables (`{{secret.loginPassword}}` → `LOGINPASSWORD`); Run Workflow calls become functions; what has no equivalent (Notify, Save to Dataset, Download) becomes a `// BlockFlow-only:` comment. Details: [wiki](../wiki/Workflows-as-Scripts.md#export-to-playwright) |
 
 ## 13. Testing patterns
 
@@ -476,7 +483,9 @@ profile's extension storage.
 - **Keeping data**: `Save to Dataset` (append/replace, kept in the browser; see the **Data** page,
   which downloads CSV/JSON) and `Download` (CSV, JSON or text file into Downloads).
 - **The page itself**: `Page Info` (title, meta, canonical, JSON-LD) or its localStorage /
-  sessionStorage / cookies.
+  sessionStorage / cookies. To change them (or read HttpOnly cookies): `Cookies & Storage`.
+- **Files the site exports**: Click the export button → `Wait for Download` with `read: "csv"` and a
+  `dataset` → the rows are in the dataset (and `{{rows}}`).
 
 ## 15. Monitoring patterns
 
@@ -513,6 +522,10 @@ Each example is in both formats: `<name>.script.json` (the script, start here) a
   iframe it is (a page that swallows `message` events) records nothing.
 - Closed shadow roots, drag and drop, and file *drop zones* (not inputs) are not supported.
 - Run Script needs Chrome 135+ with user scripts allowed; Firefox and older Chrome explain that.
+- Response bodies (Wait For `captureBody`) need Chromium's debugger and only work for responses that
+  start after the Wait For starts. Wait for Download cannot open the saved file: `read` fetches its
+  address again (a link that makes a new file every time gives that new file; a POST form download
+  cannot be read). Chromium full-page and background-tab screenshots need the debugger permission.
 - Pages browsers protect: `chrome://`, the extension stores, other extensions, PDF viewer. `file://`
   only after the user enables "Allow access to file URLs".
 - CAPTCHAs and 2FA are not bypassed: use Manual Step.

@@ -427,6 +427,36 @@ class Writer {
         this.line('}, data)) ?? null };');
         break;
       }
+      case 'screenshot': {
+        const target = c.area === 'element' ? firstOf(loc()) : tab(c);
+        const jpeg = c.format === 'jpeg';
+        const options = [c.area === 'full' ? 'fullPage: true' : '', jpeg ? `type: 'jpeg', quality: ${Number(c.quality) || 80}` : ''].filter(Boolean);
+        this.line(`{ const shot = await ${target}.screenshot(${this.opt(options)}); await test.info().attach(${js(label)}, { body: shot, contentType: ${js(jpeg ? 'image/jpeg' : 'image/png')} }); data = { ...data, screenshotId: ${js(node.id)} }; }`);
+        break;
+      }
+      case 'wait-for-download':
+        this.line(`data = { ...data, ...(await waitForDownload(${tab(c)}, ${template(c.url)}, ${js(c.read || 'none')}${this.timeoutMs !== undefined ? `, ${this.timeoutMs}` : ''})) };`);
+        if (String(c.dataset ?? '').trim() && (c.read === 'csv' || c.read === 'json')) this.line(`// BlockFlow-only: saving the rows to the dataset ${commentText(c.dataset)} (use data.rows / data.data).`);
+        break;
+      case 'cookies-storage': {
+        const action = js(c.action || 'get');
+        if ((c.area ?? 'cookies') === 'cookies') {
+          const site = String(c.url ?? '').trim() ? template(c.url) : `${tab(c)}.url()`;
+          const set = [
+            `name: ${template(c.name)}`,
+            `value: ${template(c.value)}`,
+            String(c.domain ?? '').trim() ? `domain: ${template(c.domain)}, path: ${js(String(c.path ?? '').trim() || '/')}` : `url: ${site}`,
+            Number(c.maxAgeSeconds) > 0 ? `expires: Math.round(Date.now() / 1000) + ${Number(c.maxAgeSeconds)}` : '',
+            c.httpOnly ? 'httpOnly: true' : '',
+            c.secure ? 'secure: true' : '',
+            c.sameSite ? `sameSite: ${js(c.sameSite)}` : '',
+          ].filter(Boolean);
+          this.line(`data = { ...data, ...(await cookies(context, ${site}, ${action}, ${template(c.name)}${c.action === 'set' ? `, { ${set.join(', ')} }` : ''})) };`);
+        } else {
+          this.line(`data = { ...data, ...(await pageStorage(${tab(c)}, ${js(c.area)}, ${action}, ${template(c.name)}, ${template(c.value)})) };`);
+        }
+        break;
+      }
       case 'timer':
         if (this.fed(node)) {
           // After another block a Timer is a delay.
@@ -465,13 +495,20 @@ class Writer {
       case 'url':
         this.line(`await ${tab(c)}.waitForURL(urlPattern(${template(c.url)})${this.optArg()});`);
         break;
-      case 'response':
-        this.line(`data = { ...data, response: await waitForResponse(${tab(c)}, ${template(c.url)}, ${js(c.status)}${this.timeoutMs !== undefined ? `, ${this.timeoutMs}` : ''}) };`);
+      case 'response': {
+        const method = String(c.method ?? '').trim();
+        const extra = method || c.captureBody ? `, ${js(method)}, ${c.captureBody ? 'true' : 'false'}` : '';
+        const timeout = this.timeoutMs !== undefined ? `, ${this.timeoutMs}` : extra ? ', undefined' : '';
+        this.line(`data = { ...data, response: await waitForResponse(${tab(c)}, ${template(c.url)}, ${js(c.status)}${timeout}${extra}) };`);
+        break;
+      }
+      case 'request':
+        this.line(`data = { ...data, request: await waitForRequest(${tab(c)}, ${template(c.url)}, ${js(String(c.method ?? '').trim())}${this.timeoutMs !== undefined ? `, ${this.timeoutMs}` : ''}) };`);
         break;
       default:
         this.line(`await ${tab(c)}.waitForLoadState(${js(mode === 'networkidle' ? 'networkidle' : 'load')}${this.optArg()});`);
     }
-    if (mode !== 'response') this.line(`data = { ...data, url: ${tab(c)}.url() };`);
+    if (mode !== 'response' && mode !== 'request') this.line(`data = { ...data, url: ${tab(c)}.url() };`);
   }
 
   /**
@@ -635,16 +672,29 @@ async function retry<T>(retries: number, action: () => Promise<T>): Promise<T> {
 }
 
 /** What happened in the browser so far: new pages (popups), responses (Wait For response), dialogs. */
-const seen = { pages: [] as { page: Page; at: number }[], responses: [] as { response: Response; at: number }[], ours: new WeakSet<Page>() };
+const seen = {
+  pages: [] as { page: Page; at: number }[],
+  responses: [] as { response: Response; at: number }[],
+  requests: [] as { request: Request; at: number }[],
+  downloads: [] as { download: Download; at: number }[],
+  used: new WeakSet<object>(),
+  ours: new WeakSet<Page>(),
+};
 const dialogAnswers = new WeakMap<Page, { action: string; text: string; shown: { type: string; message: string }[] }>();
 
 /** Starts recording; called first thing in the test. */
 function watch(context: BrowserContext, page: Page) {
   seen.ours.add(page);
   trackDialogs(page);
+  trackDownloads(page);
   context.on('page', (opened) => {
     seen.pages.push({ page: opened, at: Date.now() });
     trackDialogs(opened);
+    trackDownloads(opened);
+  });
+  context.on('request', (request) => {
+    seen.requests.push({ request, at: Date.now() });
+    if (seen.requests.length > 500) seen.requests.shift();
   });
   context.on('response', (response) => {
     seen.responses.push({ response, at: Date.now() });
@@ -676,10 +726,16 @@ function statusFits(status: number, wanted: string): boolean {
   return options.some((option) => (/^\\dxx$/.test(option) ? Math.floor(status / 100) === Number(option[0]) : Number(option) === status));
 }
 
+/** "POST", "get,post" or "" for any. */
+function methodFits(method: string, wanted: string): boolean {
+  const options = wanted.split(',').map((part) => part.trim().toUpperCase()).filter(Boolean);
+  return options.length === 0 || options.includes(method.toUpperCase());
+}
+
 /** Wait For "a network request finishes": a matching response of this tab in the last 10 s, or the next one. */
-async function waitForResponse(tab: Page, pattern: string, status = '', timeout?: number) {
+async function waitForResponse(tab: Page, pattern: string, status = '', timeout?: number, method = '', withBody = false) {
   const fits = (response: Response) => {
-    if (!statusFits(response.status(), status) || !urlPatternModule.urlMatches(response.url(), pattern)) return false;
+    if (!statusFits(response.status(), status) || !urlPatternModule.urlMatches(response.url(), pattern) || !methodFits(response.request().method(), method)) return false;
     try {
       return response.frame().page() === tab;
     } catch {
@@ -689,7 +745,82 @@ async function waitForResponse(tab: Page, pattern: string, status = '', timeout?
   const since = Date.now() - 10_000;
   const response = seen.responses.find(({ response, at }) => at >= since && fits(response))?.response ?? (await tab.waitForResponse(fits, timeout ? { timeout } : {}));
   await response.finished();
-  return { url: response.url(), status: response.status(), method: response.request().method() };
+  const result: any = { url: response.url(), status: response.status(), method: response.request().method() };
+  if (withBody) result.body = await response.text();
+  return result;
+}
+
+/** Wait For "the page sends a request": a matching request of this tab in the last 10 s, or the next one. */
+async function waitForRequest(tab: Page, pattern: string, method = '', timeout?: number) {
+  const fits = (request: Request) => {
+    if (seen.used.has(request) || !urlPatternModule.urlMatches(request.url(), pattern) || !methodFits(request.method(), method)) return false;
+    try {
+      return request.frame().page() === tab;
+    } catch {
+      return false;
+    }
+  };
+  const since = Date.now() - 10_000;
+  const request = seen.requests.find(({ request, at }) => at >= since && fits(request))?.request ?? (await tab.waitForRequest(fits, timeout ? { timeout } : {}));
+  seen.used.add(request);
+  const postData = request.postData();
+  return { url: request.url(), method: request.method(), type: request.resourceType(), ...(postData !== null ? { postData } : {}) };
+}
+
+function trackDownloads(tab: Page) {
+  tab.on('download', (download) => seen.downloads.push({ download, at: Date.now() }));
+}
+
+/** Wait for Download: a download of this tab in the last 15 s (or the next one), optionally read. */
+async function waitForDownload(tab: Page, pattern: string, read: string, timeout?: number) {
+  const fits = (download: Download) => !seen.used.has(download) && (!pattern || urlPatternModule.urlMatches(download.url(), pattern) || urlPatternModule.urlMatches(download.suggestedFilename(), pattern));
+  const since = Date.now() - 15_000;
+  const download = seen.downloads.find(({ download, at }) => at >= since && fits(download))?.download ?? (await tab.waitForEvent('download', { predicate: fits, ...(timeout ? { timeout } : {}) }));
+  seen.used.add(download);
+  const path = await download.path();
+  const { readFile, stat } = await import('node:fs/promises');
+  const result: any = { download: { filename: download.suggestedFilename(), url: download.url(), path, size: (await stat(path)).size, mime: '' } };
+  if (read === 'none') return result;
+  const text = await readFile(path, 'utf8');
+  if (read === 'csv') result.rows = csvModule.csvToObjects(text);
+  else if (read === 'json') result.data = JSON.parse(text);
+  else result.content = text;
+  return result;
+}
+
+/** Cookies & Storage, cookies: get / set / delete / clear for one site (like the extension's cookies API). */
+async function cookies(context: BrowserContext, url: string, action: string, name = '', cookie?: any) {
+  if (action === 'set') {
+    await context.addCookies([cookie]);
+    return { value: cookie.value };
+  }
+  const found = (await context.cookies(url)).filter((candidate) => !name || candidate.name === name);
+  if (action === 'get') return { value: name ? (found[0]?.value ?? null) : Object.fromEntries(found.map((candidate) => [candidate.name, candidate.value])), cookies: found };
+  for (const candidate of found) await context.clearCookies({ name: candidate.name, domain: candidate.domain, path: candidate.path });
+  return { deleted: found.length };
+}
+
+/** Cookies & Storage, localStorage / sessionStorage: get / set / delete / clear in the page. */
+async function pageStorage(tab: Page, area: string, action: string, key = '', value = '') {
+  return tab.evaluate(([area, action, key, value]) => {
+    const store = area === 'local' ? localStorage : sessionStorage;
+    if (action === 'set') {
+      store.setItem(key, value);
+      return { value };
+    }
+    if (action === 'delete') {
+      const deleted = store.getItem(key) === null ? 0 : 1;
+      store.removeItem(key);
+      return { deleted };
+    }
+    if (action === 'clear') {
+      const deleted = store.length;
+      store.clear();
+      return { deleted };
+    }
+    if (key) return { value: store.getItem(key) };
+    return { value: Object.fromEntries(Object.keys(store).map((name) => [name, store.getItem(name)])) };
+  }, [area, action, key, value]);
 }
 
 /** Records a page's dialogs and answers them with its latest Dialogs choice (dismiss until one). */
@@ -814,7 +945,7 @@ export function workflowToPlaywright(workflow: Workflow, options: ExportOptions)
   return `// Exported from BlockFlow: "${workflow.name.replace(/\n/g, ' ')}".
 // Run with: npx playwright test${secretNames.length ? `\n// Secrets come from environment variables: ${secretNames.map(envName).join(', ')}` : ''}
 import { expect, test } from '@playwright/test';
-import type { APIRequestContext, BrowserContext, Locator, Page, Response } from '@playwright/test';
+import type { APIRequestContext, BrowserContext, Download, Locator, Page, Request, Response } from '@playwright/test';
 
 /** {{secret.name}} values. */
 const SECRETS: Record<string, string> = {${secrets.length ? ` ${secrets.join(', ')} ` : ''}};
