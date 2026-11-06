@@ -1,0 +1,106 @@
+{
+  "format": "blockflow-evals",
+  "version": 1,
+  "about": "Authoring tasks for measuring how well a model writes BlockFlow workflows from llms.txt alone (PLAN.md L10, IMPLEMENTATION.md M1.6). Each task is run against the fixture site (tests/e2e/server.mjs); {{BASE}} is its origin, e.g. http://127.0.0.1:41234. A task passes when the model's workflow imports with no error issues, runs, and every check holds. The goal for v1.0 is that 9 of 10 pass in at most 2 tries, where a retry gets the import issues or the failed run's step code and message.",
+  "checkKinds": {
+    "status": "The run's final status equals `equals`.",
+    "output": "Some step's output has the value at `path` (dot path, `length` allowed on lists and strings) equal to `equals`, or containing `contains` (strings, and lists by JSON).",
+    "step-type": "The workflow uses at least one block of type `type` (keeps the task honest, e.g. a scrape must not hard-code its answer)."
+  },
+  "tasks": [
+    {
+      "id": "login-ok",
+      "title": "Log in and check the welcome page",
+      "prompt": "Open {{BASE}}/login.html. Sign in with the email me@example.com and the password from the secret named \"password\", choose the country Bangladesh, tick \"Remember me\", and submit. Then check that the main heading says \"Welcome, me!\".",
+      "secrets": { "password": "Op3n-Sesame!" },
+      "checks": [
+        { "kind": "status", "equals": "passed" },
+        { "kind": "step-type", "type": "assert" }
+      ]
+    },
+    {
+      "id": "login-wrong-password",
+      "title": "A wrong password shows the error",
+      "prompt": "Open {{BASE}}/login.html, sign in with me@example.com and the password \"nope\", and check that the page then shows the message \"Wrong email or password.\".",
+      "checks": [
+        { "kind": "status", "equals": "passed" },
+        { "kind": "step-type", "type": "assert" }
+      ]
+    },
+    {
+      "id": "scrape-table",
+      "title": "Scrape a price table",
+      "prompt": "Open {{BASE}}/table.html and extract every row of the price table as a list of items with the product name and price. The workflow's data should end up with 3 items, the first being Kettle at $25.",
+      "checks": [
+        { "kind": "status", "equals": "passed" },
+        { "kind": "output", "path": "rows.length", "equals": 3 },
+        { "kind": "output", "path": "rows", "contains": "Kettle" }
+      ]
+    },
+    {
+      "id": "paginate-products",
+      "title": "Collect a paged product list",
+      "prompt": "{{BASE}}/products?page=1 lists products 3 per page with a \"Next\" link until the last page. Collect the name and price of every product on every page into a dataset named \"products\".",
+      "checks": [
+        { "kind": "status", "equals": "passed" },
+        { "kind": "step-type", "type": "paginate" },
+        { "kind": "output", "path": "pages", "equals": 3 }
+      ]
+    },
+    {
+      "id": "infinite-feed",
+      "title": "Load an infinite feed",
+      "prompt": "{{BASE}}/feed.html loads 10 more posts each time you scroll near the bottom, up to 40. Scroll until all posts are loaded and count the posts (elements with the class \"post\"). The count must be 40.",
+      "checks": [
+        { "kind": "status", "equals": "passed" },
+        { "kind": "output", "path": "value", "equals": "40" }
+      ]
+    },
+    {
+      "id": "upload-file",
+      "title": "Upload through a hidden file input",
+      "prompt": "On {{BASE}}/upload.html, upload a text file named notes.txt containing \"hello\" through the \"Upload CV\" field, then check that the page shows \"notes.txt|text/plain|hello\".",
+      "checks": [
+        { "kind": "status", "equals": "passed" },
+        { "kind": "step-type", "type": "upload-file" }
+      ]
+    },
+    {
+      "id": "dialogs",
+      "title": "Answer confirm and prompt dialogs",
+      "prompt": "On {{BASE}}/dialogs.html, click \"Delete\" and accept the confirmation, check that the page says \"deleted\". Then click \"Your name\", answer the prompt with \"Akib\" and check that the page says \"Hi Akib\".",
+      "checks": [
+        { "kind": "status", "equals": "passed" },
+        { "kind": "step-type", "type": "dialogs" }
+      ]
+    },
+    {
+      "id": "spa-signup",
+      "title": "Sign up in a single-page app",
+      "prompt": "{{BASE}}/spa/ is a single-page app with a cookie banner covering it. Accept the cookies, fill the sign-up form (full name Ada Lovelace, email ada@example.com, plan Pro, accept the terms), create the account, and check that the page then says \"Thanks, Ada Lovelace!\" and that the URL ends with /spa/done.",
+      "checks": [
+        { "kind": "status", "equals": "passed" },
+        { "kind": "step-type", "type": "assert" }
+      ]
+    },
+    {
+      "id": "shadow-newsletter",
+      "title": "A form inside a web component",
+      "prompt": "On {{BASE}}/shadow.html, the newsletter form lives inside a web component. Enter ada@example.com as your email, press Join, and check that the status says \"Joined as ada@example.com\".",
+      "checks": [
+        { "kind": "status", "equals": "passed" },
+        { "kind": "step-type", "type": "assert" }
+      ]
+    },
+    {
+      "id": "popup-read",
+      "title": "Read from a popup window",
+      "prompt": "On {{BASE}}/popup.html, the \"Open help\" button opens a popup window. Open it and read the text of the first table header cell in the popup. The value must be \"Product\". Close the popup at the end.",
+      "checks": [
+        { "kind": "status", "equals": "passed" },
+        { "kind": "step-type", "type": "wait-for-popup" },
+        { "kind": "output", "path": "value", "equals": "Product" }
+      ]
+    }
+  ]
+}

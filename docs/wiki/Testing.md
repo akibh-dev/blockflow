@@ -69,6 +69,7 @@ against real Chromium.
 | [core/workflow.test.ts](../../tests/core/workflow.test.ts) | `diffWorkflows`, `rootSignature`, `createWorkflow`, sample workflows, timer keys, `uid` |
 | [core/library.test.ts](../../tests/core/library.test.ts) | `uniqueName`, clone / duplicate, export / import |
 | [core/migrate.test.ts](../../tests/core/migrate.test.ts) | v1 → v2 key renames (`selector`/`next` → `locator`), no-op on current workflows, old keys accepted on import |
+| [core/evals.test.ts](../../tests/core/evals.test.ts) | The authoring eval set ([tests/evals/tasks.json](../../tests/evals/tasks.json)) is well formed: ten tasks, known check kinds and block types, fixture pages that exist |
 | [core/expression.test.ts](../../tests/core/expression.test.ts) | Expression language and templates with expressions |
 | [core/template.test.ts](../../tests/core/template.test.ts) | `render`, `hasTemplate`, `getPath` |
 | [core/csv.test.ts](../../tests/core/csv.test.ts) | CSV parse / write |
