@@ -1,6 +1,7 @@
 # Implementation plan
 
-> **Status:** 2026-11-05. **M0 done** (branch `m0-stabilise`, v0.2.0); M1 is next. This is the
+> **Status:** 2026-11-06. **M0 done** (v0.2.0), **M1 done** (branch `m1-script-first`, v0.3.0); M2 is next
+> (M3 and M4 may start in parallel). This is the
 > task-level plan for [PLAN.md](PLAN.md): *what* to build is decided there (goal, gaps, decisions in §8).
 > This file says *how*, in which order, with which files, tests and docs. Tick tasks off here as they
 > land, and update the matching wiki pages in the same change.
@@ -125,7 +126,7 @@ coverage; e2e runs in CI; Firefox checklist passes; wiki updated; v0.2 tagged.
 Goal: a model with only `llms.txt` writes a passing login test in one or two tries, using BlockFlow's
 errors to repair its own script.
 
-### M1.1 Strict validation with paths, codes and suggestions (L1)
+### M1.1 Strict validation with paths, codes and suggestions (L1) ✅
 
 - **New module `src/core/check.ts`**: `checkFile(raw: unknown, registry): Issue[]` runs on the *raw*
   file before ids are replaced, so paths and ids are the author's. `Issue = { level, code, path, message,
@@ -148,7 +149,7 @@ errors to repair its own script.
   with their paths; warnings import with a banner.
 - Tests: one fixture per code in `tests/core/check.test.ts`.
 
-### M1.2 Linear `steps` format (L2) and auto-layout (L3)
+### M1.2 Linear `steps` format (L2) and auto-layout (L3) ✅
 
 ```json
 { "format": "blockflow-script", "version": 1, "name": "Login test",
@@ -171,7 +172,7 @@ errors to repair its own script.
 - Import accepts both formats; the guide and `llms.txt` teach the script format first (decision §8.5).
 - Tests: round-trip of every guide example (graph → script → graph is isomorphic), layout snapshot tests.
 
-### M1.3 Page snapshot for authoring (L4)
+### M1.3 Page snapshot for authoring (L4) ✅
 
 - **New page op `snapshot`** (`src/core/page.ts`, `src/dom/agent.ts`, jsdom tests): walks the
   accessibility tree (`aria.ts` roles and names), skipping hidden nodes, and returns a compact outline:
@@ -182,7 +183,7 @@ errors to repair its own script.
   copies the outline (useful when chatting with an LLM before M4 exists).
 - Same op later backs the MCP tool `snapshot_page` (M4) and the ARIA assert (M5).
 
-### M1.4 Machine-readable results (L5)
+### M1.4 Machine-readable results (L5) ✅
 
 - `StepRecord` gains `code` (from a small error taxonomy: `locator.not-found`, `locator.strict`,
   `element.not-visible`, `element.disabled`, `element.covered`, `timeout`, `assert.failed`, `http.status`,
@@ -193,20 +194,30 @@ errors to repair its own script.
   `origin`), so a report maps back to the script.
 - JSON report export gets a versioned schema (`docs/guide/report.schema.json`, generated).
 
-### M1.5 Versioning and migrations (L9) and key renames (§8.6)
+### M1.5 Versioning and migrations (L9) and key renames (§8.6) ✅
 
 - `src/core/migrate.ts`: `migrate(workflow) → Workflow` applied on load and import. `schemaVersion: 2`
   renames `selector` → `locator` (Read Element, Watch Element) and `next` → `locator` (Paginate); old keys
   still accepted in files (migrated, with a `config.key.renamed` info issue).
 - Tests: v1 fixtures of every changed block load as v2; the stored list is rewritten once.
 
-### M1.6 Docs for models (L10)
+### M1.6 Docs for models (L10) ✅
 
 - Guide: the script format first, a "Repair" table (code → fix), the snapshot workflow, examples
   converted to scripts (graph versions kept and tested).
 - `llms.txt` points to the script format, the schema, the repair table.
 - An eval set: 10 tasks against `tests/fixtures/site` (login, scrape, upload…) with expected outcomes,
   runnable later through the CLI (M4) to measure "passes in ≤ 2 tries".
+
+**As built (v0.3.0).** Import checking: `check.ts` (codes, JSON Pointers, did-you-mean in `suggest.ts`),
+blocks' `validate` hooks shared with the editor, an issues dialog with Copy. Scripts: `script.ts` (aliases,
+shorthands, If rejoin, several scripts per file, Export as script), `layout.ts` (also Tidy up); script
+files get the same strict check with paths moved back to the author's steps. Snapshot: page op `snapshot`
+(`src/dom/snapshot.ts`), block `page-snapshot`, "📸 Snapshot page" on Open Tab. Results: `errors.ts`
+(24 codes), `StepRecord.code/locator/url/matches/sourceId`, `report.schema.json`. Migration: `migrate.ts`
+(schema v2). Docs: script format first in the guide and `llms.txt`, Repair and error-code tables; eval set
+with reference solutions scored by `npm run e2e -- evals`. **Not yet measured:** whether a model passes in
+≤ 2 tries; that needs the CLI (M4.3) to run the eval set against a model.
 
 **M1 done when:** strict check + codes + suggestions in import and editor, script format with
 round-trip tests, snapshot op and block, coded step errors, v2 migration, docs; wiki pages
@@ -343,7 +354,7 @@ site, the CLI runs the guide examples in CI, and suites produce a combined JUnit
 | Milestone | Branch | Status |
 | --- | --- | --- |
 | M0 | `m0-stabilise` | ✅ Done: 395 unit tests, 122 Chromium e2e checks (Brave), 14 Firefox e2e checks |
-| M1 | `m1-script-first` | Not started |
+| M1 | `m1-script-first` | ✅ Done: 544 unit tests, 154 Chromium e2e checks in 14 specs (system Chromium), 14 Firefox e2e checks; eval set: 10/10 reference solutions pass |
 | M2 | `m2-essentials` | Not started |
 | M3 | `m3-network` | Not started |
 | M4 | `m4-outside-access` | Not started |
