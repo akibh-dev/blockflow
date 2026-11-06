@@ -355,11 +355,13 @@ register a bridge content script on `http://127.0.0.1/*`
 `{ bfE2e, op, arg }` (`send` a runtime message, `get` from `storage.local`, `ping`) and the bridge answers.
 Workflows run through `bf:run-workflow`, exactly like the Chromium specs.
 
-The 24 checks cover forms, HTML parsing without an offscreen document, `storage.session` watch tabs,
+The 30 checks cover forms, HTML parsing without an offscreen document, `storage.session` watch tabs,
 upload, popups, dialogs, IndexedDB datasets, in-run delays, screenshots on failure, Notify, the
 "Chromium only" errors for Run Script, real input and response bodies, and M2: Wait for Download (real file
 names, CSV and `blob:` JSON), Screenshot in all three areas through `tabs.captureTab`, Cookies & Storage,
-and Wait For request. CI runs it in the `e2e-firefox` job.
+Wait For request, locator filters and role states, the new Assert subjects, click options, Element Action
+(focus in a background tab, a CustomEvent), synthetic Drag (HTML5 list and pointer slider) and a drop zone.
+CI runs it in the `e2e-firefox` job.
 
 ## Manual test pages
 

@@ -298,6 +298,12 @@ page `url` and, for strict-mode errors, `matches`; the engine copies them onto t
 - `src/dom/*` runs inside web pages: only `import type` from the extension, plus pure `src/core` modules
   ([locatorSyntax.ts](../../src/core/locatorSyntax.ts)). No `browser.*`.
 - `isTrusted` is false for everything; sites that check it need real input.
+- Firefox, background tab: `element.focus()` moves focus without firing `focus`/`blur` (the window has no
+  focus). `focus()` and `blur()` in `agent.ts` notice that the event did not fire and dispatch
+  `focus`+`focusin` / `blur`+`focusout` themselves; in Chrome the native events fire and nothing is added.
+- Firefox, drop zones: during an untrusted `drop`, a content-script DataTransfer shows its file in `items` but
+  an empty `files`. `exposeFiles` defines `files` on the page's view of the transfer (`wrappedJSObject`)
+  from a second DataTransfer; no-op in Chrome.
 - Opacity-0 and off-screen-clipped elements count as visible.
 - `select` only drives native `<select>`; custom dropdowns are clicks.
 - New op checklist: add it to `AgentRequest` in `page.ts`, a `case` in `attempt`, a jsdom test in

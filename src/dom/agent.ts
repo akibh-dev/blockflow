@@ -284,7 +284,35 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   function focus(element: Element): void {
     const focusable = (element.closest('a[href], button, input, select, textarea, [tabindex], [contenteditable=""], [contenteditable="true"]') ??
       element) as HTMLElement;
-    if (typeof focusable.focus === 'function') focusable.focus();
+    if (typeof focusable.focus !== 'function') return;
+    // A tab that is not showing has no focused window, and then Firefox moves focus without firing the
+    // focus events. Fire them ourselves in that case (Chrome fires them; then nothing is added).
+    let fired = false;
+    const seen = () => {
+      fired = true;
+    };
+    focusable.addEventListener('focus', seen, { once: true });
+    focusable.focus();
+    focusable.removeEventListener('focus', seen);
+    if (!fired && focusable.ownerDocument.activeElement === focusable) {
+      focusable.dispatchEvent(new win.FocusEvent('focus', { bubbles: false, composed: true }));
+      focusable.dispatchEvent(new win.FocusEvent('focusin', { bubbles: true, composed: true }));
+    }
+  }
+
+  /** Takes focus away from `element`, firing blur / focusout when the browser does not (see `focus`). */
+  function blur(element: HTMLElement): void {
+    let fired = false;
+    const seen = () => {
+      fired = true;
+    };
+    element.addEventListener('blur', seen, { once: true });
+    element.blur?.();
+    element.removeEventListener('blur', seen);
+    if (!fired && element.ownerDocument.activeElement !== element) {
+      element.dispatchEvent(new win.FocusEvent('blur', { bubbles: false, composed: true }));
+      element.dispatchEvent(new win.FocusEvent('focusout', { bubbles: true, composed: true }));
+    }
   }
 
   /** A point of the element in its document's viewport: `position` from its top-left corner, or its center. */
@@ -934,6 +962,24 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return stand as unknown as DataTransfer;
   }
 
+  /**
+   * Firefox: a DataTransfer made by a content script shows its files in `items` but an empty `files` to the
+   * page during an untrusted drop, and pages read `files`. Give the page's view of the transfer its own
+   * `files`: the FileList of a second DataTransfer that is not part of a drag. Elsewhere `wrappedJSObject`
+   * does not exist and nothing changes.
+   */
+  function exposeFiles(transfer: DataTransfer, files: File[]): void {
+    const page = (transfer as unknown as { wrappedJSObject?: object }).wrappedJSObject;
+    if (!page || files.length === 0 || typeof win.DataTransfer !== 'function') return;
+    try {
+      const holder = new win.DataTransfer();
+      for (const file of files) holder.items.add(file);
+      Reflect.defineProperty(page, 'files', { value: holder.files, configurable: true });
+    } catch {
+      // Leave the transfer as it is.
+    }
+  }
+
   /** Dispatches one drag event carrying `transfer`; returns false when the page cancelled it. */
   function dragEvent(target: Element, type: string, point: { x: number; y: number }, transfer: DataTransfer, flags: ModifierFlags = {}): boolean {
     const init: DragEventInit = {
@@ -1044,7 +1090,9 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   function dropFiles(locator: string, files: UploadFile[]): Done {
     const zone = one(locator);
     ready(zone, {});
-    const transfer = dataTransfer(toFiles(files));
+    const fileList = toFiles(files);
+    const transfer = dataTransfer(fileList);
+    exposeFiles(transfer, fileList);
     const point = pointIn(zone);
     dragEvent(zone, 'dragenter', point, transfer);
     if (dragEvent(zone, 'dragover', point, transfer)) {
@@ -1272,7 +1320,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       case 'blur': {
         const element = one(request.locator);
         const active = element.ownerDocument.activeElement;
-        if (active && (active === element || element.contains(active))) (active as HTMLElement).blur?.();
+        if (active && (active === element || element.contains(active))) blur(active as HTMLElement);
         return { blurred: describeElement(element) };
       }
       case 'clear': {

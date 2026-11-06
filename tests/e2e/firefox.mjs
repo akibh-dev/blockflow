@@ -294,6 +294,62 @@ try {
   }
 
   {
+    // M2 page work, synthetic input (real input is Chromium-only): locator filters, role states, the new
+    // Assert subjects, click options, Element Action, Drag, drop zones. Same fixtures as the Chromium specs.
+    const locators = await run(workflow('m2 locators', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/m2.html`, active: false } },
+      { id: 'del', type: 'click', config: { locator: 'role=listitem >> has-text=Banana >> role=button[name="Delete"]' } },
+      { id: 'deleted', type: 'assert', config: { subject: 'text', locator: '#status', operator: 'equals', expected: 'deleted Banana' } },
+      { id: 'rows', type: 'assert', config: { subject: 'count', locator: 'li >> visible >> has=button', operator: 'equals', expected: '2' } },
+      { id: 'bold', type: 'click', config: { locator: 'role=button[name="Bold"][pressed=false]' } },
+      { id: 'pressed', type: 'assert', config: { subject: 'text', locator: 'role=button[pressed]', operator: 'equals', expected: 'Bold' } },
+      { id: 'save', type: 'click', config: { locator: '#missing || button >> has-text=Save >> visible' } },
+      { id: 'saved', type: 'assert', config: { subject: 'text', locator: '#status', operator: 'equals', expected: 'saved' } },
+      { id: 'class', type: 'assert', config: { subject: 'class', locator: '#save', operator: 'contains', expected: 'primary' } },
+      { id: 'css', type: 'assert', config: { subject: 'css', locator: '#save', name: 'color', operator: 'equals', expected: 'rgb(0, 128, 0)' } },
+      { id: 'name', type: 'assert', config: { subject: 'accessible-name', locator: '#email', operator: 'equals', expected: 'Email address' } },
+      { id: 'editable', type: 'assert', config: { subject: 'editable', locator: '#email' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    check('locator filters, ||, role states, class / css / accessible-name / editable asserts', locators.status === 'passed', summary(locators));
+
+    const clicks = await run(workflow('m2 clicks', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/clicks.html`, active: false } },
+      { id: 'mid', type: 'click', config: { locator: '#target', button: 'middle', modifiers: 'Shift', position: '5,6' } },
+      { id: 'triple', type: 'click', config: { locator: '#target', clickCount: 3, modifiers: 'Control+Alt', position: '20,10' } },
+      { id: 'read', type: 'read-element', config: { locator: '#log', url: '' } },
+      { id: 'focus', type: 'element-action', config: { locator: 'label=Name', action: 'focus' } },
+      { id: 'r1', type: 'read-element', config: { locator: '#focus-state', url: '' } },
+      { id: 'event', type: 'element-action', config: { locator: '#custom-target', action: 'dispatch-event', eventType: 'my-event', detail: '{"n": 2}' } },
+      { id: 'r2', type: 'read-element', config: { locator: '#custom', url: '' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    const log = String(step(clicks, 'read')?.output?.value ?? '').split(';').map((line) => line.trim()).filter(Boolean);
+    const wanted = ['auxclick 1 1 Shift 5,6 false', 'click 0 1 Alt+Control 20,10 false', 'click 0 2 Alt+Control 20,10 false', 'dblclick 0 2 Alt+Control 20,10 false', 'click 0 3 Alt+Control 20,10 false'];
+    check('click options: middle button, modifiers, position, click count', JSON.stringify(log) === JSON.stringify(wanted), `${JSON.stringify(log)} ${summary(clicks)}`);
+    check('Element Action: focus, CustomEvent with detail', step(clicks, 'r1')?.output?.value === 'focused' && step(clicks, 'r2')?.output?.value === 'custom-target {"n":2}', `${step(clicks, 'r1')?.output?.value} | ${step(clicks, 'r2')?.output?.value} ${summary(clicks)}`);
+
+    const drag = await run(workflow('m2 drag', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/dnd.html`, active: false } },
+      { id: 'sort', type: 'drag', config: { from: '#list >> text=Apple', to: '#list >> text=Cherry' } },
+      { id: 'order', type: 'read-element', config: { locator: '#order', url: '' } },
+      { id: 'slide', type: 'drag', config: { from: 'role=slider', to: '#track', toPosition: '150,10' } },
+      { id: 'value', type: 'read-element', config: { locator: '#value', url: '' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    const dropped = await run(workflow('m2 drop zone', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/upload.html`, active: false } },
+      { id: 'drop', type: 'upload-file', config: { locator: 'text=Drop files here', target: 'dropzone', content: 'hello', filename: 'hi.txt' } },
+      // The page reads the file asynchronously (file.text()): wait for it to show.
+      { id: 'shown', type: 'wait-for', config: { mode: 'text', locator: '#dropped', text: 'hi.txt' }, step: { timeoutSeconds: 5 } },
+      { id: 'read', type: 'read-element', config: { locator: '#dropped', url: '' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    check('Upload File onto a drop zone', step(dropped, 'read')?.output?.value === 'hi.txt|text/plain|hello', `${JSON.stringify(step(dropped, 'read')?.output)} ${summary(dropped)}`);
+    check('Drag: HTML5 sortable list and pointer slider', step(drag, 'order')?.output?.value === 'Banana,Cherry,Apple' && step(drag, 'value')?.output?.value === '75', `${step(drag, 'order')?.output?.value} ${step(drag, 'value')?.output?.value} ${summary(drag)}`);
+  }
+
+  {
     // M2: downloads, screenshots (tabs.captureTab), cookies and storage, requests.
     const downloads = await run(workflow('downloads', [
       { id: 'open', type: 'open-url', config: { url: `${base}/m2-browser.html`, active: false } },
