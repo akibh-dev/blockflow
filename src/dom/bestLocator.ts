@@ -19,23 +19,29 @@ function short(text: string | null | undefined, max = 60): string | null {
   return value && value.length <= max ? value : null;
 }
 
-/** The locator resolves (from the element's document) to exactly this element. */
-function finds(locator: string, element: Element): boolean {
-  try {
-    const found = resolveLocator(locator, element.ownerDocument);
-    return found.length === 1 && found[0] === element;
-  } catch {
-    return false;
+/**
+ * The locator resolves (from the element's document) to exactly this element. `cache` (locator →
+ * matches, one per document) saves resolving the same idea again for similar elements.
+ */
+function finds(locator: string, element: Element, cache?: Map<string, Element[]>): boolean {
+  let found = cache?.get(locator);
+  if (!found) {
+    try {
+      found = resolveLocator(locator, element.ownerDocument);
+    } catch {
+      found = [];
+    }
+    cache?.set(locator, found);
   }
+  return found.length === 1 && found[0] === element;
 }
 
 /**
- * Up to `max` locators for `element`, best first. Ideas are tried in this order and kept only if
- * they match exactly this element: testid, label / placeholder (form fields), role+name,
- * role+name exact (not form fields), text (not form fields), alt, title, `tag[name=...]` (form
- * fields; radios add `[value=...]`). The generated CSS selector is always appended last.
+ * Locator ideas for `element`, best first, not yet checked: testid, label / placeholder (form fields),
+ * role+name, role+name exact (not form fields), text (not form fields), alt, title, `tag[name=...]`
+ * (form fields; radios add `[value=...]`).
  */
-export function locatorCandidates(element: Element, max = 5): string[] {
+function locatorIdeas(element: Element): string[] {
   const ideas: string[] = [];
   const testId = TEST_IDS.map((name) => element.getAttribute(name)).find(Boolean);
   if (testId) ideas.push(`testid=${testId}`);
@@ -64,10 +70,28 @@ export function locatorCandidates(element: Element, max = 5): string[] {
     const value = (element as HTMLInputElement).type === 'radio' ? `[value=${quote((element as HTMLInputElement).value)}]` : '';
     ideas.push(`${element.localName}[name=${quote(nameAttr)}]${value}`);
   }
+  return [...new Set(ideas)];
+}
 
-  const unique = [...new Set(ideas)].filter((idea) => finds(idea, element));
+/**
+ * Up to `max` locators for `element`, best first: the {@link locatorIdeas} that match exactly this
+ * element. The generated CSS selector is always appended last.
+ */
+export function locatorCandidates(element: Element, max = 5): string[] {
+  const unique = locatorIdeas(element).filter((idea) => finds(idea, element));
   const css = generateSelector(element);
   return [...unique.slice(0, Math.max(0, max - 1)), ...(unique.includes(css) ? [] : [css])];
+}
+
+/**
+ * The first idea that finds exactly this element, else the generated CSS selector. Same answer as
+ * {@link bestLocator}, but stops at the first match, and with a `cache` shared between calls (one per
+ * document, not kept across page changes) each idea is resolved once: page snapshots call it for
+ * hundreds of elements.
+ */
+export function firstLocator(element: Element, cache?: Map<string, Element[]>): string {
+  for (const idea of locatorIdeas(element)) if (finds(idea, element, cache)) return idea;
+  return generateSelector(element);
 }
 
 /** The first candidate, or the generated CSS selector. Used by the recorder and Detect fields. */

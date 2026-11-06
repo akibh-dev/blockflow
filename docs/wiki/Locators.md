@@ -203,6 +203,13 @@ element**:
 
 At most `max − 1` readable ideas are kept, then the CSS selector. `bestLocator` returns the first.
 
+`firstLocator(element, cache?)` gives the same answer as `bestLocator` but stops at the first idea that
+works; with a `cache` (locator → matches, one `Map` per document, only while the page does not change)
+each idea is resolved once for all elements. Page snapshots use it for every element they list.
+
+`role=` checks the name before the hidden state: `isHiddenForAria` reads computed styles up the tree,
+the most expensive test, so it only runs for elements that otherwise match.
+
 ### Structural CSS: `generateSelector(element)` (`selector.ts`)
 
 ```ts

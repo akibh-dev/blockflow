@@ -870,6 +870,30 @@
         },
         {
           "type": "object",
+          "title": "Page Snapshot",
+          "required": [
+            "page-snapshot"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Optional step id (kept as the node id; shown in run reports). Default s<N> for the Nth step."
+            },
+            "page-snapshot": {
+              "$ref": "#/$defs/config/page-snapshot"
+            },
+            "step": {
+              "$ref": "#/$defs/stepSettings"
+            },
+            "onError": {
+              "$ref": "#/$defs/steps",
+              "description": "Steps on the error output (sets step.onError to \"port\")."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "title": "Assert",
           "required": [
             "assert"
@@ -2069,6 +2093,27 @@
           "key": {
             "description": "Storage and cookies: one key. Empty = all of them.",
             "type": "string"
+          },
+          "tab": {
+            "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "page-snapshot": {
+        "type": "object",
+        "description": "Page Snapshot: Outline of what is on the page (roles, names, a locator for each element), to write steps from or keep with the run.",
+        "properties": {
+          "locator": {
+            "description": "Only this element and what is inside it. Empty = the whole page.",
+            "type": "string"
+          },
+          "maxLines": {
+            "description": "Long pages are cut here, with a note.",
+            "type": "number",
+            "minimum": 10,
+            "maximum": 10000
           },
           "tab": {
             "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",

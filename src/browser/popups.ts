@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { sleep } from './tabs';
+import { CodedError } from '../core/errors';
 
 /**
  * Tabs opened by other tabs (window.open, target=_blank), remembered for Wait for Popup. The
@@ -41,7 +42,7 @@ export async function waitForPopup(openerTabId: number, lookBackMs: number, time
       await browser.storage.session.set({ [KEY]: records.filter((record) => record !== found && record.tabId !== found.tabId) });
       return found.tabId;
     }
-    if (Date.now() >= deadline) throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s: no new tab was opened by this page`);
+    if (Date.now() >= deadline) throw new CodedError('timeout', `Timed out after ${Math.round(timeoutMs / 1000)}s: no new tab was opened by this page`);
     await sleep(200);
   }
 }

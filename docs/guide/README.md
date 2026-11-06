@@ -13,6 +13,7 @@ how to use BlockFlow** without reading the source code. Read it top to bottom on
 | [`blocks.json`](blocks.json) | The same, machine-readable. |
 | [`script.schema.json`](script.schema.json) | JSON Schema of a script file (the format to write): every block, alias, shorthand and branch key. |
 | [`workflow.schema.json`](workflow.schema.json) | JSON Schema of a graph file (what the editor exports), with every block's config (unknown keys not allowed). |
+| [`report.schema.json`](report.schema.json) | JSON Schema of the JSON report (Reports → Export JSON): runs, steps, [error codes](#error-codes). **Generated.** |
 | [`examples/`](examples) | Importable workflows, each as a script (`*.script.json`) and a graph (`*.blockflow.json`). A test checks both import without errors or warnings, to the same graph. |
 | [Repair](#repair-what-import-errors-mean) | What each import error code means and how to fix it. |
 
@@ -47,6 +48,9 @@ If you are changing BlockFlow's code rather than using it, read `CLAUDE.md` and 
 8. For tests, check results with **Assert**; for monitoring, with **If** + **Notify**.
 9. Values in templates are **strings**. Compare numbers with the numeric operators (`greater`,
    `less`…), which parse `1,250` and `$9.99`.
+10. Ask for a **page snapshot** before writing locators, and copy locators from it as they are
+    ([below](#getting-locators-from-a-page-snapshot)). When a run fails, read the step's **error code**
+    ([table](#error-codes)) and fix what it names.
 
 ---
 
@@ -238,6 +242,39 @@ Common roles: `button`, `link`, `textbox`, `checkbox`, `radio`, `combobox` (a `<
 with a message listing the matches. Add `>> nth=0` or make it more specific. Reads (Read Element,
 Assert text) use the first match.
 
+### Getting locators from a page snapshot
+
+A page snapshot is an outline of what is on a page, with a ready-made locator for each element that a
+step could use. Two ways to get one:
+
+- In the editor: select an **Open Tab** block and press **📸 Snapshot page**. BlockFlow opens its URL,
+  takes the snapshot and copies it to the clipboard. Paste it into the chat with the AI tool.
+- In a workflow: the **Page Snapshot** block (`type: "page-snapshot"`) outputs `snapshot` (the text) and
+  `elements` (a list of `{ref, role, name, tag, locator, value?, checked?, disabled?, level?, url?}`),
+  for the whole page or one part (`locator`). Useful to record what a page looked like during a run.
+
+```text
+# Page snapshot: Log in
+URL: https://example.com/login
+- main
+  - heading "Log in" [level=1] [ref=e1] locator=role=heading[name="Log in"]
+  - form "Login" [ref=e2] locator=role=form[name="Login"]
+    - textbox "Email" [required] [ref=e3] locator=label="Email"
+    - textbox "Password" [password] [ref=e4] locator=label="Password"
+    - checkbox "Remember me" [ref=e5] locator=label="Remember me"
+    - button "Sign in" [ref=e6] locator=role=button[name="Sign in"]
+  - link "Forgot password?" [url="/reset"] [ref=e7] locator=role=link[name="Forgot password?"]
+```
+
+Each line is `role "name" [state…] [ref] locator=…`. The locator finds exactly that element (inside
+frames it starts with `frame=… >> `), so a workflow can use it unchanged:
+`{ "type": "fill", "config": { "locator": "label=\"Email\"", "value": "{{email}}" } }`. `[ref=…]` ids only
+number the lines of one snapshot; do not use them as locators. States: `[checked]`, `[disabled]`,
+`[expanded]`, `[selected]`, `[required]`, `[value="…"]` (never shown for passwords), `[options="…"]`
+(selects), `[url="…"]` (links), `[level=N]` (headings). Hidden elements are left out; `[shadow]` marks a
+web component's shadow root, `[frame]` an iframe whose content follows, `[cross-origin]` one that could not
+be read. Long pages are cut at 1,500 lines with a note: snapshot one part with the block's `locator`.
+
 ## 5. Waiting and timeouts
 
 - Each action **auto-waits** until its element: exists exactly once, is visible, enabled (and
@@ -277,7 +314,7 @@ with its own copy of the data.
 
 | Key | Meaning |
 | --- | --- |
-| `onError` | `stop` (default): this path stops, the run fails. `continue`: pass the input on as if it worked. `port`: send `{...input, error, errorBlock}` out of the `error` output (connect it with `"sourcePort": "error"`). |
+| `onError` | `stop` (default): this path stops, the run fails. `continue`: pass the input on as if it worked. `port`: send `{...input, error, errorCode, errorBlock}` out of the `error` output (`errorCode`: see [error codes](#error-codes)) (connect it with `"sourcePort": "error"`). |
 | `retries` | 0 to 5 extra attempts, waiting 1 s, 2 s, 4 s… |
 | `timeoutSeconds` | the step fails after this long |
 | `screenshot` | `error` (default), `always`, `never`. Of the run's tab, only while that tab is showing in its window (Open Tab with `"where": "window"` is best for tests) |
@@ -309,6 +346,42 @@ A workflow may have several start blocks; each starts its own runs.
   embedded), **JUnit XML** (for CI dashboards), **JSON**.
 - If the browser stops the extension's background worker during a run, the run is marked
   **interrupted**.
+- The **JSON** export is for programs: `{ "$schema", "schemaVersion": 1, "generatedAt", "summary", "runs" }`
+  ([schema](report.schema.json)). Each step of a run has `nodeId`, `sourceId` (the block's `id` in the
+  file you imported, when it had one), `blockType`, `status`, `durationMs`, `attempts`, `input`, `output`
+  and, when it failed, `error`, `code`, `locator`, `url` (the page) and `matches` (for `locator.strict`,
+  up to 5 descriptions of the elements that matched).
+
+### Error codes
+
+Every failed step has a `code`. Fix by the code, then the message:
+
+| Code | Meaning | Fix |
+| --- | --- | --- |
+| `locator.not-found` | No element matches the locator (within the step timeout). | Check the locator against a page snapshot; wait for the page or the element first. |
+| `locator.strict` | The locator matches more than one element where exactly one is needed. | Make it more specific (see `matches`), or add `>> nth=0`. |
+| `locator.invalid` | The locator cannot be parsed (bad CSS, unknown engine, bad regex). | Fix the locator syntax. |
+| `element.not-visible` | The element exists but stayed hidden. | Open whatever reveals it first (menu, tab, accordion), or wait for it. |
+| `element.disabled` | The element stayed disabled. | Fill in what enables it first, or check the right element is targeted. |
+| `element.not-editable` | The field is read-only. | Target an editable field. |
+| `element.covered` | Another element (an overlay, a cookie banner) sits on top of it. | Close the overlay first, or use `force` on Click. |
+| `element.unstable` | The element kept moving (an animation). | Wait for the animation to end. |
+| `element.wrong-type` | The element cannot do this (typing into a button, selecting on a non-select…). | Use the block that fits the element, or target the real field. |
+| `option.not-found` | The select has no such option (or it is disabled). | Use one of the options the message lists. |
+| `timeout` | Waited too long for something other than an element (text, URL, response, popup). | Raise the step timeout, or wait for the right thing. |
+| `assert.failed` | An Assert did not hold. | Fix the expectation or the steps before it. |
+| `http.status` | HTTP Request got a non-2xx answer with `failOnError`. | Check the URL, method, headers and body. |
+| `http.network` | HTTP Request could not reach the server. | Check the URL and the host permission. |
+| `navigation.failed` | A page did not finish loading. | Check the URL; raise the timeout for slow pages. |
+| `tab.missing` | No tab of that name in this run. | Put an Open Tab (with that tab name) before the step. |
+| `tab.closed` | The tab was closed while the step used it. | Do not close the tab mid-run. |
+| `frame.unreachable` | The element is inside a frame that could not be reached. | Check the `frame=` part of the locator. |
+| `page.restricted` | The browser does not let extensions script this page. | Use a normal web page. |
+| `permission.missing` | An optional permission is not granted. | Grant it on the block or in the extension settings. |
+| `script.error` | Run Script code threw. | Fix the script. |
+| `config.invalid` | A setting is missing or invalid. | Fix the setting the message names. |
+| `workflow.failed` | A workflow called by Run Workflow failed. | Fix the failing step of the called run (`childRunId`). |
+| `step.failed` | Any other failure. | Read the message. |
 
 ## 10. Building workflows in the editor
 

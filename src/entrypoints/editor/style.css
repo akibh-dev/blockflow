@@ -1159,3 +1159,19 @@ textarea {
 .bf-tryit-status.up {
   color: var(--ok);
 }
+
+/* Error code of a failed step (ConfigPanel's StepResult, ReportsPage): small, the message says it in words. */
+.bf-error-code {
+  font-size: 11px;
+  margin: 2px 0 4px;
+}
+.bf-error-code code {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+.bf-error-code ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}

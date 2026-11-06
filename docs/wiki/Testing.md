@@ -63,7 +63,7 @@ against real Chromium.
 | [core/dataBlocks.test.ts](../../tests/core/dataBlocks.test.ts) | Extract List / Table, For Each, Repeat, Filter, Transform, Data Table, Paginate, datasets and downloads |
 | [core/testing.test.ts](../../tests/core/testing.test.ts) | Assert, screenshots, Run Workflow (sub-workflows), secrets, Manual Step, Stop, Log |
 | [core/triggers.test.ts](../../tests/core/triggers.test.ts) | Schedule, Start block, Page Visited / Context Menu triggers |
-| [core/moreBlocks.test.ts](../../tests/core/moreBlocks.test.ts) | Scroll (top/bottom/element; "until nothing more loads" with its height check and `maxScrolls`), Page Info (page, local, session, cookies), Context Menu (config → menu item, item id parsing, click → payload, a click starting the flow), Page Visited start log, Navigate back/forward/reload, Press Key, Stop, Notify, Repeat |
+| [core/moreBlocks.test.ts](../../tests/core/moreBlocks.test.ts) | Scroll (top/bottom/element; "until nothing more loads" with its height check and `maxScrolls`), Page Info (page, local, session, cookies), Page Snapshot (request and outputs), Context Menu (config → menu item, item id parsing, click → payload, a click starting the flow), Page Visited start log, Navigate back/forward/reload, Press Key, Stop, Notify, Repeat |
 | [core/config.test.ts](../../tests/core/config.test.ts) | `withDefaults`, `resolveConfig`, `validateConfig` |
 | [core/validate.test.ts](../../tests/core/validate.test.ts) | `validateWorkflow` |
 | [core/workflow.test.ts](../../tests/core/workflow.test.ts) | `diffWorkflows`, `rootSignature`, `createWorkflow`, sample workflows, timer keys, `uid` |
@@ -76,6 +76,7 @@ against real Chromium.
 | [core/csv.test.ts](../../tests/core/csv.test.ts) | CSV parse / write |
 | [core/url.test.ts](../../tests/core/url.test.ts) | `normalizeHttpUrl` |
 | [core/report.test.ts](../../tests/core/report.test.ts) | JUnit / HTML report generation from run records |
+| [core/errors.test.ts](../../tests/core/errors.test.ts) | `errorDetails`, every error code documented (and listed in the usage guide and Troubleshooting), step records with `code` / `locator` / `url` / `matches` / `sourceId` (page errors, soft and hard Assert, HTTP status, missing tab, step timeout, uncoded errors, secrets masked), the versioned JSON report |
 | [core/recordingSchedule.test.ts](../../tests/core/recordingSchedule.test.ts) | Schedule parsing, recorded actions → blocks |
 | [core/playwright.test.ts](../../tests/core/playwright.test.ts) | Locators and whole workflows → Playwright test source |
 | [core/guideExamples.test.ts](../../tests/core/guideExamples.test.ts) | Every `docs/guide/examples/*.blockflow.json`, and every complete JSON example in `docs/guide/README.md`, imports with `parseImport` with no issues at all (strict check) and no editor validation errors |
@@ -83,6 +84,7 @@ against real Chromium.
 | [core/layout.test.ts](../../tests/core/layout.test.ts) | Auto-layout: chains in one row, If and loop port order, joins, several starts, cycles, no overlaps on a random DAG |
 | [browser/hybridScheduler.test.ts](../../tests/browser/hybridScheduler.test.ts) | Timers ≥ 30 s (alarms), < 30 s (in-memory + keep-alive), clearing, worker restart, end to end with the engine. Uses local `FakeClock`, `FakeAlarms`, `MemoryTimerStore`. See [Scheduling and Timers](Scheduling-and-Timers.md) |
 | [dom/agent.test.ts](../../tests/dom/agent.test.ts) | Page agent ops: click, fill/type, select/check/press, read/wait/detect-form, scraping, frames, upload and locate. See [Page Agent](Page-Agent.md) |
+| [dom/snapshot.test.ts](../../tests/dom/snapshot.test.ts) | The `snapshot` op: roles, names, flags and working locators, hidden elements skipped, shadow roots (slots), same-origin and cross-origin frames, the line cap, a part of the page, speed on 100 identical rows; error codes of agent answers (strict with `matches`, waits, wrong element type, invalid locator) |
 | [dom/locator.test.ts](../../tests/dom/locator.test.ts) | `parseLocator`, `resolveLocator`, ARIA name/role, `locatorCandidates`. See [Locators](Locators.md) |
 | [dom/selector.test.ts](../../tests/dom/selector.test.ts) | `cssEscape`, stable id/class heuristics, `generateSelector` (incl. a property test: every element gets a selector matching only itself), `ElementNavigator`, `sampleText` |
 | [dom/picker.test.ts](../../tests/dom/picker.test.ts) | Element picker overlay. See [Picker and Recorder](Picker-and-Recorder.md) |
@@ -231,7 +233,7 @@ handles it like `contextMenus.onClicked`, because an automated browser cannot op
 | --- | --- |
 | `run.mjs` | Entry: picks the specs named on the command line (all by default), launches once, runs each spec's default export with the harness, prints the summary, exits 1 on any failed check |
 | `harness.mjs` | `launch()`: browser, extension, fixture server and the helpers below |
-| `specs/<area>.mjs` | `export default async function (h) { … }`: one area's scenarios. Order: `forms`, `editor-detect`, `testing`, `scraping`, `authoring`, `harder-pages`, then any others alphabetically |
+| `specs/<area>.mjs` | `export default async function (h) { … }`: one area's scenarios (e.g. `snapshot-codes`: Page Snapshot on `snapshot.html`, error codes of failed steps, the JSON export, the 📸 Snapshot page button). Order: `forms`, `editor-detect`, `testing`, `scraping`, `authoring`, `harder-pages`, then any others alphabetically |
 
 A spec that throws is reported as `<name>: spec crashed` and the run goes on with the next spec.
 
@@ -282,6 +284,10 @@ Scenarios by spec:
 | Stop | none | Pass ends the path with the run passed; fail fails the run with the templated message |
 | Repeat, Filter | none | Data Table → Filter → Repeat: `each` three times, then `done` |
 | Notify | none | The run passes and `chrome.notifications.getAll()` in the worker lists the notification |
+| **snapshot-codes** | | |
+| Page Snapshot | `snapshot.html` (+ `frame-inner.html`) | The outline has headings, landmarks, field values, checked/disabled states, the shadow host and its button, the same-origin frame with `frame=#pay >> …` locators, the cut at 1,499 lines, no hidden elements; its frame locators fill and click as they are; a part of the page (`#search`); under 5 s for ~2,000 elements |
+| Error codes | `snapshot.html` | `locator.not-found` (with locator and page URL), `locator.strict` (two `matches`), `element.disabled`, `assert.failed` (with locator), `timeout` (text never shown), `locator.invalid`; Export JSON has `schemaVersion` 1 and the codes |
+| 📸 Snapshot page | `snapshot.html` | The Open Tab button copies the outline with the title/URL header (the clipboard write is captured in the page: Playwright cannot grant clipboard access to an extension origin) |
 | Editor UX (`editor-ux`) | editor UI; `docs/manual-test/playground.html` via `scripts/playground.mjs` on port 7357 | In-editor toasts and confirm/input dialogs (no native ones), the All workflows switch and Turn all on with a problem workflow, `bf:state` cleanup on delete, recorder start-URL check, real-input setting only on page actions, undo per workflow, paste at the mouse, the Try it card and the playground template passing |
 | Import checking (`import-check`) | editor UI | Importing a broken file (unknown type, mistyped config key) opens the issues dialog with each code, JSON path and did-you-mean and imports nothing; a file with only warnings imports and its toast's Details lists `page.no-tab`; Escape closes the dialog |
 | Authoring evals (`evals`) | every page used by [tests/evals/tasks.json](../../tests/evals/tasks.json) | Each reference solution in `tests/evals/solutions/` is imported through the editor (compiled and checked), run, and scored with its task's checks (`status`, `output` at a dot path, `step-type`); the scorer the M4 CLI will reuse |
@@ -312,6 +318,7 @@ Exports `PASSWORD` (`Op3n-Sesame!`, the only password the fixture login accepts)
 | `welcome.html` | `#greeting` "Welcome, name!" and the submitted country / remember values |
 | `spa.html` | Single-page app: cookie banner overlay, controlled inputs, plan select, custom checkbox, disabled-until-valid button, `pushState` to `/spa/done`, `#order`, `<fancy-counter>` web component with shadow DOM |
 | `table.html` | `#prices` table with relative links, `h1` "Prices" |
+| `snapshot.html` | For Page Snapshot and error codes: banner with a named nav, a search form (value, select, checked checkbox, disabled Reset), two "Add to cart" buttons (strict), hidden promos, `<shop-badge>` with a shadow button, `#pay` iframe of `frame-inner.html`, `#greeting`, and 600 generated list items (past the line cap) |
 | `feed.html` | Infinite scroll feed of `article.post` (40 in total) |
 | `popup.html` | `window.open` button and a `target=_blank` link |
 | `dialogs.html` | `confirm` (`#del`) and `prompt` (`#ask`) writing to `#result` |

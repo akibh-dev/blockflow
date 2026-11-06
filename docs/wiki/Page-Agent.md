@@ -66,11 +66,14 @@ async run({ request, budgetMs }) {
 | Thrown | Meaning | Answer |
 |---|---|---|
 | — (returns) | Success | `{status: 'done', result}` |
-| `Pending(reason)` | Not possible yet | Retry every 50 ms; at the deadline `{status: 'pending', reason}` (the last reason). |
-| `Fatal(message)` | Never going to work | `{status: 'error', message}` immediately. |
+| `Pending(reason, code)` | Not possible yet | Retry every 50 ms; at the deadline `{status: 'pending', reason, code, url}` (the last reason). `code` defaults to `timeout`. |
+| `Fatal(message, code?, matches?)` | Never going to work | `{status: 'error', message, code?, url, matches?}` immediately. |
 | `FrameBoundaryError` | Locator crosses into a cross-origin iframe (and no same-origin frame it matches has the element) | `{status: 'frame', src, rest}` immediately; for `locate` also `offset`. |
-| `LocatorError` | Bad locator syntax/CSS/XPath/regex | Wrapped into `Fatal` by `all()`, so `error`. |
-| anything else | Bug or page oddity | `{status: 'error', message}`. `run` never rejects. |
+| `LocatorError` | Bad locator syntax/CSS/XPath/regex | Wrapped into `Fatal(…, 'locator.invalid')` by `all()`, so `error`. |
+| anything else | Bug or page oddity | `{status: 'error', message, url}` (no code: the engine records `step.failed`). `run` never rejects. |
+
+The codes come from [errors.ts](../../src/core/errors.ts); which check throws which is in
+[Page Protocol: Error codes](Page-Protocol.md#error-codes).
 
 `budgetMs` comes from the driver: `min(2000, timeLeft − 150)`. The driver keeps calling until the
 block's timeout and then throws `Timed out after Ns: <last reason>`. With `budgetMs: 0` the agent makes
@@ -104,6 +107,24 @@ agent does with them.
 | `scroll` | `one` for `to: 'element'` | none | `{height, y}` |
 | `upload` | `one`, then input / `label.control` / nested `input[type=file]` | enabled only (hidden inputs allowed) | `{files: names[]}` |
 | `locate` | `one` | visible, enabled, editable (fill, or set-field on a text field), stable, hit | `{x, y, kind: 'text' \| 'select' \| 'check' \| 'other'}` |
+| `snapshot` | body, or `all(locator)[0]` (Pending while none) | none | `SnapshotResult`: `takeSnapshot()` in [snapshot.ts](../../src/dom/snapshot.ts), plus `url` and `title` |
+
+### Snapshot (`snapshot.ts`)
+
+`takeSnapshot(root, { maxLines })` builds the outline described in
+[Page Protocol: The snapshot op](Page-Protocol.md#the-snapshot-op) in two passes:
+
+1. **Walk** the composed tree (shadow roots as rendered, slots by `assignedNodes`, same-origin frames by
+   `contentDocument`) into items: role (`getRole`, plus `textbox`/`button` for inputs `aria.ts` leaves
+   without a role), name (only for targets and labelled elements: names from content cost a subtree
+   walk), children (not for leaf roles: fields, selects, checkboxes, images), and merged text runs.
+   Hidden subtrees are skipped (`display:none` via `getComputedStyle`, `hidden`, `aria-hidden`). The walk
+   stops after `3 × maxLines` items.
+2. **Render** until `maxLines − 1` lines, adding flags and, for targets, `[ref=eN] locator=…` from
+   `firstLocator` in [bestLocator.ts](../../src/dom/bestLocator.ts) (prefixed `frame=… >> ` in frames).
+   Locator lookups share a per-document cache, and the whole snapshot runs inside `withAriaMemo`
+   ([aria.ts](../../src/dom/aria.ts)), which remembers names and hidden states: hundreds of locator
+   checks ask about the same elements. After 4 s of locator work, the rest get `generateSelector`.
 
 ### Strictness
 
@@ -227,8 +248,11 @@ What a block ends up seeing (after [pageDriver.ts](../../src/browser/pageDriver.
 | Fatal: strict | `#list li matches 3 elements (li "One", li "Two", li "Three"). Make it more specific, or add ">> nth=0" for the first one.` |
 | Fatal: locator | `Invalid CSS selector: ##`, `Unknown role option [bogus]. Use name, exact, checked, level.`, `nth needs a whole number: nth=x` |
 | Fatal: wrong element | `select#x is not a <select>. Use Click to open custom dropdowns.`, `… is not a checkbox, radio or switch`, `A radio button cannot be unchecked; check another one instead` |
-| Pending at timeout | `Timed out after 30s: waiting for button "Save" to be enabled` |
-| Driver | `The tab was closed`, `The browser does not let extensions work on this page: …`, `Timed out after Ns: the page navigated` |
+| Pending at timeout | `Timed out after 30s: waiting for button "Save" to be enabled` (code `element.disabled`) |
+| Driver | `The tab was closed` (`tab.closed`), `The browser does not let extensions work on this page: …` (`permission.missing` / `page.restricted`), `Timed out after Ns: the page navigated` (`timeout`) |
+
+Every one of them is a `CodedError` (src/core/errors.ts) carrying `code`, the request's `locator`, the
+page `url` and, for strict-mode errors, `matches`; the engine copies them onto the step record.
 
 ## Gotchas
 

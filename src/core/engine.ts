@@ -1,4 +1,6 @@
 import { resolveConfig } from './config';
+import { CodedError, errorDetails } from './errors';
+import type { ErrorDetails } from './errors';
 import type { EvalEnv } from './expression';
 import { uid } from './id';
 import { DEFAULT_PORT, ERROR_PORT, Routed, edgePort, nodePorts } from './ports';
@@ -314,7 +316,7 @@ export class WorkflowRunner {
     const def = this.registry.get(node.type);
     const step = this.beginStep(run, node, input);
     if (!def) {
-      await this.failStep(run, step, node, input, `Unknown block type "${node.type}"`);
+      await this.failStep(run, step, node, input, `Unknown block type "${node.type}"`, { code: 'config.invalid' });
       return;
     }
     const blockRun = def.run;
@@ -341,27 +343,24 @@ export class WorkflowRunner {
       return;
     }
     if (!outcome.ok) {
-      await this.handleFailure(run, step, node, def, input, outcome.error, ports);
+      await this.handleFailure(run, step, node, def, input, outcome.error, ports, outcome.details);
       return;
     }
 
     const { output } = outcome;
+    const soft = outcome.softError ? { error: outcome.softError, details: outcome.softDetails } : {};
     if (!output) {
-      this.endStep(run, step, outcome.softError ? 'failed' : 'passed', outcome.softError ? { error: outcome.softError } : {});
+      this.endStep(run, step, outcome.softError ? 'failed' : 'passed', soft);
       await this.afterStep(run, step, node, input, Boolean(outcome.softError));
       return;
     }
     const port = output instanceof Routed ? output.port : (ports[0] ?? DEFAULT_PORT);
     const payload = output instanceof Routed ? output.payload : output;
     if (!ports.includes(port)) {
-      await this.handleFailure(run, step, node, def, input, `sent data to an output it does not have: "${port}"`, ports);
+      await this.handleFailure(run, step, node, def, input, `sent data to an output it does not have: "${port}"`, ports, { code: 'step.failed' });
       return;
     }
-    this.endStep(run, step, outcome.softError ? 'failed' : 'passed', {
-      output: payload,
-      port,
-      ...(outcome.softError ? { error: outcome.softError } : {}),
-    });
+    this.endStep(run, step, outcome.softError ? 'failed' : 'passed', { output: payload, port, ...soft });
     await this.afterStep(run, step, node, payload, Boolean(outcome.softError));
     await this.emitFrom(node.id, payload, port, run);
   }
@@ -374,10 +373,10 @@ export class WorkflowRunner {
     run: ActiveRun,
     call: Invoke,
     step: StepRecord,
-  ): Promise<{ ok: true; output: RunOutput; softError?: string } | { ok: false; error: string }> {
+  ): Promise<{ ok: true; output: RunOutput; softError?: string; softDetails?: ErrorDetails } | { ok: false; error: string; details: ErrorDetails }> {
     // {{secret.name}} works in every templated setting, but secrets never enter the payload.
     const resolved = resolveConfig(def, node.config, Object.keys(run.secrets).length > 0 ? { ...input, secret: run.secrets } : input, this.evalEnv);
-    if (resolved.errors.length > 0) return { ok: false, error: resolved.errors.join('; ') };
+    if (resolved.errors.length > 0) return { ok: false, error: resolved.errors.join('; '), details: { code: 'config.invalid' } };
 
     const settings = node.step ?? {};
     const retries = clamp(settings.retries ?? 0, 0, MAX_RETRIES);
@@ -385,7 +384,7 @@ export class WorkflowRunner {
 
     for (let attempt = 1; ; attempt += 1) {
       step.attempts = attempt;
-      const soft = { error: '' };
+      const soft: { error: string; details?: ErrorDetails } = { error: '' };
       // Set when this attempt times out. A block call cannot be cancelled from outside, so the
       // abandoned call is fenced off instead: its emits, sub-workflow calls and soft failures are
       // refused, and its eventual result is ignored. Loops end at their next emit.
@@ -396,9 +395,12 @@ export class WorkflowRunner {
         run,
         'start',
         timeoutSeconds * 1000,
-        (message) => {
+        (failure) => {
           if (fence.abandoned) return;
+          const message = typeof failure === 'string' ? failure : failure.message;
           soft.error = soft.error ? `${soft.error}; ${message}` : message;
+          // The first soft failure's details describe the step.
+          soft.details ??= typeof failure === 'string' ? { code: 'step.failed' } : errorDetails(failure);
         },
         () => fence.abandoned,
       );
@@ -412,11 +414,11 @@ export class WorkflowRunner {
           run.record.error ??= this.mask(`${def.label}: ${softError}`);
           this.log('error', node.id, `${def.label}: ${softError} (soft: continuing)`);
         }
-        return softError ? { ok: true, output, softError: this.mask(softError) } : { ok: true, output };
+        return softError ? { ok: true, output, softError: this.mask(softError), ...(soft.details ? { softDetails: soft.details } : {}) } : { ok: true, output };
       } catch (error) {
         const message = errorMessage(error);
         if (attempt > retries || run.cancelled || this.stopped || this.isCancelled(run.record.id)) {
-          return { ok: false, error: message };
+          return { ok: false, error: message, details: errorDetails(error) };
         }
         const waitMs = Math.min(1000 * 2 ** (attempt - 1), 10_000);
         this.log('warn', node.id, `${def.label}: ${message}. Retrying in ${waitMs / 1000}s (attempt ${attempt + 1} of ${retries + 1})`);
@@ -435,36 +437,37 @@ export class WorkflowRunner {
     input: Payload,
     error: string,
     ports: string[],
+    details: ErrorDetails,
   ): Promise<void> {
     const message = this.mask(`${def.label}: ${error}`);
     switch (node.step?.onError) {
       case 'continue': {
         this.log('warn', node.id, `${message} (continuing)`);
         const port = ports[0] ?? DEFAULT_PORT;
-        this.endStep(run, step, 'handled', { error: message, output: input, port });
+        this.endStep(run, step, 'handled', { error: message, details, output: input, port });
         await this.afterStep(run, step, node, input, true);
         await this.emitFrom(node.id, input, port, run);
         return;
       }
       case 'port': {
         this.log('warn', node.id, `${message} (sent to the error output)`);
-        const payload = { ...input, error: this.mask(error), errorBlock: def.label };
-        this.endStep(run, step, 'handled', { error: message, output: payload, port: ERROR_PORT });
+        const payload = { ...input, error: this.mask(error), errorCode: details.code, errorBlock: def.label };
+        this.endStep(run, step, 'handled', { error: message, details, output: payload, port: ERROR_PORT });
         await this.afterStep(run, step, node, input, true);
         await this.emitFrom(node.id, payload, ERROR_PORT, run);
         return;
       }
       default:
-        await this.failStep(run, step, node, input, message);
+        await this.failStep(run, step, node, input, message, details);
     }
   }
 
   /** Marks the step and the run failed; this path ends here. */
-  private async failStep(run: ActiveRun, step: StepRecord, node: NodeDef, input: Payload, message: string): Promise<void> {
+  private async failStep(run: ActiveRun, step: StepRecord, node: NodeDef, input: Payload, message: string, details: ErrorDetails): Promise<void> {
     this.log('error', node.id, message);
     run.failed = true;
     run.record.error ??= this.mask(message);
-    this.endStep(run, step, 'failed', { error: message });
+    this.endStep(run, step, 'failed', { error: message, details });
     await this.afterStep(run, step, node, input, true);
   }
 
@@ -522,7 +525,7 @@ export class WorkflowRunner {
     });
     const { record, output } = await child.runAsCall(input, parentId);
     if (record.status !== 'passed') {
-      throw Object.assign(new Error(`"${workflow.name}" ${record.status}: ${record.error ?? 'no reason given'}`), { childRunId: record.id });
+      throw Object.assign(new CodedError('workflow.failed', `"${workflow.name}" ${record.status}: ${record.error ?? 'no reason given'}`), { childRunId: record.id });
     }
     return { output, runId: record.id };
   }
@@ -536,7 +539,7 @@ export class WorkflowRunner {
     const timeout = this.host.sleep(seconds * 1000).then(() => {
       if (settled) return new Promise<never>(() => {});
       onTimeout();
-      throw new Error(`Timed out after ${seconds}s`);
+      throw new CodedError('timeout', `Timed out after ${seconds}s`);
     });
     const guarded = promise.finally(() => {
       settled = true;
@@ -554,6 +557,8 @@ export class WorkflowRunner {
       startedAt: this.host.now().toISOString(),
       attempts: 0,
       input: compactPayload(maskPayload(input, this.secretValues)),
+      // Maps the step back to the node id in the author's file (see NodeDef.origin).
+      ...(node.origin ? { sourceId: node.origin } : {}),
     };
     if (run.record.steps.length < MAX_STEPS_KEPT) run.record.steps.push(step);
     else run.record.droppedSteps = (run.record.droppedSteps ?? 0) + 1;
@@ -561,18 +566,25 @@ export class WorkflowRunner {
     return step;
   }
 
-  /** Finishes a step record (status, duration, masked output/port/error) and publishes the run. */
+  /** Finishes a step record (status, duration, masked output/port/error and error details) and publishes the run. */
   private endStep(
     run: ActiveRun,
     step: StepRecord,
     status: StepRecord['status'],
-    extra: { output?: Payload; port?: string; error?: string } = {},
+    extra: { output?: Payload; port?: string; error?: string; details?: ErrorDetails } = {},
   ): void {
     step.status = status;
     step.durationMs = this.host.now().getTime() - Date.parse(step.startedAt);
     if (extra.output) step.output = compactPayload(maskPayload(extra.output, this.secretValues));
     if (extra.port) step.port = extra.port;
-    if (extra.error) step.error = this.mask(extra.error);
+    if (extra.error) {
+      step.error = this.mask(extra.error);
+      const details = extra.details ?? { code: 'step.failed' };
+      step.code = details.code;
+      if (details.locator) step.locator = this.mask(details.locator);
+      if (details.url) step.url = this.mask(details.url);
+      if (details.matches) step.matches = details.matches.map((match) => this.mask(match));
+    }
     this.publish(run);
   }
 
@@ -606,7 +618,7 @@ export class WorkflowRunner {
     run: ActiveRun | undefined,
     trigger: RunTrigger = 'start',
     timeoutMs = DEFAULT_TIMEOUT_SECONDS * 1000,
-    softFail: (message: string) => void = (message) => this.log('error', node.id, message),
+    softFail: (failure: string | Error) => void = (failure) => this.log('error', node.id, typeof failure === 'string' ? failure : failure.message),
     abandoned: () => boolean = () => false,
   ): BlockContext<never> {
     const workflowId = this.workflow.id;

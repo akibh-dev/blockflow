@@ -6,7 +6,7 @@ JSON. Each section is short and links to the [usage guide](../guide/README.md), 
 ## Workflows and blocks
 
 A **workflow** is a set of **blocks** joined by **connections**. A block does one step: open a tab, click,
-fill a form, read a value, compare, loop, notify. There are 42 blocks, grouped in the palette as Start, Tabs,
+fill a form, read a value, compare, loop, notify. There are 43 blocks, grouped in the palette as Start, Tabs,
 Page actions, Read & scrape, Test, Logic & loops, Data, and Send & log. Every one is listed, with its
 settings and defaults, in the [block reference](../guide/blocks.md).
 

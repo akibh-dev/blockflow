@@ -28,6 +28,7 @@ state, and which messages, storage keys or browser APIs it touches. Read [Editor
 | --- | --- | --- |
 | [BlockNode](#blocknode) | every block on the canvas | none (reads two contexts) |
 | [ConfigPanel](#configpanel) | right column, canvas view | sends `bf:start-pick`, listens for `bf:pick-result` / `bf:pick-error` |
+| [SnapshotButton](#snapshotbutton) | ConfigPanel, Open Tab only | sends `bf:snapshot-page`, listens for `bf:snapshot-result`, writes the clipboard |
 | [TemplateInput](#templateinput) | templated text settings | none |
 | [PermissionNote](#permissionnote) | ConfigPanel, blocks with `permissions` | `permissions.contains` / `request` |
 | [Screenshot](#screenshot) | step inspector, reports | IndexedDB read |
@@ -142,6 +143,8 @@ is ignored):
 The other side is in [Picker and Recorder](Picker-and-Recorder.md) and
 [Message Protocol](Message-Protocol.md).
 
+Open Tab blocks also get [SnapshotButton](#snapshotbutton) below their settings.
+
 ### Internal pieces
 
 | Function | Purpose |
@@ -149,8 +152,20 @@ The other side is in [Picker and Recorder](Picker-and-Recorder.md) and
 | `RowsInput` | Table editor for `rows` fields (Fill Form, Extract List, Manual Start, Transform). Cells are TemplateInputs (suggestions only for `column.templated`), 🎯 per `column.locator` cell, `+ Add row`, ✕ remove, and **Detect fields** when `field.detectForm`. A row's `hint` becomes the value placeholder. Rows are keyed by index. |
 | `FieldInput` | The scalar control table above. |
 | `StepSettingsEditor` | "Step settings" `<details>`, open when anything is set. On error (`stop`/`continue`/`port`), Retries (0..`MAX_RETRIES`), Timeout (placeholder = `def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS`), Screenshot (`error`/`always`/`never`), **Use real mouse and keyboard** (only for blocks with `realInput: true` in their definition, or when already set; asks for the `debugger` permission first; stays off if refused), Disabled, Note. Semantics: [ARCHITECTURE.md, Engine model](../ARCHITECTURE.md#engine-model-srccoreenginets). |
-| `StepResult` | "Last run" `<details>`: status, duration, attempts, chosen port, error, [Screenshot](#screenshot), input and output as JSON. |
+| `StepResult` | "Last run" `<details>`: status, duration, attempts, chosen port, error, `ErrorDetails`, [Screenshot](#screenshot), input and output as JSON. |
+| `ErrorDetails` (exported) | A failed step's error `code` as a small badge (`.bf-error-code`) and, for `locator.strict`, the `matches` list. Also used by ReportsPage. |
 | `formatMs(ms)` (exported) | `850 ms`, `2.5 s`, `12 s`. Also used by LogPanel and ReportsPage. |
+
+## SnapshotButton
+
+**📸 Snapshot page** on Open Tab ([SnapshotButton.tsx](../../src/entrypoints/editor/components/SnapshotButton.tsx)).
+
+**Props:** `url` (the block's URL setting; not sent when it has `{{…}}`).
+
+Sends `bf:snapshot-page` and waits (button disabled, "Taking snapshot…") for `bf:snapshot-result`, which
+only the waiting component acts on. On success it writes `text` with `navigator.clipboard.writeText` and
+toasts "Page snapshot copied (N lines)"; an error or a refused clipboard is an error toast. The background
+side is `snapshotForEditor` in [Browser Host: picking.ts](Browser-Host.md#pickingts).
 
 ## TemplateInput
 
@@ -284,9 +299,11 @@ Test-report view over the stored runs.
 - The trigger is shown with `TRIGGER_LABELS` (`src/core/runs.ts`): Run button, turned on, schedule, page
   event, called by another workflow.
 - Totals line from `summarize(shown)` (`src/core/report.ts`).
-- Detail: steps with status, block label, duration, attempts, port taken, error, [Screenshot](#screenshot),
-  and **open called run** for Run Workflow steps (`childRunId`).
-- Exports (of the filtered runs) through `downloadText`: **JSON**, **JUnit XML** (`toJUnitXml`) and
+- Detail: steps with status, block label, duration, attempts, port taken, error, error code
+  (`ErrorDetails` from ConfigPanel), [Screenshot](#screenshot), and **open called run** for Run Workflow
+  steps (`childRunId`).
+- Exports (of the filtered runs) through `downloadText`: **JSON** (`toJsonReport`: versioned, see
+  `docs/guide/report.schema.json`), **JUnit XML** (`toJUnitXml`) and
   **HTML** (`toHtmlReport`, with screenshots loaded from IndexedDB and inlined as data URLs, so the file
   stands alone). Report formats are documented in [Core Modules](Core-Modules.md).
 

@@ -3,9 +3,10 @@ import { STORAGE_KEYS } from '../shared/keys';
 import { normalizeHttpUrl } from '../core/url';
 import { actInTab } from './pageDriver';
 import { requireTabId, waitForTabComplete } from './tabs';
-import type { FormFieldRow } from '../core/page';
+import { snapshotDocument } from '../core/page';
+import type { FormFieldRow, SnapshotResult } from '../core/page';
 import type { PickerMode } from '../dom/picker';
-import type { PickedMessage, PickerSyncMessage } from '../shared/messages';
+import type { PickedMessage, PickerSyncMessage, SnapshotResultMessage } from '../shared/messages';
 
 /**
  * Background side of the element picker.
@@ -224,6 +225,24 @@ export async function finishPicking(message: PickedMessage, sender: { tabId?: nu
     ...(fields ? { fields } : {}),
   });
   await returnToEditor(pending);
+}
+
+/**
+ * Handles `bf:snapshot-page` (the editor's "📸 Snapshot page" button): finds or opens the page the same
+ * way as picking (`findTargetTab`, so the next pick reuses the tab), runs the `snapshot` op, brings the
+ * editor back to the front (it copies to the clipboard, which needs focus) and sends `bf:snapshot-result`.
+ */
+export async function snapshotForEditor(editorTabId: number | undefined, url: string | undefined): Promise<void> {
+  let reply: SnapshotResultMessage;
+  try {
+    const tabId = await findTargetTab(editorTabId, url, 'block');
+    const result = (await actInTab(tabId, { op: 'snapshot' }, 15_000)) as unknown as SnapshotResult;
+    reply = { type: 'bf:snapshot-result', text: snapshotDocument(result), lines: result.lines, truncated: result.truncated };
+  } catch (error) {
+    reply = { type: 'bf:snapshot-result', error: `Could not snapshot the page: ${error instanceof Error ? error.message : String(error)}` };
+  }
+  await returnToEditor({ editorTabId });
+  await tellEditor(reply);
 }
 
 /** Handles `bf:pick-cancelled` (and a picker's own `bf:pick-error`): ends the pick in every frame and focuses the editor tab. Sends the editor nothing. */

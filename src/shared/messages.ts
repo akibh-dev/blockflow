@@ -72,6 +72,27 @@ export interface PickErrorMessage {
   message: string;
 }
 
+/**
+ * Editor → background: the "📸 Snapshot page" button (Open Tab). Opens or reuses the editor's picker tab
+ * on `url` (or the last-used web tab without one), runs the `snapshot` page op there and answers with
+ * `bf:snapshot-result`.
+ */
+export interface SnapshotPageMessage {
+  type: 'bf:snapshot-page';
+  url?: string;
+}
+
+/** Background → editor: the snapshot as text to copy (see `snapshotDocument` in core/page.ts), or why it failed. */
+export interface SnapshotResultMessage {
+  type: 'bf:snapshot-result';
+  /** Set on success. */
+  text?: string;
+  lines?: number;
+  truncated?: boolean;
+  /** Set on failure. */
+  error?: string;
+}
+
 /** Editor → background: run this workflow once, now (the Run button). Sends what is on the canvas. */
 export interface RunWorkflowMessage {
   type: 'bf:run-workflow';
@@ -123,7 +144,9 @@ export type ExtensionMessage =
   | StopRecordingMessage
   | RecordedMessage
   | PickerSyncMessage
-  | RecorderSyncMessage;
+  | RecorderSyncMessage
+  | SnapshotPageMessage
+  | SnapshotResultMessage;
 
 /** Runtime list of the `type` values above; keep it in sync with `ExtensionMessage`. */
 const TYPES = new Set<string>([
@@ -140,6 +163,8 @@ const TYPES = new Set<string>([
   'bf:recorded',
   'bf:picker-sync',
   'bf:recorder-sync',
+  'bf:snapshot-page',
+  'bf:snapshot-result',
 ]);
 
 /**

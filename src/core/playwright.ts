@@ -348,6 +348,10 @@ class Writer {
       case 'page-info':
         this.line(`data = { ...data, page: { url: ${tab(c)}.url(), title: await ${tab(c)}.title() } };`);
         break;
+      case 'page-snapshot':
+        // Playwright's ARIA snapshot is the same idea (an outline of roles and names), without locators.
+        this.line(`data = { ...data, snapshot: await ${String(c.locator ?? '').trim() ? loc() : `${tab(c)}.locator('body')`}.ariaSnapshot() };`);
+        break;
       case 'set-variable':
         this.line(`data = { ...data, ${js(String(c.name ?? '').trim())}: ${template(c.value)} };`);
         break;

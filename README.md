@@ -4,7 +4,7 @@
 visual editor, or write them as JSON scripts, by hand or with an LLM.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
 
-**Status: v0.2.0.** 42 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
+**Status: v0.2.0.** 43 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
 [What has been verified](#what-has-been-verified) before you rely on it.
 
 **Using BlockFlow, or asking an AI to build workflows for you?** Read the
@@ -29,7 +29,7 @@ other block's input. The data a block produces becomes available to the next blo
 | ✅ **Assert** | The test step: text, input value, attribute, count, visible, checked, enabled, URL, title, or any `{{value}}`. Page checks retry until they pass. **Soft** mode records the failure and goes on. | `actual` |
 | 🧩 **Run Workflow** | Calls another workflow like a function (e.g. a reusable "Log in"), in the same tab; continues with its result. | its data |
 | 🧺 **Extract List** · 📊 **Extract Table** | Scrape repeated items (fields by locator, links absolute) or a table, from a tab or from fetched HTML (no tab). | `items` / `rows`, `count` |
-| 📄 **Paginate** · 🖱️ **Scroll** · ℹ️ **Page Info** | Click Next through pages; scroll infinite lists to the end; title/meta/JSON-LD, localStorage, cookies. | `page`; `page`/`value` |
+| 📄 **Paginate** · 🖱️ **Scroll** · ℹ️ **Page Info** · 📸 **Page Snapshot** | Click Next through pages; scroll infinite lists to the end; title/meta/JSON-LD, localStorage, cookies; an outline of the page with a locator per element (to write steps from). | `page`; `page`/`value`; `snapshot`, `elements` |
 | 🔁 **For Each** · 🔂 **Repeat** · 🧹 **Filter** · 🧮 **Transform** | Loop over a list (`each`/`done` outputs), N times; keep matching items; compute values with expressions (`sum(pluck(items,'price'))`). | `item`, `index` |
 | 🗂️ **Data Table** · 💾 **Save to Dataset** · ⬇️ **Download** | Paste CSV/JSON test data; keep rows between runs (Data page); save CSV/JSON files. | `rows`; `datasetSize`; `file` |
 | 📎 **Upload File** · 💬 **Dialogs** · 🪟 **Wait for Popup** · 🧑‍💻 **Run Script** | Files without the file dialog; answer alert/confirm/prompt; catch new tabs/windows; your own JS (Chrome 135+). | `uploaded`; `dialogs`; `popupUrl`; `result` |
@@ -178,7 +178,7 @@ src/
     types.ts             Workflow model, block definition, Host interface
     engine.ts            WorkflowRunner: start blocks, pass data along connections, timers, runs, sub-workflows
     registry.ts          BlockRegistry (lookup by type)
-    blocks/              one file per block (42), index.ts = registry of built-ins and palette groups;
+    blocks/              one file per block (43), index.ts = registry of built-ins and palette groups;
                          pageCommon.ts / dataCommon.ts hold shared fields and helpers
     template.ts          {{value}} templating
     expression.ts        safe expression language for {{ }} and Transform/Filter (no eval)

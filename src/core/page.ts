@@ -7,6 +7,8 @@
  *   placeholder=you@example.com · testid=submit · xpath=//form · A >> B · A >> nth=1
  */
 
+import type { ErrorCode } from './errors';
+
 /** What a `read` request reads from the element. */
 export type ReadKind = 'text' | 'value' | 'attribute' | 'has-class' | 'exists' | 'count' | 'visible' | 'checked' | 'enabled';
 
@@ -52,7 +54,58 @@ export type AgentRequest =
    * For real (debugger) input: wait until the element is ready, scroll it into view, and return
    * its center in viewport pixels plus what kind of field it is.
    */
-  | { op: 'locate'; locator: string; purpose: 'click' | 'fill' | 'set-field' | 'check' | 'press' };
+  | { op: 'locate'; locator: string; purpose: 'click' | 'fill' | 'set-field' | 'check' | 'press' }
+  /**
+   * What is on the page, for authoring: an outline of the accessibility tree with a ready-made locator per
+   * element (see {@link SnapshotResult}). `locator` limits it to one part of the page (first match);
+   * `maxLines` caps the outline (default {@link SNAPSHOT_MAX_LINES}).
+   */
+  | { op: 'snapshot'; locator?: string; maxLines?: number };
+
+/** Default cap of a snapshot outline. */
+export const SNAPSHOT_MAX_LINES = 1_500;
+
+/**
+ * One element of a snapshot (an outline line with a `[ref=…]`). `locator` finds exactly this element
+ * from the top page (frames included, as `frame=… >> …`); missing for structural roles (lists, rows...).
+ */
+export interface SnapshotElement {
+  ref: string;
+  role: string;
+  name: string;
+  tag: string;
+  locator?: string;
+  /** Current value of a text field or select. Never set for password fields. */
+  value?: string;
+  checked?: boolean | 'mixed';
+  disabled?: boolean;
+  /** Heading level. */
+  level?: number;
+  /** Absolute URL of a link. */
+  url?: string;
+  /** Inside a same-origin frame. */
+  inFrame?: boolean;
+  /** Inside an open shadow root. */
+  inShadow?: boolean;
+}
+
+/** The `result` of a `snapshot` request. */
+export interface SnapshotResult {
+  /**
+   * The outline, one element per line, indented by nesting:
+   * `- button "Sign in" [disabled] [ref=e12] locator=role=button[name="Sign in"]`.
+   * Frames are `- iframe … [frame]` with their content nested below (or `[cross-origin]` when it cannot be
+   * read), open shadow roots are marked `[shadow]` on their host.
+   */
+  snapshot: string;
+  elements: SnapshotElement[];
+  url: string;
+  title: string;
+  /** Lines in `snapshot` (the truncation note included). */
+  lines: number;
+  /** True when the cap was reached and the rest of the page is missing. */
+  truncated: boolean;
+}
 
 /** A file to put on a file input. */
 export interface UploadFile {
@@ -75,19 +128,45 @@ export interface AgentCall {
   budgetMs: number;
 }
 
+/**
+ * The machine-readable part of a `pending` or `error` answer (see src/core/errors.ts): the code, the
+ * page's URL, and for strict-mode errors up to 5 descriptions of the matching elements.
+ */
+export interface AgentErrorInfo {
+  code?: ErrorCode;
+  url?: string;
+  matches?: string[];
+}
+
 /** The agent's answer to one `AgentCall`. */
 export type AgentResponse =
   | { status: 'done'; result: Record<string, unknown> }
   /** Not possible yet (element missing, hidden, disabled...). The driver asks again until its timeout. */
-  | { status: 'pending'; reason: string }
+  | ({ status: 'pending'; reason: string } & AgentErrorInfo)
   /** Will never work (bad locator, wrong element type...). */
-  | { status: 'error'; message: string }
+  | ({ status: 'error'; message: string } & AgentErrorInfo)
   /**
    * The locator enters an iframe from another site: run `rest` inside the frame showing `src`.
    * `offset` (for `locate` only) is where the frame's content starts in this frame's viewport, so
    * the driver can turn the inner frame's coordinates into the tab's.
    */
   | { status: 'frame'; src: string; rest: string; offset?: { x: number; y: number } };
+
+/**
+ * A snapshot as text to paste into a chat with a model: page title and URL, then the outline. Used by
+ * the editor's "📸 Snapshot page" button.
+ */
+export function snapshotDocument(result: Pick<SnapshotResult, 'snapshot' | 'url' | 'title' | 'truncated'>): string {
+  return [
+    `# Page snapshot: ${result.title || '(no title)'}`,
+    `URL: ${result.url}`,
+    'Each line: role "name" [state] [ref] locator=<a BlockFlow locator that finds exactly that element>.',
+    ...(result.truncated ? ['The outline was cut at its line limit; snapshot one part of the page to see the rest.'] : []),
+    '',
+    result.snapshot,
+    '',
+  ].join('\n');
+}
 
 /** One row of a Fill Form block, also what "Detect fields" produces. */
 export interface FormFieldRow {

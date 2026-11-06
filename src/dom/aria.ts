@@ -126,7 +126,9 @@ function textOf(node: Node, seen: Set<Node>): string {
     return '';
   }
   let text = '';
-  for (const child of element.childNodes) text += textOf(child, seen);
+  // A slot shows the nodes assigned to it (shadow DOM), or its own fallback content.
+  const assigned = tag === 'slot' ? ((element as HTMLSlotElement).assignedNodes?.({ flatten: true }) ?? []) : [];
+  for (const child of assigned.length > 0 ? assigned : Array.from(element.childNodes)) text += textOf(child, seen);
   // Block-level children read as separate words.
   return /^(div|p|li|h[1-6]|br|tr|td|th|section|article)$/.test(tag) ? ` ${text} ` : text;
 }
@@ -150,8 +152,32 @@ function labelsText(element: Element): string {
     .join(' ');
 }
 
+/** Results remembered while {@link withAriaMemo} runs. */
+let memo: { names: Map<Element, string>; hidden: Map<Element, boolean> } | null = null;
+
+/**
+ * Runs `fn` with names and hidden states remembered per element. Only for synchronous work that does
+ * not change the page: a page snapshot resolves hundreds of locators, each asking the same elements again.
+ */
+export function withAriaMemo<T>(fn: () => T): T {
+  if (memo) return fn();
+  memo = { names: new Map(), hidden: new Map() };
+  try {
+    return fn();
+  } finally {
+    memo = null;
+  }
+}
+
 /** The name a screen reader would announce for the element. */
 export function accessibleName(element: Element): string {
+  if (!memo) return computeName(element);
+  let name = memo.names.get(element);
+  if (name === undefined) memo.names.set(element, (name = computeName(element)));
+  return name;
+}
+
+function computeName(element: Element): string {
   const labelledBy = element.getAttribute('aria-labelledby');
   if (labelledBy) {
     const name = normalize(byIds(element, labelledBy));
@@ -193,6 +219,13 @@ export function accessibleName(element: Element): string {
 
 /** Hidden from assistive technology: aria-hidden, the hidden attribute, or display:none / visibility:hidden. */
 export function isHiddenForAria(element: Element): boolean {
+  if (!memo) return computeHidden(element);
+  let hidden = memo.hidden.get(element);
+  if (hidden === undefined) memo.hidden.set(element, (hidden = computeHidden(element)));
+  return hidden;
+}
+
+function computeHidden(element: Element): boolean {
   if (element.closest('[aria-hidden="true"], [hidden]')) return true;
   const view = element.ownerDocument.defaultView;
   if (!view) return false;

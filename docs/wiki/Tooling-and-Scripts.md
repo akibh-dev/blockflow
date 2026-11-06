@@ -32,6 +32,8 @@ directly: `createDefaultRegistry()`, `DEFAULT_TIMEOUT_SECONDS` (engine), `nodePo
 | `blocks.json` | `{ generatedBy, blocks: [...] }`; per block: `type`, `label`, `category`, `description`, `canStart` (has `start`, `trigger` or `run`), `canTakeInput` (has `run`), `ports`, `timeoutSeconds`, `defaultConfig`, `fields` (key, label, kind, plus `required`, `templated`, select `options`, number `min`/`max`, rows `columns`, `help` when present), `outputs` |
 | `workflow.schema.json` | JSON Schema (2020-12) for what Import accepts: either `{ format: 'blockflow-workflows', version: 1, workflows[] }` or one workflow. Nodes are a `oneOf` per block type with typed `config` (number → `number` with min/max, boolean, select → `enum`, rows → array of string-valued objects, everything else → string) and `required` keys; edges; and a shared `step` definition (`timeoutSeconds`, `retries` 0–5, `onError`, `disabled`, `note`, `screenshot`) |
 
+| `report.schema.json` | From [scripts/reportSchema.ts](../../scripts/reportSchema.ts) (`reportSchemaFiles()`, one line in `guide.ts`): JSON Schema of the JSON report (`toJsonReport`): `schemaVersion` (`REPORT_SCHEMA_VERSION`), `summary`, runs and steps (statuses from `runs.ts`, triggers from `TRIGGER_LABELS`), and `$defs/errorCode` with every code of `ERROR_CODES` (src/core/errors.ts) and its meaning and fix |
+
 Mode: without arguments it writes files whose content differs and prints `wrote docs/guide/<name>`. With
 `--check` (passed as `vite-node scripts/guide.ts -- --check`) it writes nothing, prints
 `docs/guide/<name> is out of date. Run: npm run guide:sync` for each stale file and exits 1.

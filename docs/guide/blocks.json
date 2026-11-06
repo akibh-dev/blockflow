@@ -1544,6 +1544,56 @@
       ]
     },
     {
+      "type": "page-snapshot",
+      "label": "Page Snapshot",
+      "category": "read",
+      "description": "Outline of what is on the page (roles, names, a locator for each element), to write steps from or keep with the run.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "locator": "",
+        "maxLines": 1500
+      },
+      "fields": [
+        {
+          "key": "locator",
+          "label": "Part of the page (optional)",
+          "kind": "locator",
+          "templated": true,
+          "help": "Only this element and what is inside it. Empty = the whole page."
+        },
+        {
+          "key": "maxLines",
+          "label": "At most (lines)",
+          "kind": "number",
+          "min": 10,
+          "max": 10000,
+          "help": "Long pages are cut here, with a note."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "snapshot",
+          "description": "The outline: one element per line, e.g. - button \"Sign in\" [ref=e3] locator=role=button[name=\"Sign in\"]."
+        },
+        {
+          "key": "elements",
+          "description": "The same elements as a list of {ref, role, name, tag, locator, value?, checked?, disabled?, level?, url?}."
+        }
+      ]
+    },
+    {
       "type": "assert",
       "label": "Assert",
       "category": "test",

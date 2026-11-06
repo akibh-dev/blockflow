@@ -1,3 +1,4 @@
+import { CodedError } from '../errors';
 import { requireSessionTab } from '../session';
 import { hasTemplate } from '../template';
 import { normalizeHttpUrl } from '../url';
@@ -54,7 +55,7 @@ export const navigateBlock: BlockDefinition<NavigateConfig> = {
     let url: string | undefined;
     if (ctx.config.action === 'goto') {
       url = normalizeHttpUrl(ctx.config.url) ?? undefined;
-      if (!url) throw new Error(`"${ctx.config.url}" is not a valid http(s) URL`);
+      if (!url) throw new CodedError('config.invalid', `"${ctx.config.url}" is not a valid http(s) URL`);
     }
     const result = await ctx.host.tabs.navigate(tabId, {
       action: ctx.config.action,

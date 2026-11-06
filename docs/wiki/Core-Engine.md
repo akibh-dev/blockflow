@@ -61,7 +61,7 @@ Built per call by the private `makeContext()`; do not keep it between calls.
 | `timeoutMs` | This step's timeout. Page blocks wait a bit less (`pageWaitMs`) so the page's reason wins. Start/timer contexts get the 60 s default. |
 | `realInput` | `step.realInput === true`. |
 | `runId` | Current run id, `''` in `start` / `onTimer` (no run yet). |
-| `softFail(message)` | Marks the step and run failed but lets the block return normally (soft Assert). Outside a run it only logs. |
+| `softFail(failure)` | Marks the step and run failed but lets the block return normally (soft Assert). `failure` is a message or an `Error`; a `CodedError` also records its code. Outside a run it only logs. |
 | `callWorkflow(id, input)` | Runs another workflow as a child run and resolves with its last output. Throws outside a run, when nested ≥ `MAX_CALL_DEPTH` (8), when the workflow is missing, or when the child did not pass. |
 | `host` | The `Host` (below). |
 | `emit(payload, port = 'out')` | Inside a run: runs the downstream subtree now and awaits it (loops use this with `each`). Outside a run (`start`/`onTimer`): starts a **new run** whose first step is this block, trigger `start` or `timer`. |
@@ -149,15 +149,22 @@ attempt():
   resolveConfig(def, node.config, {...input, secret}) ── errors ─▶ failure
   loop: ctx = makeContext(...); withTimeout(call(ctx, input), timeoutSeconds)
         throw ─▶ retry after min(1s·2^(n-1), 10s) via Host.sleep, up to `retries`
-failure ──▶ handleFailure by step.onError:
+failure (message + errorDetails(error)) ──▶ handleFailure by step.onError:
    continue: step "handled", input goes out of the first port
-   port:     step "handled", {...input, error, errorBlock} goes out of "error"
+   port:     step "handled", {...input, error, errorCode, errorBlock} goes out of "error"
    default:  failStep (step "failed", run failed, path ends)
 success:
    no output   ──▶ step passed (or failed if softFail was called); path ends
    Routed/port ──▶ port must be in nodePorts() else failure
    endStep, afterStep (screenshot), emitFrom(node, payload, port)
 ```
+
+**Error details.** Every failure carries `ErrorDetails` (`code`, `locator?`, `url?`, `matches?`) from
+`errorDetails(error)` in [errors.ts](../../src/core/errors.ts): a thrown `CodedError` (or anything with a
+known `code` property) keeps its code, anything else is `step.failed`. The engine adds its own: config that
+does not render or an unknown block type is `config.invalid`, its step timeout is `timeout`, a failed
+called workflow is `workflow.failed`, a soft failure given as plain text is `step.failed`. `endStep` copies
+them onto the step record next to `error` (masked like the message).
 
 `emitFrom` runs every edge whose `edgePort()` equals the port, **sequentially and depth-first**, each target
 getting a shallow copy `{ ...payload }`. If no edge leaves that port, the payload is stored as
@@ -206,7 +213,7 @@ Details: [Scheduling and Timers](Scheduling-and-Timers.md),
 | `RunTrigger` | `manual` / `start` / `timer` / `call` / `event`. |
 | `RunStatus` | `running` / `passed` / `failed` / `cancelled` / `interrupted`. |
 | `StepStatus` | `running` / `passed` / `failed` / `handled` (failed but dealt with) / `skipped`. |
-| `StepRecord` | `nodeId, blockType, status, startedAt, durationMs?, attempts, input?, output?, port?, error?, screenshot?, childRunId?`. |
+| `StepRecord` | `nodeId, blockType, status, startedAt, durationMs?, attempts, input?, output?, port?, error?, code?, locator?, url?, matches?, sourceId?, screenshot?, childRunId?`. `code` (an `ErrorCode`) is set whenever `error` is; `locator`, `url` and `matches` (up to 5 element descriptions, strict-mode errors) when the error had them. `sourceId` is the node's `origin` (its id in the imported file), so a report maps back to the script. |
 | `RunRecord` | `id, workflowId, workflowName, trigger, status, startedAt, endedAt?, steps, droppedSteps?, error?, parentRunId?`. |
 | `RunObserver` | `(run) => void`; receives a fresh copy after every change. |
 | `MAX_STEPS_KEPT` | 300. |
@@ -214,6 +221,29 @@ Details: [Scheduling and Timers](Scheduling-and-Timers.md),
 | `markInterrupted(runs, liveIds, now)` | Runs still `running` and not in `liveIds` become `interrupted`, their running steps `failed`. Called on worker start. |
 | `maskText(text, secrets)` | Replaces each secret (length ≥ 3) with `•••`. |
 | `maskPayload(value, secrets)` | Same over JSON, matching JSON-escaped secrets. |
+
+## Error codes (`errors.ts`)
+
+| Export | Meaning |
+| --- | --- |
+| `ERROR_CODES` | Code → `{ meaning, fix }`. The source of the usage guide's table and of `$defs/errorCode` in `docs/guide/report.schema.json`. |
+| `ErrorCode`, `ERROR_CODE_LIST` | The codes as a type and as a list. |
+| `CodedError(code, message, { locator?, url?, matches? })` | Throw it from blocks and the host. Message unchanged; the details go on the step record. |
+| `errorDetails(error)` | `ErrorDetails` of any thrown value (duck-typed on `code`), `step.failed` when it has none. |
+| `isErrorCode(value)` | Type guard. |
+
+Codes: `locator.not-found`, `locator.strict`, `locator.invalid`, `element.not-visible`, `element.disabled`,
+`element.not-editable`, `element.covered`, `element.unstable`, `element.wrong-type`, `option.not-found`,
+`timeout`, `assert.failed`, `http.status`, `http.network`, `navigation.failed`, `tab.missing`, `tab.closed`,
+`frame.unreachable`, `page.restricted`, `permission.missing`, `script.error`, `config.invalid`,
+`workflow.failed`, `step.failed`. Who throws which: [Page Protocol](Page-Protocol.md#error-codes) for
+page ops; blocks and host: Assert `assert.failed`, HTTP Request `http.status` / `http.network`, Run Script
+`script.error`, Open Tab / Navigate / HTTP Request with a bad URL `config.invalid`, `requireSessionTab`
+`tab.missing`, page loads `navigation.failed`, the debugger and userScripts permissions
+`permission.missing`, URL / response / popup / network-idle waits `timeout`.
+
+Adding a code: add it to `ERROR_CODES` (meaning and fix), run `npm run guide:sync` (the report schema
+lists the codes), add a row to the guide's error-code table and to [Troubleshooting](Troubleshooting.md).
 
 The background stores records in `bf:runs` ([Storage Keys](Storage-Keys.md)); the editor reads them for
 block colours, the step inspector and reports ([Core Modules: report](Core-Modules.md#report)).
