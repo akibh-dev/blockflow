@@ -5,7 +5,7 @@ connecting **blocks** in a visual editor or by writing the same workflow as a **
 **Playwright-compatible automation in your browser**, usable by people through the editor and by LLMs
 through well-defined scripts.
 
-> **Status:** v0.2.0. 43 blocks, editor, recorder and reports; verified in Chromium, Brave and Firefox, with e2e tests for every block. See the [Roadmap](Roadmap.md).
+> **Status:** v0.4.0. 49 blocks, editor, recorder and reports; verified in Chromium, Brave and Firefox, with e2e tests for every block. See the [Roadmap](Roadmap.md).
 
 ## Using BlockFlow
 
