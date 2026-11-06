@@ -96,6 +96,7 @@ agent does with them.
 | `select` | `one` | visible, enabled, stable | `{selected: values[]}` |
 | `check` | `one` | visible, enabled, stable | `{changed, checked}` |
 | `press` | `one` if `locator`, else `document.activeElement` (or body) | visible, enabled, stable (with locator); focuses it | `{key}` |
+| `insert-text` | `one` if `locator`, else `document.activeElement` (or body) | visible, enabled, editable, stable (with locator); focuses it unless focused | `{text}` |
 | `read` | `all` (first match) | none | `{found: true, text, count}` |
 | `wait` | `all` | none (the state is the wait) | `{state, count?}` |
 | `detect-form` | `all` (first) | none | `{fields: FormFieldRow[], form: locator \| null}` |
@@ -174,7 +175,8 @@ are `composed: true`, so they cross shadow boundaries.
 | fill (contenteditable) | select contents, `execCommand('insertText')`, else `textContent =` + `input` | — |
 | select | focus, native setter (or `option.selected` for multiple), `input`, `change` | — |
 | check | a full `click`, then verifies `checkedState` changed (Fatal if not) | — |
-| press | keydown, keypress (printable or Enter), keyup | printable char typed into inputs/textarea; Enter adds `\n` in textarea, `form.requestSubmit()` in inputs, `.click()` on a/button; Backspace deletes; Tab / Shift+Tab focus the next/previous tabbable; Ctrl+A selects |
+| press | keydown per held modifier (Control, Alt, Meta, Shift; each carrying the modifiers held so far), keydown, keypress (printable or Enter), keyup, keyup per modifier in reverse | printable char typed into inputs/textarea; Enter adds `\n` in textarea, `form.requestSubmit()` in inputs, `.click()` on a/button; Backspace deletes; Tab / Shift+Tab focus the next/previous tabbable; Ctrl+A (Meta+A on a Mac) selects the field or a contenteditable's content |
+| insert-text | `execCommand('insertText')` on the focused field when the browser does it (it fires beforeinput/input itself); else the selection is replaced through the native setter, caret after the text, one `input` (`insertText`) | no key events at all |
 | upload | `input.files = DataTransfer.files`, `input`, `change` | — |
 
 **Native setter.** `setNativeValue` calls the `value` setter from `HTMLInputElement.prototype` (or
@@ -182,8 +184,9 @@ TextArea/Select), bypassing the instance-level property React installs to track 
 Vue and Angular see the following `input` event as a change.
 
 **Key names.** `parseKey('Control+Shift+a')` splits on `+`; modifiers are `ctrl`/`control`, `shift`,
-`alt`, `meta`/`cmd`/`command` (case-insensitive). `code` is `KeyA` / `Digit1` for single characters,
-else the key name itself.
+`alt`, `meta`/`cmd`/`command`, and `ControlOrMeta` (Meta when `navigator.platform` is a Mac, else Control),
+case-insensitive. With Shift a lowercase letter becomes uppercase (`Shift+a` types `A`, as Playwright).
+`code` is `KeyA` / `Digit1` for single characters, `ControlLeft`… for modifier keys, else the key name itself.
 
 **Text fields.** `textKind`: `textarea`; `input` of type `''`, text, email, password, search, tel, url,
 number, date, time, datetime-local, month, week, color, range; or contenteditable. Anything else makes
@@ -231,6 +234,12 @@ viewport, after scrolling it into view), and the driver adds the offsets of ever
 | `value` | Pending | `.value` if the element has one, else `''` |
 | `attribute` | Pending | `getAttribute(name) ?? ''` |
 | `has-class` | Pending | `classList.contains(name)` |
+| `class` | Pending | the `class` attribute, whitespace collapsed |
+| `css` | Pending (Fatal `config.invalid` without `name`) | `getComputedStyle(el).getPropertyValue(name)`, trimmed |
+| `accessible-name` / `accessible-description` | Pending | `accessibleName` / `accessibleDescription` ([aria.ts](../../src/dom/aria.ts)) |
+| `focused` | answers `false` | the first match is its document's active element (descending into open shadow roots' `activeElement`) |
+| `editable` | answers `false` | a field (`input` except hidden, `textarea`, `select`, contenteditable, or role textbox/searchbox/combobox/spinbutton/slider/checkbox/radio/switch/listbox), enabled, not `readOnly`, not `aria-readonly` |
+| `in-viewport` | answers `false` | an `IntersectionObserver` (the element's window's) is asked once: ratio > 0. A background tab may never answer, so after 500 ms the box decides (intersects the top window's viewport, frame offsets added; no layout → `false`). `attempt` returns a promise only for this read. |
 
 `wait` text states use `innerText` (falling back to `textContent`) of each match, or of `body`, through
 `textMatcher` (substring, `"exact"` or `/regex/`).

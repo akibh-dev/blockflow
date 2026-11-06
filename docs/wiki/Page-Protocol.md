@@ -38,7 +38,7 @@ Everything here must stay JSON-serialisable: it crosses `scripting.executeScript
 | `AgentErrorInfo` | `{ code?, url?, matches? }`: the machine-readable part of `pending` / `error` (see [Error codes](#error-codes)). |
 | `SnapshotResult` | `{ snapshot, elements, url, title, lines, truncated }`: the `snapshot` op's result (see [The snapshot op](#the-snapshot-op)). |
 | `SnapshotElement` | `{ ref, role, name, tag, locator?, value?, checked?, disabled?, level?, url?, inFrame?, inShadow? }`: one targetable element of a snapshot. |
-| `ReadKind` | `text`, `value`, `attribute`, `has-class`, `exists`, `count`, `visible`, `checked`, `enabled`. |
+| `ReadKind` | `text`, `value`, `attribute`, `has-class`, `exists`, `count`, `visible`, `checked`, `enabled`, `class`, `css`, `focused`, `editable`, `in-viewport`, `accessible-name`, `accessible-description`. |
 | `WaitState` | `visible`, `hidden`, `attached`, `detached`, `enabled`, `text`, `no-text`. |
 | `WaitUntil` | `load`, `networkidle`, `none` (tab operations, not agent ops). |
 | `UploadFile` | `{ name, type, base64 }`. |
@@ -49,7 +49,7 @@ Inside the agent, `Pending` errors become `pending` (retried), `Fatal` and any o
 `FrameBoundaryError` becomes `frame`. `Pending` and `Fatal` carry an error code; both answers carry the
 document's URL, and strict-mode errors the first 5 matches (`describeElement`). The driver adds two outcomes of its own: `missing` (agent not
 injected yet: inject `agent.js`, ask again) and `vanished` (no answer because the page navigated). After
-`vanished`, an action op (`click`, `fill`, `set-field`, `select`, `check`, `press`) returns
+`vanished`, an action op (`click`, `fill`, `set-field`, `select`, `check`, `press`; `insert-text` only with real input) returns
 `{ navigated: true }` instead of repeating, so a form is never submitted twice.
 
 ## Readiness ("auto-wait")
@@ -79,8 +79,9 @@ Geometry checks (stable, hit) are skipped where there is no layout (jsdom, `Host
 | `set-field` | `locator`, `value` | `setField()` | visible, enabled, editable for text fields | select: as `select` (value split on `\|`); checkbox/radio/switch: as `check` (`true/yes/on/1/checked`); text: `{ value }`. File inputs → error. | Fill Form |
 | `select` | `locator`, `values: string[]` | `select()` | visible, enabled | `{ selected: string[] }` (option values). Not a `<select>` → error; missing option → pending. | Select Option |
 | `check` | `locator`, `checked` | `check()` | visible, enabled | `{ changed, checked }`. Unchecking a radio → error. | Check |
-| `press` | `key` (combo like `Control+a`), `locator?` | `press()` | with a locator: visible, enabled, then focus | `{ key }`. Without a locator the focused element (or body) gets the keys. | Press Key |
-| `read` | `locator`, `kind: ReadKind`, `name?` | `read()` | none | `{ found: true, text, count }`. `count`/`exists`/`visible`/`checked`/`enabled` answer even with no match; other kinds wait for a match. `text` is raw `textContent`. | Read Element, Assert, Paginate, `pageReader` (Watch Element), driver (real-input check) |
+| `press` | `key` (combo like `Control+a`, `Control+Shift+K`, `ControlOrMeta+A`), `locator?` | `press()` | with a locator: visible, enabled, then focus | `{ key }`. Without a locator the focused element (or body) gets the keys. Modifier keys go down first and up last. | Press Key |
+| `insert-text` | `text`, `locator?` | `insertText()` | with a locator: visible, enabled, editable, then focus (unless already focused) | `{ text }`. Replaces the selection at the caret with one `input` event, no key events (`execCommand('insertText')` when it works, else the native value setter). Not a text field → `error` `element.wrong-type`. | Press Key (`mode: "text"`) |
+| `read` | `locator`, `kind: ReadKind`, `name?` | `read()` | none | `{ found: true, text, count }`. `count`/`exists`/`visible`/`checked`/`enabled`/`focused`/`editable`/`in-viewport` answer even with no match; other kinds wait for a match. `text` is raw `textContent`. `css` needs `name` (the property; missing → `error` `config.invalid`). `in-viewport` is the only asynchronous read (an IntersectionObserver, ≤ 500 ms). | Read Element, Assert, Paginate, `pageReader` (Watch Element), driver (real-input check) |
 | `wait` | `state: WaitState`, `locator?`, `text?` | `wait()` | n/a | `{ state, count? }`; pending until the state holds. `text`/`no-text` search `innerText` of the locator's matches or the body. | Wait For |
 | `detect-form` | `locator` | `detectForm()` | n/a | `{ fields: FormFieldRow[], form }`: visible fields of the enclosing `<form>` (or the element), skipping hidden/submit/button/reset/image/file inputs. | `src/browser/picking.ts` (Detect fields) |
 | `info` | none | inline | n/a | `{ url, title }` | nothing currently |

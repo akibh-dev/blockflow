@@ -1,4 +1,4 @@
-import { accessibleName, checkedState, getRole } from './aria';
+import { accessibleDescription, accessibleName, checkedState, getRole } from './aria';
 import { FrameBoundaryError, LocatorError, describeElement, resolveLocator, textMatcher } from './locator';
 import { bestLocator } from './bestLocator';
 import { takeSnapshot } from './snapshot';
@@ -440,23 +440,37 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   // --- keyboard -------------------------------------------------------------
 
-  /** "Control+Shift+a" → key "a" plus modifier flags (ctrl/control, shift, alt, meta/cmd/command). */
+  /** Mac keyboards use Meta (⌘) where others use Control: the target of `ControlOrMeta`. */
+  const isMac = /Mac|iPhone|iPad/.test(win.navigator?.platform ?? '');
+
+  /**
+   * "Control+Shift+a" → key "A" plus modifier flags (ctrl/control, shift, alt, meta/cmd/command, and
+   * ControlOrMeta: Meta on a Mac, else Control). With Shift a lowercase letter becomes uppercase, as typed.
+   */
   function parseKey(combo: string): KeyInfo {
     const parts = combo.split('+').map((part) => part.trim());
     const keyName = parts.pop() || combo;
     const has = (name: string) => parts.some((part) => part.toLowerCase() === name);
+    const either = has('controlormeta');
+    const shiftKey = has('shift');
     return {
-      key: keyName,
-      ctrlKey: has('control') || has('ctrl'),
-      shiftKey: has('shift'),
+      key: shiftKey && /^[a-z]$/.test(keyName) ? keyName.toUpperCase() : keyName,
+      ctrlKey: has('control') || has('ctrl') || (either && !isMac),
+      shiftKey,
       altKey: has('alt'),
-      metaKey: has('meta') || has('cmd') || has('command'),
+      metaKey: has('meta') || has('cmd') || has('command') || (either && isMac),
     };
+  }
+
+  /** The modifier keys held for `info`, in the order they go down. */
+  function modifierKeys(info: KeyInfo): string[] {
+    return [info.ctrlKey && 'Control', info.altKey && 'Alt', info.metaKey && 'Meta', info.shiftKey && 'Shift'].filter((name): name is string => Boolean(name));
   }
 
   /** Dispatches one synthetic KeyboardEvent; returns false when the page cancelled it. */
   function key(target: Element, type: 'keydown' | 'keypress' | 'keyup', info: KeyInfo): boolean {
-    const code = info.key.length === 1 ? (/[a-z]/i.test(info.key) ? `Key${info.key.toUpperCase()}` : /\d/.test(info.key) ? `Digit${info.key}` : '') : info.key;
+    const modifier = ['Control', 'Alt', 'Meta', 'Shift'].includes(info.key);
+    const code = info.key.length === 1 ? (/[a-z]/i.test(info.key) ? `Key${info.key.toUpperCase()}` : /\d/.test(info.key) ? `Digit${info.key}` : '') : modifier ? `${info.key}Left` : info.key;
     return target.dispatchEvent(new win.KeyboardEvent(type, { ...info, code, bubbles: true, cancelable: true, composed: true }));
   }
 
@@ -473,6 +487,14 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
    */
   function press(target: Element, combo: string): Done {
     const info = parseKey(combo);
+    // Modifiers go down first and come up last, each event carrying the modifiers held so far (as Playwright does).
+    const modifiers = modifierKeys(info);
+    const held: KeyInfo = { key: '', ctrlKey: false, shiftKey: false, altKey: false, metaKey: false };
+    const flag = { Control: 'ctrlKey', Alt: 'altKey', Meta: 'metaKey', Shift: 'shiftKey' } as const;
+    for (const name of modifiers) {
+      held[flag[name as keyof typeof flag]] = true;
+      key(target, 'keydown', { ...held, key: name });
+    }
     const allowed = key(target, 'keydown', info);
     const printable = info.key.length === 1 && !info.ctrlKey && !info.metaKey && !info.altKey;
     if (allowed && (printable || info.key === 'Enter') && key(target, 'keypress', info)) {
@@ -505,21 +527,115 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
         const index = list.indexOf(target as HTMLElement);
         const next = list[(index + (info.shiftKey ? -1 : 1) + list.length) % list.length];
         next?.focus();
-      } else if (info.ctrlKey && info.key.toLowerCase() === 'a' && (target as HTMLInputElement).select) {
-        (target as HTMLInputElement).select();
+      } else if ((isMac ? info.metaKey : info.ctrlKey) && info.key.toLowerCase() === 'a') {
+        // Select all: Control+A, or Meta+A on a Mac (like the browser on that system).
+        if (typeof (target as HTMLInputElement).select === 'function') (target as HTMLInputElement).select();
+        else if (textKind(target) === 'editable') win.getSelection()?.selectAllChildren(target);
       }
     }
     key(target, 'keyup', info);
+    for (const name of [...modifiers].reverse()) {
+      held[flag[name as keyof typeof flag]] = false;
+      key(target, 'keyup', { ...held, key: name });
+    }
     return { key: combo };
   }
 
+  /**
+   * Text at the caret (replacing the selection) with one `input` event and no key events. Uses the
+   * browser's own `insertText` command when it works (undo, beforeinput), else edits the value.
+   */
+  function insertText(target: Element, text: string): Done {
+    const kind = textKind(target);
+    if (!kind) throw new Fatal(`${describeElement(target)} cannot take text. Point at a text field, or focus one first.`, 'element.wrong-type');
+    const owner = target.ownerDocument;
+    if (owner.activeElement === target || kind === 'editable') {
+      if (typeof owner.execCommand === 'function' && owner.execCommand('insertText', false, text)) return { text };
+    }
+    if (kind === 'editable') {
+      target.append(owner.createTextNode(text));
+      inputEvent(target, text);
+      return { text };
+    }
+    const field = target as HTMLInputElement | HTMLTextAreaElement;
+    let start: number | null = null;
+    let end: number | null = null;
+    try {
+      start = field.selectionStart;
+      end = field.selectionEnd;
+    } catch {
+      // email / number inputs have no selection API: append.
+    }
+    const value = field.value;
+    const from = start ?? value.length;
+    const to = end ?? from;
+    setNativeValue(field, value.slice(0, from) + text + value.slice(to));
+    try {
+      field.setSelectionRange(from + text.length, from + text.length);
+    } catch {
+      // see above
+    }
+    inputEvent(field, text);
+    return { text };
+  }
+
   // --- reading ------------------------------------------------------------
+
+  /** The element has focus in its document (through open shadow roots: the innermost focused element). */
+  function isFocused(element: Element): boolean {
+    let active = element.ownerDocument.activeElement;
+    while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+    return active === element;
+  }
+
+  const EDITABLE_ROLES = new Set(['textbox', 'searchbox', 'combobox', 'spinbutton', 'slider', 'checkbox', 'radio', 'switch', 'listbox']);
+
+  /** Editable like Playwright's toBeEditable: a form field (or contenteditable / such a role), enabled and not read-only. */
+  function canEdit(element: Element): boolean {
+    const field = textKind(element) !== null || ['input', 'select', 'textarea'].includes(element.localName) || EDITABLE_ROLES.has(getRole(element) ?? '');
+    if (!field || (element as HTMLInputElement).type === 'hidden') return false;
+    return isEnabled(element) && isEditable(element);
+  }
+
+  /** Some of the element's box is inside the viewport, from its box alone (no layout: false). */
+  function inViewportByRect(element: Element): boolean {
+    if (!hasLayout()) return false;
+    const rect = element.getBoundingClientRect();
+    const origin = documentOrigin(element.ownerDocument);
+    const left = Math.max(rect.left + origin.x, 0);
+    const top = Math.max(rect.top + origin.y, 0);
+    const right = Math.min(rect.right + origin.x, win.innerWidth);
+    const bottom = Math.min(rect.bottom + origin.y, win.innerHeight);
+    return right > left && bottom > top;
+  }
+
+  /**
+   * Like Playwright's toBeInViewport: an IntersectionObserver's first answer has a ratio above 0 (it also
+   * sees clipping by scrolled containers). A tab in the background may never answer, so after 500 ms the
+   * element's box decides.
+   */
+  function inViewport(element: Element): Promise<boolean> {
+    const view = (element.ownerDocument.defaultView ?? win) as PageWindow;
+    if (typeof view.IntersectionObserver !== 'function') return Promise.resolve(inViewportByRect(element));
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (inside: boolean) => {
+        if (settled) return;
+        settled = true;
+        observer.disconnect();
+        resolve(inside);
+      };
+      const observer = new view.IntersectionObserver((entries) => finish((entries[0]?.intersectionRatio ?? 0) > 0));
+      observer.observe(element);
+      win.setTimeout(() => finish(inViewportByRect(element)), 500);
+    });
+  }
 
   /**
    * Not strict: uses the first match. count/exists/visible/checked/enabled answer even with no match;
    * text/value/attribute/has-class wait (Pending) for one.
    */
-  function read(request: Extract<AgentRequest, { op: 'read' }>): Done {
+  function read(request: Extract<AgentRequest, { op: 'read' }>): Done | Promise<Done> {
     const found = all(request.locator);
     const count = found.length;
     if (request.kind === 'count') return { found: true, text: String(count), count };
@@ -529,11 +645,23 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     if (request.kind === 'visible') return { found: true, text: String(found.some(isVisible)), count };
     if (request.kind === 'checked') return { found: true, text: String(element ? checkedState(element) === true : false), count };
     if (request.kind === 'enabled') return { found: true, text: String(element ? isEnabled(element) && isVisible(element) : false), count };
+    if (request.kind === 'focused') return { found: true, text: String(element ? isFocused(element) : false), count };
+    if (request.kind === 'editable') return { found: true, text: String(element ? canEdit(element) : false), count };
+    if (request.kind === 'in-viewport') {
+      if (!element) return { found: true, text: 'false', count };
+      return inViewport(element).then((inside) => ({ found: true, text: String(inside), count }));
+    }
     if (!element) throw new Pending(`waiting for ${request.locator}: no element matches`, 'locator.not-found');
     const name = request.name ?? '';
     let text: string;
     if (request.kind === 'attribute') text = element.getAttribute(name) ?? '';
     else if (request.kind === 'has-class') text = String(element.classList.contains(name));
+    else if (request.kind === 'class') text = (element.getAttribute('class') ?? '').replace(/\s+/g, ' ').trim();
+    else if (request.kind === 'css') {
+      if (!name.trim()) throw new Fatal('Reading a CSS value needs the property name (e.g. color)', 'config.invalid');
+      text = (element.ownerDocument.defaultView ?? win).getComputedStyle(element).getPropertyValue(name.trim()).trim();
+    } else if (request.kind === 'accessible-name') text = accessibleName(element);
+    else if (request.kind === 'accessible-description') text = accessibleDescription(element);
     else if (request.kind === 'value') text = 'value' in element ? String((element as HTMLInputElement).value) : '';
     // textContent, as Watch Element always used, so existing watchers keep comparing like with like.
     else text = element.textContent ?? '';
@@ -783,7 +911,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   // --- dispatch -------------------------------------------------------------
 
   /** One try at the request. Throws Pending (retry), Fatal (give up) or FrameBoundaryError (hand over). */
-  function attempt(request: AgentRequest): Done {
+  function attempt(request: AgentRequest): Done | Promise<Done> {
     switch (request.op) {
       case 'click': {
         const element = one(request.locator);
@@ -821,6 +949,15 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
         }
         return press(target, request.key);
       }
+      case 'insert-text': {
+        let target: Element = doc.activeElement && doc.activeElement !== doc.body ? doc.activeElement : doc.body;
+        if (request.locator) {
+          target = one(request.locator);
+          ready(target, { enabled: true, editable: true });
+          if (target.ownerDocument.activeElement !== target) focus(target);
+        }
+        return insertText(target, request.text);
+      }
       case 'read':
         return read(request);
       case 'wait':
@@ -853,7 +990,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       const deadline = Date.now() + Math.max(0, budgetMs);
       for (;;) {
         try {
-          return { status: 'done', result: attempt(request) };
+          return { status: 'done', result: await attempt(request) };
         } catch (error) {
           if (error instanceof FrameBoundaryError) {
             const offset = request.op === 'locate' && error.frame ? frameOffset(error.frame) : undefined;

@@ -406,7 +406,12 @@ Chrome 135+) covers some of them.
 | `getByLabel`, `getByPlaceholder`, `getByTestId`, `getByAltText`, `getByTitle` | `label=`, `placeholder=`, `testid=`, `alt=`, `title=` |
 | `locator('css')`, `locator('xpath=…')` | the CSS itself, `xpath=…` |
 | `a.locator(b)`, `.first()`, `.last()`, `.nth(n)` | `a >> b`, `>> nth=0`, `>> nth=-1`, `>> nth=n` |
-| `filter({ hasText })`, `has`, `or`, `and`, `visible` | no equivalent yet |
+| `filter({ hasText })` / `{ hasNotText }` | `>> has-text=…` / `>> has-not-text=…` |
+| `filter({ has })` / `{ hasNot }` | `>> has=<locator>` / `>> has-not=<locator>` (quote it when it has steps) |
+| `filter({ visible: true })` / `false` | `>> visible` / `>> visible=false` |
+| `a.or(b)` | `a \|\| b` |
+| `getByRole(…, { pressed, expanded, selected, disabled, includeHidden })` | `[pressed]`, `[expanded=false]`, `[selected]`, `[disabled]`, `[include-hidden]` |
+| `a.and(b)` | no equivalent yet |
 
 ### Actions
 
@@ -420,7 +425,8 @@ Chrome 135+) covers some of them.
 | several `fill`s and a submit click | **Fill Form** `fill-form` (`fields`, `submit`) |
 | `locator.selectOption(label)` | **Select Option** `select-option` (text or value; `a\|b` for multi) |
 | `check()` / `uncheck()` / `setChecked()` | **Check** `check`, `state` |
-| `locator.press('Enter')`, `keyboard.press('Control+A')` | **Press Key** `press-key` (`locator` optional) |
+| `locator.press('Enter')`, `keyboard.press('Control+Shift+K')`, `'ControlOrMeta+A'` | **Press Key** `press-key` (`locator` optional) |
+| `keyboard.insertText(text)` | **Press Key** `mode: "text"`, `text` |
 | `setInputFiles` | **Upload File** `upload-file` (one file, from text or a URL) |
 | `page.on('dialog', d => d.accept())` | **Dialogs** `dialogs`, placed **before** the click that opens the dialog |
 | `scrollIntoViewIfNeeded()`, `mouse.wheel` | **Scroll** `scroll` (`to`: `element`, `end`, `bottom`, `top`) |
@@ -448,7 +454,10 @@ Chrome 135+) covers some of them.
 | `expect(l).toHaveText` / `toContainText` | **Assert** `assert`, `subject: "text"`, `operator: "equals"` / `"contains"` (also `matches`, `starts-with`…) |
 | `toHaveValue` | **Assert** `subject: "input"` |
 | `toHaveAttribute(name, v)` | **Assert** `subject: "attribute"`, `name` |
-| `toHaveClass` | **Assert** `subject: "attribute"`, `name: "class"`, `operator: "contains"` |
+| `toHaveClass` / `toContainClass` | **Assert** `subject: "class"`, `operator: "equals"` / `"contains"` (has the classes) |
+| `toHaveCSS(name, v)` | **Assert** `subject: "css"`, `name` = the property |
+| `toHaveAccessibleName` / `toHaveAccessibleDescription` | **Assert** `subject: "accessible-name"` / `"accessible-description"` |
+| `toBeFocused` / `toBeEditable` / `toBeInViewport` | **Assert** `subject: "focused"` / `"editable"` / `"in-viewport"` |
 | `toHaveCount` | **Assert** `subject: "count"` |
 | `toBeVisible` / `toBeHidden` / `toBeChecked` / `toBeEnabled` / `toBeDisabled` | **Assert** `subject` of the same name (`unchecked` for not checked) |
 | `expect(page).toHaveURL` / `toHaveTitle` | **Assert** `subject: "url"` / `"title"` |

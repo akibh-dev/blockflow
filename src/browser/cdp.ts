@@ -78,21 +78,52 @@ export async function mouseClick(send: Send, x: number, y: number, options: { bu
   }
 }
 
+/** Modifier keys as CDP sends them: bit, key, code, Windows key code. */
+const MODIFIER_KEYS = [
+  { bit: 2, key: 'Control', code: 'ControlLeft', keyCode: 17 },
+  { bit: 1, key: 'Alt', code: 'AltLeft', keyCode: 18 },
+  { bit: 4, key: 'Meta', code: 'MetaLeft', keyCode: 91 },
+  { bit: 8, key: 'Shift', code: 'ShiftLeft', keyCode: 16 },
+];
+
+/** Mac keyboards use Meta (⌘) where others use Control: the target of `ControlOrMeta`. */
+const isMac = () => /Mac/.test(globalThis.navigator?.platform ?? '');
+
 /**
- * Presses a key or combo like "Enter", "a", "Control+a", "Shift+Tab". Text is only sent without
- * modifiers other than Shift.
+ * Presses a key or combo like "Enter", "a", "Control+a", "Shift+Tab", "Control+Shift+K",
+ * "ControlOrMeta+A" (Meta on a Mac, else Control). The modifier keys go down first and come up last,
+ * as on a keyboard. Text is only sent without modifiers other than Shift; Shift+a types "A".
  */
 export async function pressKey(send: Send, combo: string): Promise<void> {
   const parts = combo.split('+').map((part) => part.trim());
-  const name = parts.pop() || combo;
-  const modifiers = parts.reduce((sum, part) => sum | (MODIFIERS[part.toLowerCase()] ?? 0), 0);
+  const typed = parts.pop() || combo;
+  const modifiers = parts.reduce((sum, part) => {
+    const lower = part.toLowerCase();
+    return sum | (lower === 'controlormeta' ? (isMac() ? 4 : 2) : (MODIFIERS[lower] ?? 0));
+  }, 0);
+  const name = modifiers & 8 && /^[a-z]$/.test(typed) ? typed.toUpperCase() : typed;
   const known = KEYS[name];
   const printable = !known && name.length === 1;
   const code = known?.code ?? (printable ? (/[a-z]/i.test(name) ? `Key${name.toUpperCase()}` : /\d/.test(name) ? `Digit${name}` : '') : name);
   const keyCode = known?.keyCode ?? (printable ? name.toUpperCase().charCodeAt(0) : 0);
   const text = (modifiers & ~8) === 0 ? (known?.text ?? (printable ? name : undefined)) : undefined;
+  const held = MODIFIER_KEYS.filter((modifier) => modifiers & modifier.bit);
+  let down = 0;
+  for (const modifier of held) {
+    down |= modifier.bit;
+    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: modifier.key, code: modifier.code, windowsVirtualKeyCode: modifier.keyCode, modifiers: down });
+  }
   await send('Input.dispatchKeyEvent', { type: text ? 'keyDown' : 'rawKeyDown', key: name, code, windowsVirtualKeyCode: keyCode, modifiers, ...(text ? { text } : {}) });
   await send('Input.dispatchKeyEvent', { type: 'keyUp', key: name, code, windowsVirtualKeyCode: keyCode, modifiers });
+  for (const modifier of [...held].reverse()) {
+    down &= ~modifier.bit;
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: modifier.key, code: modifier.code, windowsVirtualKeyCode: modifier.keyCode, modifiers: down });
+  }
+}
+
+/** Text at the caret as one input, no key events (Playwright's `keyboard.insertText`). */
+export async function insertText(send: Send, text: string): Promise<void> {
+  if (text) await send('Input.insertText', { text });
 }
 
 /** Click into a field, select what is there, and type over it. */

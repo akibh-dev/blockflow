@@ -1,6 +1,6 @@
 import { withDefaults } from './config';
 import { pointer } from './issues';
-import { ENGINES, LocatorSyntaxError, parseLocatorSteps } from './locatorSyntax';
+import { ENGINES, FILTERS, LocatorSyntaxError, nestedLocator, parseLocatorAlternatives, parseRoleSelector, visibleFilter } from './locatorSyntax';
 import { CURRENT_SCHEMA_VERSION, RENAMED_KEYS } from './migrate';
 import { nodePorts, DEFAULT_PORT, ERROR_PORT } from './ports';
 import { DEFAULT_TAB } from './session';
@@ -125,27 +125,47 @@ export function locatorProblem(source: string): { message: string; hint?: string
   }
   if (quote) return { message: `Locator "${source}" has an unclosed ${quote} quote` };
   if (depth > 0) return { message: `Locator "${source}" has an unclosed bracket` };
-  let steps;
+  let alternatives;
   try {
-    steps = parseLocatorSteps(source);
+    alternatives = parseLocatorAlternatives(source);
   } catch (error) {
     if (error instanceof LocatorSyntaxError) return { message: error.message, hint: 'Steps are joined with >>, e.g. role=list >> text=Total' };
     throw error;
   }
-  for (const step of steps) {
-    if (step.engine === 'css') {
-      // `rol=button` is not CSS (a bare "=" only belongs inside [attribute=value]): a mistyped engine.
-      const engine = /^([a-zA-Z-]+)\s*=/.exec(step.body)?.[1];
-      if (engine) {
-        return {
-          message: `Locator "${source}" uses "${engine}=", which is not a locator engine`,
-          hint: didYouMean(engine, ENGINES) ?? `Engines: ${[...ENGINES].join(', ')}. Or plain CSS.`,
-        };
+  for (const steps of alternatives) {
+    for (const [index, step] of steps.entries()) {
+      if (step.engine === 'css') {
+        // `rol=button` is not CSS (a bare "=" only belongs inside [attribute=value]): a mistyped engine.
+        const engine = /^([a-zA-Z-]+)\s*=/.exec(step.body)?.[1];
+        if (engine) {
+          return {
+            message: `Locator "${source}" uses "${engine}=", which is not a locator engine`,
+            hint: didYouMean(engine, ENGINES) ?? `Engines: ${[...ENGINES].join(', ')}. Or plain CSS.`,
+          };
+        }
+        // `>> visibel` is a valid CSS tag name, but almost certainly the visible filter mistyped.
+        if (index > 0 && /^[a-z]+$/i.test(step.body) && didYouMean(step.body, ['visible'])) {
+          return { message: `Locator "${source}": "${step.body}" looks like a mistyped visible filter`, hint: didYouMean(step.body, ['visible']) };
+        }
+        continue;
       }
-      continue;
+      if (FILTERS.has(step.engine) && index === 0) {
+        return { message: `Locator "${source}": ${step.engine}= filters the matches of a step before it`, hint: `Start with a locator, e.g. role=listitem >> ${step.engine}=…` };
+      }
+      if (!step.body) return { message: `Locator "${source}": "${step.engine}=" needs a value` };
+      if (step.engine === 'nth' && !/^-?\d+$/.test(step.body)) return { message: `Locator "${source}": nth= takes a number (0 = first, -1 = last)` };
+      try {
+        if (step.engine === 'role') parseRoleSelector(step.body);
+        if (step.engine === 'visible') visibleFilter(step.body);
+      } catch (error) {
+        if (error instanceof LocatorSyntaxError) return { message: `Locator "${source}": ${error.message}` };
+        throw error;
+      }
+      if (step.engine === 'has' || step.engine === 'has-not') {
+        const inner = locatorProblem(nestedLocator(step.body));
+        if (inner) return { message: `Locator "${source}", inside ${step.engine}=: ${inner.message}`, ...(inner.hint ? { hint: inner.hint } : {}) };
+      }
     }
-    if (!step.body) return { message: `Locator "${source}": "${step.engine}=" needs a value` };
-    if (step.engine === 'nth' && !/^-?\d+$/.test(step.body)) return { message: `Locator "${source}": nth= takes a number (0 = first, -1 = last)` };
   }
   return null;
 }

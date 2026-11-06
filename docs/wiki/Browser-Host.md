@@ -31,7 +31,7 @@ workflow timing goes through the scheduler.
 | `pageDriver.ts` | Sends requests to the page agent | `act`, `actInTab` | host, pageReader, picking |
 | `pageReader.ts` | Watch Element / Read Element with a URL | `readElement` | host |
 | `htmlParse.ts` | Agent on an HTML string | `actOnHtml`, `runOnHtml` | host, offscreen document |
-| `cdp.ts` | Real input and background screenshots via `debugger` | `withDebugger`, `mouseClick`, `pressKey`, `typeInto`, `captureWithDebugger`, `hasDebugger` | pageDriver, host |
+| `cdp.ts` | Real input and background screenshots via `debugger` | `withDebugger`, `mouseClick`, `pressKey`, `insertText`, `typeInto`, `captureWithDebugger`, `hasDebugger` | pageDriver, host |
 | `popups.ts` | Tabs opened by pages | `recordPopup`, `waitForPopup` | background, host |
 | `prompts.ts` | Manual Step | `askUser`, `answerPrompt`, `promptRunId`, `clearStalePrompts`, `PendingPrompt` | host, background, editor |
 | `picking.ts` | Background side of the element picker and the editor's 📸 Snapshot page | `startPicking`, `finishPicking`, `cancelPicking`, `relayPickerSync`, `snapshotForEditor` | background |
@@ -167,7 +167,8 @@ Firefox's build declares neither `debugger` nor `userScripts`.
 | `hasDebugger()` | `permissions.contains({permissions: ['debugger']})`, false on error. |
 | `withDebugger(tabId, fn)` | Attach (protocol `1.3`; "already attached" is tolerated), run `fn(send)`, always detach. Attaching per action keeps Chrome's "started debugging this browser" bar short. |
 | `mouseClick(send, x, y, {button, clicks, hoverOnly})` | `Input.dispatchMouseEvent` move, then press/release per click. |
-| `pressKey(send, combo)` | `"Control+a"`, `"Shift+Tab"`, `"Enter"`, single characters. Modifier bits alt 1, ctrl 2, meta 4, shift 8. Sends `text` only without non-shift modifiers. |
+| `pressKey(send, combo)` | `"Control+a"`, `"Shift+Tab"`, `"Enter"`, `"Control+Shift+K"`, `"ControlOrMeta+A"` (Meta on a Mac), single characters. Modifier bits alt 1, ctrl 2, meta 4, shift 8. The modifier keys get their own `rawKeyDown` first and `keyUp` last (each with the bits held so far). Shift uppercases a letter. Sends `text` only without non-shift modifiers. |
+| `insertText(send, text)` | `Input.insertText` (Press Key `mode: "text"`; with a locator the driver clicks the element first). |
 | `typeInto(send, x, y, text)` | Click, Ctrl+A (`commands: ['selectAll']`), then `Input.insertText` (or Backspace for empty). |
 | `captureWithDebugger(tabId)` | `Page.captureScreenshot` JPEG 60, raced against 4 s (background tabs may not paint); null without permission. |
 

@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { mouseClick, pressKey, typeInto, withDebugger } from './cdp';
+import { insertText, mouseClick, pressKey, typeInto, withDebugger } from './cdp';
 import { sleep, tabExists } from './tabs';
 import { CodedError } from '../core/errors';
 import type { AgentCall, AgentErrorInfo, AgentRequest, AgentResponse } from '../core/page';
@@ -17,7 +17,7 @@ import type { ErrorCode } from '../core/errors';
 
 const AGENT_FILE = '/content-scripts/agent.js';
 const SLICE_MS = 2_000;
-const ACTIONS = new Set<AgentRequest['op']>(['click', 'fill', 'set-field', 'select', 'check', 'press']);
+const ACTIONS = new Set<AgentRequest['op']>(['click', 'fill', 'set-field', 'select', 'check', 'press', 'insert-text']);
 
 /** What one call can return: the agent's answer, `missing` (no agent in the page yet) or `vanished` (the page went away mid-call). */
 type Outcome = AgentResponse | { status: 'missing' } | { status: 'vanished' };
@@ -84,9 +84,10 @@ function locatorOf(request: AgentRequest): string | undefined {
 async function actWithRealInput(tabId: number, request: AgentRequest, timeoutMs: number): Promise<Record<string, unknown>> {
   if (!('locator' in request) || !request.locator) {
     if (request.op === 'press') await withDebugger(tabId, (send) => pressKey(send, request.key));
+    if (request.op === 'insert-text') await withDebugger(tabId, (send) => insertText(send, request.text));
     return { real: true };
   }
-  const purpose = request.op === 'click' || request.op === 'fill' || request.op === 'set-field' || request.op === 'check' || request.op === 'press' ? request.op : 'click';
+  const purpose = request.op === 'click' || request.op === 'fill' || request.op === 'set-field' || request.op === 'check' || request.op === 'press' ? request.op : request.op === 'insert-text' ? 'fill' : 'click';
   const where = await actInTab(tabId, { op: 'locate', locator: request.locator, purpose }, timeoutMs);
   const x = Number(where.x);
   const y = Number(where.y);
@@ -115,6 +116,13 @@ async function actWithRealInput(tabId: number, request: AgentRequest, timeoutMs:
         await pressKey(send, request.key);
       });
       return { key: request.key, real: true };
+    case 'insert-text':
+      // Clicking puts the caret where it lands (the middle of the field), as a person would.
+      await withDebugger(tabId, async (send) => {
+        await mouseClick(send, x, y);
+        await insertText(send, request.text);
+      });
+      return { text: request.text, real: true };
     default:
       return actInTab(tabId, request, timeoutMs);
   }

@@ -249,3 +249,58 @@ export function checkedState(element: Element): boolean | null {
   if (aria === 'false') return false;
   return null;
 }
+
+/** `aria-pressed` of toggle buttons: true / false, null when the element has none (or "mixed"). */
+export function pressedState(element: Element): boolean | null {
+  const aria = element.getAttribute('aria-pressed');
+  return aria === 'true' ? true : aria === 'false' ? false : null;
+}
+
+/** `aria-expanded` (menus, accordions, comboboxes): null when the element does not say. */
+export function expandedState(element: Element): boolean | null {
+  const aria = element.getAttribute('aria-expanded');
+  return aria === 'true' ? true : aria === 'false' ? false : null;
+}
+
+/** Selected: a native `<option>`'s `selected`, else `aria-selected` (tabs, grid cells, rows); null when neither. */
+export function selectedState(element: Element): boolean | null {
+  if (element.localName === 'option') return (element as HTMLOptionElement).selected;
+  const aria = element.getAttribute('aria-selected');
+  return aria === 'true' ? true : aria === 'false' ? false : null;
+}
+
+const NATIVE_DISABLED = new Set(['button', 'input', 'select', 'textarea', 'option', 'optgroup', 'fieldset']);
+
+/**
+ * Disabled as Playwright's getByRole sees it: a native control with `disabled` (or inside a disabled
+ * fieldset, outside its first legend, or a disabled optgroup), or `aria-disabled="true"` on it or an
+ * ancestor. Always true or false.
+ */
+export function disabledState(element: Element): boolean {
+  if (NATIVE_DISABLED.has(element.localName)) {
+    if (element.hasAttribute('disabled')) return true;
+    const fieldset = element.parentElement?.closest('fieldset[disabled]');
+    if (fieldset) {
+      const legend = fieldset.querySelector(':scope > legend');
+      if (!legend || !legend.contains(element)) return true;
+    }
+    if (element.localName === 'option' && element.closest('optgroup[disabled]')) return true;
+  }
+  return element.closest('[aria-disabled="true"]') !== null;
+}
+
+/**
+ * The description a screen reader adds after the name: `aria-describedby` text, else
+ * `aria-description`, else `title` when the title did not already give the name.
+ */
+export function accessibleDescription(element: Element): string {
+  const describedBy = element.getAttribute('aria-describedby');
+  if (describedBy) {
+    const text = normalize(byIds(element, describedBy));
+    if (text) return text;
+  }
+  const description = normalize(element.getAttribute('aria-description') ?? '');
+  if (description) return description;
+  const title = normalize(element.getAttribute('title') ?? '');
+  return title && title !== accessibleName(element) ? title : '';
+}

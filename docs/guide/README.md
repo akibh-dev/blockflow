@@ -229,6 +229,7 @@ Every "Element"/"Field" setting is a locator, Playwright style:
 | `role=button[name="Save"]` | ARIA role + accessible name (name: contains, any case) |
 | `role=button[name="Save"][exact]` | exact name |
 | `role=checkbox[checked]`, `role=heading[level=2]` | state / heading level |
+| `role=button[pressed]`, `role=button[expanded=false]`, `role=tab[selected]`, `role=button[disabled]` | ARIA states (`aria-pressed`, `aria-expanded`, `aria-selected` or a selected `<option>`, disabled natively or by `aria-disabled`); `=false` for the opposite. An element without `aria-pressed`/`aria-expanded` matches neither. `[include-hidden]` also finds hidden elements |
 | `label=Email`, `label="Email"` | form control by its `<label>`, `aria-label` or `aria-labelledby` |
 | `placeholder=you@example.com` | input by placeholder |
 | `testid=submit` | `data-testid`, `data-test-id`, `data-test`, `data-cy` or `data-qa` |
@@ -237,6 +238,17 @@ Every "Element"/"Field" setting is a locator, Playwright style:
 | `#cart >> text=Remove` | the second inside the first |
 | `li >> nth=0`, `li >> nth=-1` | first / last match |
 | `frame=#pay >> label=Card number` | inside an iframe (same site or another site) |
+| `role=listitem >> has-text=Apple` | **filter**: keep the matches so far whose text contains "Apple" (same text rules as `text=`: any case, `"exact"`, `/regex/`) |
+| `li >> has-not-text=Sold out` | filter: keep those whose text does not |
+| `role=row >> has=role=button[name="Edit"]` | filter: keep those with such an element inside; quote an inner locator that has steps: `has="td >> text=Paid"` |
+| `li >> has-not=button` | filter: keep those without |
+| `button >> visible`, `>> visible=false` | filter: keep only visible (or only hidden) matches |
+| `#accept \|\| role=button[name="OK"]` | either one (all matches of both, in page order). `\|\|` binds loosest: `A >> B \|\| C` is `(A >> B) \|\| C` |
+
+Filters narrow what the step before found, like Playwright's `locator.filter()`, so they never come first.
+They combine with everything else: `role=listitem >> has-text=Banana >> role=button[name="Delete"]` is
+"the Delete button in the Banana row". The picker and recorder write such a locator themselves when the
+same button repeats in every row.
 
 Common roles: `button`, `link`, `textbox`, `checkbox`, `radio`, `combobox` (a `<select>`), `heading`,
 `listitem`, `row`, `cell`, `dialog`, `switch`, `tab`, `img`.
@@ -478,6 +490,20 @@ profile's extension storage.
 - **Reuse** a login (or any setup) with **Run Workflow**: the called workflow receives the caller's
   data (including the tab), and its last block's data comes back. Its run appears separately, linked.
 - **Soft assert** (`"soft": true`): record a failure, keep checking the rest.
+- **What Assert can check** (`subject`): `text`, `input` (field value), `attribute` (`name` = the
+  attribute), `count`, `class` (`contains` = has the class(es), not a substring: `active` does not match
+  `inactive`), `css` (`name` = the property, computed value: `rgb(0, 128, 0)`, `block`),
+  `accessible-name`, `accessible-description` (what a screen reader announces), `url`, `title`, `value`
+  (a value from the data) with an `operator`; and the yes/no ones (no operator): `visible`, `hidden`,
+  `checked`, `unchecked`, `enabled`, `disabled`, `focused`, `editable` (enabled, not read-only, a field),
+  `in-viewport` (some of it is on screen; scroll first if needed). Playwright export maps them to
+  `toHaveClass`/`toContainClass`, `toHaveCSS`, `toHaveAccessibleName`, `toHaveAccessibleDescription`,
+  `toBeFocused`, `toBeEditable`, `toBeInViewport`.
+- **Keys**: Press Key takes chords (`Control+Shift+K`, `Shift+Tab`, `Meta+B`; `ControlOrMeta+A` is ⌘A on
+  a Mac, Ctrl+A elsewhere). The modifier keys go down first, as on a keyboard, in both input modes. With
+  `"mode": "text"` it types `text` at the caret in one go, replacing the selection, with no key events
+  (like pasting; Playwright's `keyboard.insertText`). With real input and an element, it clicks the
+  element first, so the caret lands where the click did.
 - **Expected failure path**: `step.onError: "port"` on the block that may fail, then handle the
   `error` output (Notify, Stop, Log).
 - **Stop** block: end a path as passed or failed with a message.

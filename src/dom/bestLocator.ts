@@ -73,12 +73,53 @@ function locatorIdeas(element: Element): string[] {
   return [...new Set(ideas)];
 }
 
+/** Containers whose text tells one repeated element from another ("the Delete button of the Apple row"). */
+const SCOPE_ROLES = new Set(['listitem', 'row', 'article', 'group', 'region', 'form', 'dialog', 'navigation', 'cell']);
+
+/**
+ * The first short text in `container` outside `element`, when it is safe to write unquoted after
+ * `has-text=` (an unquoted has-text is a case-insensitive substring, which suits a whole row's text).
+ */
+function distinctText(container: Element, element: Element): string | null {
+  const walker = container.ownerDocument.createTreeWalker(container, 4 /* NodeFilter.SHOW_TEXT */);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (element.contains(node)) continue;
+    const parent = node.parentElement;
+    if (parent && ['script', 'style', 'template', 'noscript'].includes(parent.localName)) continue;
+    const text = short(node.textContent, 40);
+    if (text && /^[^"'/>|[\]\\=]+$/.test(text)) return text;
+  }
+  return null;
+}
+
+/**
+ * For elements no simple idea finds on its own (the same "Delete" button in every row): the simple
+ * ideas inside the nearest containers with a role, picked by their text:
+ * `role=listitem >> has-text=Apple >> role=button[name="Delete"]`.
+ */
+function scopedIdeas(element: Element): string[] {
+  const own = locatorIdeas(element)
+    .filter((idea) => idea.startsWith('role=') || idea.startsWith('text=') || idea.startsWith('label=') || idea.startsWith('placeholder='))
+    .slice(0, 2);
+  if (own.length === 0) return [];
+  const ideas: string[] = [];
+  let container = element.parentElement;
+  for (let depth = 0; container && depth < 8 && ideas.length < 4; depth += 1, container = container.parentElement) {
+    const role = getRole(container);
+    if (!role || !SCOPE_ROLES.has(role)) continue;
+    const text = distinctText(container, element);
+    if (text) for (const idea of own) ideas.push(`role=${role} >> has-text=${text} >> ${idea}`);
+  }
+  return ideas;
+}
+
 /**
  * Up to `max` locators for `element`, best first: the {@link locatorIdeas} that match exactly this
- * element. The generated CSS selector is always appended last.
+ * element (else the {@link scopedIdeas} that do). The generated CSS selector is always appended last.
  */
 export function locatorCandidates(element: Element, max = 5): string[] {
-  const unique = locatorIdeas(element).filter((idea) => finds(idea, element));
+  let unique = locatorIdeas(element).filter((idea) => finds(idea, element));
+  if (unique.length === 0) unique = scopedIdeas(element).filter((idea) => finds(idea, element));
   const css = generateSelector(element);
   return [...unique.slice(0, Math.max(0, max - 1)), ...(unique.includes(css) ? [] : [css])];
 }
@@ -91,6 +132,7 @@ export function locatorCandidates(element: Element, max = 5): string[] {
  */
 export function firstLocator(element: Element, cache?: Map<string, Element[]>): string {
   for (const idea of locatorIdeas(element)) if (finds(idea, element, cache)) return idea;
+  for (const idea of scopedIdeas(element)) if (finds(idea, element, cache)) return idea;
   return generateSelector(element);
 }
 
