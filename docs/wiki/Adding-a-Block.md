@@ -29,6 +29,7 @@ they all read the registry.
 | --- | --- | --- |
 | transforms the data and passes it on | `run` returning `{ ...input, … }` | [setVariable.ts](../../src/core/blocks/setVariable.ts), [transform.ts](../../src/core/blocks/transform.ts) |
 | chooses between outputs | `ports` + `run` returning `routeTo(port, payload)` | [ifBlock.ts](../../src/core/blocks/ifBlock.ts) |
+| outputs that depend on settings | `ports: (config) => [...]` (dynamic ports) + `routeTo` | [switchBlock.ts](../../src/core/blocks/switchBlock.ts) |
 | loops | `ports: ['each', 'done']`, `await ctx.emit(…, 'each')` per item, return `routeTo('done', …)`, long `timeoutSeconds` | [forEach.ts](../../src/core/blocks/forEach.ts) |
 | acts on the run's tab | `inPage(ctx, input, request)` + `locatorField()` + `tabField`, `timeoutSeconds: PAGE_TIMEOUT_SECONDS` | [pressKey.ts](../../src/core/blocks/pressKey.ts), [click.ts](../../src/core/blocks/click.ts) |
 | calls something outside (HTTP, notifications, datasets) | a `ctx.host.*` method (add one to `Host` if needed, see below) | [notify.ts](../../src/core/blocks/notify.ts), [httpRequest.ts](../../src/core/blocks/httpRequest.ts) |
@@ -44,6 +45,14 @@ Rules from [CLAUDE.md](../../CLAUDE.md) that apply to every block:
 - Remember things in `ctx.state`, not in module variables (the worker restarts).
 - Payloads, timer data and state stay JSON-serialisable.
 - `import type` for type-only imports, relative imports only.
+- **Dynamic ports** (`ports` as a function of the config, like Switch): return names in a stable order,
+  never `error`, and never throw (they are computed for half-typed configs in the editor). Never read
+  `def.ports` directly anywhere; call `nodePorts(def, { config, step })` (`src/core/ports.ts`), which every
+  consumer (engine, check, validate, script, layout, exporter, editor) already does. Names must also work
+  as script branch keys: avoid `id`, `step`, `onError`, the block's own type, and `out`/`done` (a port
+  of that name becomes the script's continue port). When an output is renamed or removed, the editor
+  moves or deletes its connections (`followPortChanges`); give a row being edited a stand-in name so
+  typing reads as a rename.
 
 ## Worked example: a Split Text block
 

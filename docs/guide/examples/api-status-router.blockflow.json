@@ -1,0 +1,191 @@
+{
+  "format": "blockflow-workflows",
+  "version": 1,
+  "workflows": [
+    {
+      "schemaVersion": 2,
+      "id": "api-status-router",
+      "name": "API status router",
+      "enabled": false,
+      "nodes": [
+        {
+          "id": "start",
+          "type": "start",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "config": {
+            "inputs": []
+          }
+        },
+        {
+          "id": "retry",
+          "type": "repeat",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "config": {
+            "mode": "until",
+            "times": 3,
+            "left": "{{status}}",
+            "operator": "less",
+            "right": "500",
+            "max": 3,
+            "failAtMax": false
+          }
+        },
+        {
+          "id": "call",
+          "type": "http-request",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "config": {
+            "url": "https://api.example.com/health",
+            "method": "GET",
+            "headers": "",
+            "body": "",
+            "failOnError": false
+          }
+        },
+        {
+          "id": "route",
+          "type": "switch",
+          "position": {
+            "x": 520,
+            "y": 140
+          },
+          "config": {
+            "value": "{{status}}",
+            "cases": [
+              {
+                "port": "ok",
+                "operator": "equals",
+                "value": "200"
+              },
+              {
+                "port": "missing",
+                "operator": "equals",
+                "value": "404"
+              },
+              {
+                "port": "server",
+                "operator": "matches",
+                "value": "/^5\\d\\d$/"
+              }
+            ]
+          }
+        },
+        {
+          "id": "healthy",
+          "type": "log",
+          "position": {
+            "x": 780,
+            "y": 140
+          },
+          "config": {
+            "message": "Healthy after {{iterations}} tries",
+            "level": "info"
+          }
+        },
+        {
+          "id": "gone",
+          "type": "notify",
+          "position": {
+            "x": 780,
+            "y": 280
+          },
+          "config": {
+            "title": "Health endpoint missing",
+            "message": "GET /health answered 404"
+          }
+        },
+        {
+          "id": "down",
+          "type": "notify",
+          "position": {
+            "x": 780,
+            "y": 420
+          },
+          "config": {
+            "title": "API is down",
+            "message": "Still {{status}} after {{iterations}} tries"
+          }
+        },
+        {
+          "id": "done",
+          "type": "log",
+          "position": {
+            "x": 1040,
+            "y": 140
+          },
+          "config": {
+            "message": "Checked: {{status}}",
+            "level": "info"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "retry",
+          "target": "call",
+          "sourcePort": "each"
+        },
+        {
+          "id": "e2",
+          "source": "start",
+          "target": "retry"
+        },
+        {
+          "id": "e3",
+          "source": "route",
+          "target": "healthy",
+          "sourcePort": "ok"
+        },
+        {
+          "id": "e4",
+          "source": "route",
+          "target": "gone",
+          "sourcePort": "missing"
+        },
+        {
+          "id": "e5",
+          "source": "route",
+          "target": "down",
+          "sourcePort": "server"
+        },
+        {
+          "id": "e6",
+          "source": "retry",
+          "target": "route",
+          "sourcePort": "done"
+        },
+        {
+          "id": "e7",
+          "source": "healthy",
+          "target": "done"
+        },
+        {
+          "id": "e8",
+          "source": "gone",
+          "target": "done"
+        },
+        {
+          "id": "e9",
+          "source": "down",
+          "target": "done"
+        },
+        {
+          "id": "e10",
+          "source": "route",
+          "target": "done",
+          "sourcePort": "default"
+        }
+      ]
+    }
+  ]
+}

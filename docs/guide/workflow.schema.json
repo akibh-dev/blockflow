@@ -1986,6 +1986,89 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "switch"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Go one of several ways: the first case that matches the value picks the output, else \"default\".",
+                    "properties": {
+                      "value": {
+                        "description": "What the cases look at.",
+                        "type": "string"
+                      },
+                      "cases": {
+                        "description": "Each case is an output named after it (letters, digits, \"_\" and \"-\"; not \"default\", \"error\", \"out\" or \"done\"). No match goes to \"default\". For a pattern, write /text/i.",
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "port": {
+                              "type": "string",
+                              "description": "Output"
+                            },
+                            "operator": {
+                              "enum": [
+                                "equals",
+                                "not-equals",
+                                "contains",
+                                "not-contains",
+                                "starts-with",
+                                "ends-with",
+                                "matches",
+                                "greater",
+                                "greater-equal",
+                                "less",
+                                "less-equal",
+                                "empty",
+                                "not-empty",
+                                "true",
+                                "false"
+                              ],
+                              "description": "Condition"
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "Compare to"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "required": [
+                      "cases"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "for-each"
                   },
                   "position": {
@@ -2050,13 +2133,59 @@
                   },
                   "config": {
                     "type": "object",
-                    "description": "Run the blocks on \"each\" a number of times, then continue from \"done\".",
+                    "description": "Run the blocks on \"each\" a number of times, or until / while a condition holds, then continue from \"done\".",
                     "properties": {
+                      "mode": {
+                        "description": "Repeat",
+                        "enum": [
+                          "times",
+                          "until",
+                          "while"
+                        ]
+                      },
                       "times": {
-                        "description": "Times",
+                        "description": "For \"a number of times\".",
                         "type": "number",
                         "minimum": 1,
                         "maximum": 1000
+                      },
+                      "left": {
+                        "description": "Until / while: rendered at every check against the data the last time ended with ({{iteration}} = times run so far).",
+                        "type": "string"
+                      },
+                      "operator": {
+                        "description": "Condition",
+                        "enum": [
+                          "equals",
+                          "not-equals",
+                          "contains",
+                          "not-contains",
+                          "starts-with",
+                          "ends-with",
+                          "matches",
+                          "greater",
+                          "greater-equal",
+                          "less",
+                          "less-equal",
+                          "empty",
+                          "not-empty",
+                          "true",
+                          "false"
+                        ]
+                      },
+                      "right": {
+                        "description": "Compare to",
+                        "type": "string"
+                      },
+                      "max": {
+                        "description": "Until / while: a safety limit.",
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 10000
+                      },
+                      "failAtMax": {
+                        "description": "Off: continue from \"done\" instead.",
+                        "type": "boolean"
                       }
                     },
                     "required": [],

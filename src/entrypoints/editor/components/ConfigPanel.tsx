@@ -287,7 +287,7 @@ function RowsInput({
   onDetect(): void;
 }) {
   const update = (index: number, key: string, value: string) => onChange(rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
-  const blank = Object.fromEntries(field.columns.map((column) => [column.key, '']));
+  const blank = Object.fromEntries(field.columns.map((column) => [column.key, column.options?.[0]?.value ?? '']));
   return (
     <div className="bf-rows">
       {rows.length > 0 && (
@@ -308,14 +308,32 @@ function RowsInput({
                 {field.columns.map((column) => (
                   <td key={column.key}>
                     <div className="bf-cell">
-                      <TemplateInput
-                        value={row[column.key] ?? ''}
-                        suggestions={column.templated ? suggestions : []}
-                        placeholder={column.key === 'value' && row.hint ? row.hint : column.placeholder}
-                        title={row.hint ?? ''}
-                        ariaLabel={`${column.label} ${index + 1}`}
-                        onChange={(value) => update(index, column.key, value)}
-                      />
+                      {column.options ? (
+                        <select
+                          value={row[column.key] ?? ''}
+                          aria-label={`${column.label} ${index + 1}`}
+                          onChange={(event) => update(index, column.key, event.target.value)}
+                        >
+                          {/* Keep an unknown value visible instead of silently showing the first option. */}
+                          {!column.options.some((option) => option.value === (row[column.key] ?? '')) && (
+                            <option value={row[column.key] ?? ''}>{row[column.key] || '(choose)'}</option>
+                          )}
+                          {column.options.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <TemplateInput
+                          value={row[column.key] ?? ''}
+                          suggestions={column.templated ? suggestions : []}
+                          placeholder={column.key === 'value' && row.hint ? row.hint : column.placeholder}
+                          title={row.hint ?? ''}
+                          ariaLabel={`${column.label} ${index + 1}`}
+                          onChange={(value) => update(index, column.key, value)}
+                        />
+                      )}
                       {column.locator && (
                         <button type="button" title="Pick on page" onClick={() => onPickCell(index, column.key)}>
                           🎯

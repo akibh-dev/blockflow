@@ -39,6 +39,7 @@ missing keys take the block's default. A step may also have:
 | `id` | Optional name of the step, unique in the script. Without one, the Nth step from the top of the file (nested steps count too) is `s<N>`. Import keeps it as the block's `origin`, so results can point back to the script. |
 | `step` | [Step settings](../guide/README.md#7-step-settings-every-block): `timeoutSeconds`, `retries`, `onError`, `screenshot`, `disabled`, `note`, `realInput`. |
 | `true`, `false` | If only: the steps for each answer. |
+| case names, `default` | Switch only: the steps for each case (its `cases[].port`) and for no match. Any other key holding a list is refused as `edge.port.unknown`, with a did-you-mean over the real case names. |
 | `each` | For Each, Repeat, Paginate: the steps run once per item / time / page. |
 | `onError` | Any block: the steps that run when it fails. Sets `step.onError` to `"port"` for you. |
 
@@ -52,7 +53,10 @@ missing keys take the block's default. A step may also have:
 3. **If rejoins.** The step after an If runs after whichever branch ran: it is connected from the last
    step of `true` and of `false`. A missing (or empty) branch goes straight to the next step, so
    "if without else" works as in code. This also holds for an If nested inside a branch.
-4. A list's last step connects to nothing, unless the list is an If branch (rule 3).
+4. **Switch rejoins the same way**: the step after it is connected from the last step of every case list
+   and of `default`, and straight from every case without a list. Its outputs come from its settings, so
+   the compiler reads the step's `cases` (defaults filled in) before it looks at the branch keys.
+5. A list's last step connects to nothing, unless the list is an If or Switch branch (rules 3 and 4).
 
 ```json
 { "id": "big", "if": { "left": "{{count}}", "operator": "greater", "right": "100" },
@@ -62,6 +66,18 @@ missing keys take the block's default. A step may also have:
 
 Here `log` runs in both cases: after the notification when the count is over 100, straight from If's
 `false` output otherwise.
+
+```json
+{ "id": "route", "switch": { "value": "{{status}}", "cases": [
+    { "port": "ok", "operator": "equals", "value": "200" },
+    { "port": "server", "operator": "matches", "value": "/^5/" } ] },
+  "server": [ { "notify": "API down: {{status}}" } ] },
+{ "log": "checked {{status}}" }
+```
+
+`log` runs after every outcome: after the notification for a 5xx, straight from `ok` and `default`
+otherwise. A loop that stops on a condition is Repeat with `"mode": "until"` (or `"while"`), see
+[guide §6](../guide/README.md#6-branching).
 
 ### Aliases and shorthands
 
@@ -169,7 +185,7 @@ What each part means:
 | `nodes[].config` | The block's settings. Keys come from the block reference; missing keys take the default. |
 | `nodes[].position` | Where the block sits on the canvas. About 260 px apart left to right reads well. Leave `position` out of every node and import lays the workflow out for you. |
 | `nodes[].step` | Optional per-block settings: `timeoutSeconds`, `retries`, `onError`, `screenshot`, `disabled`, `note`, `realInput`. See [step settings](../guide/README.md#7-step-settings-every-block). |
-| `edges` | Connections. `sourcePort` picks an output on blocks that have several: `"true"`/`"false"` on If, `"each"`/`"done"` on loops, `"error"` when the source has `"step": { "onError": "port" }`. |
+| `edges` | Connections. `sourcePort` picks an output on blocks that have several: `"true"`/`"false"` on If, the case names and `"default"` on Switch, `"each"`/`"done"` on loops, `"error"` when the source has `"step": { "onError": "port" }`. |
 
 A graph can do what a script cannot: several start blocks, one output feeding several blocks, joins
 anywhere, loops back. A workflow like that has no script form ("Export as script" is greyed out).
@@ -264,7 +280,7 @@ import can never start something by surprise or overwrite a workflow.
 **Export**: hover a workflow in the sidebar → export, or select several on **All workflows** → Export.
 You get `<name>.blockflow.json` (several workflows: `blockflow-workflows.blockflow.json`), a graph.
 **Export as script** in the canvas header downloads the open workflow as `<name>.script.json`, when it
-can be written as one (one start block, every output feeding at most one block, joins only after an If).
+can be written as one (one start block, every output feeding at most one block, joins only after an If or a Switch).
 The export uses aliases and shorthands, leaves out settings at their default and keeps your step ids.
 Exported workflows are always marked off. Secrets are never part of the file, only their
 `{{secret.name}}` references.
@@ -498,7 +514,7 @@ What it does:
   the step (1 s, 2 s, 4 s… like the engine); `onError: "continue"` → `try/catch` that logs; `onError:
   "port"` with an `error` edge → `try/catch` that runs the error branch with `error` / `errorBlock` in the
   data (the normal path continues only on success); `disabled` → a comment.
-- If becomes `if/else`; For Each, Repeat and Paginate become loops.
+- If becomes `if/else`, Switch an `if / else if` chain over its cases; For Each, Repeat (also until / while, with `max`) and Paginate become loops.
 - Run Workflow becomes a call to a generated function for the called workflow.
 - Helper functions (`read`, `compare`, `extractList`, `extractTable`, `setField`…) are appended so the test
   keeps BlockFlow's behaviour.

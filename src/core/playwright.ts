@@ -2,6 +2,7 @@ import { parseLocatorSteps } from './locatorSyntax';
 import { runtimeSource } from './playwrightRuntime';
 import { edgePort, nodePorts } from './ports';
 import type { BlockRegistry } from './registry';
+import { casePorts } from './blocks/switchBlock';
 import type { NodeDef, Workflow } from './types';
 
 /**
@@ -110,7 +111,7 @@ const firstOf = (code: string) => (/\.(first|last|nth)\([^()]*\)$/.test(code) ? 
 const commentText = (text: unknown) => String(text ?? '').replace(/\*\//g, '* /').replace(/\s*\n\s*/g, ' ');
 
 /** Blocks that write their own continuation (branches, loops, Stop); step settings do not wrap them. */
-const CONTROL = new Set(['if', 'for-each', 'repeat', 'paginate', 'stop']);
+const CONTROL = new Set(['if', 'switch', 'for-each', 'repeat', 'paginate', 'stop']);
 
 /** Builds the test body: walks the graph from each root and writes one statement (or block) per node. */
 class Writer {
@@ -244,17 +245,64 @@ class Writer {
         });
         continueWith('done');
         return;
-      case 'repeat':
+      case 'switch': {
+        // An if / else-if chain over the cases in order; the value is rendered once.
+        this.flags += 1;
+        const value = `switchValue${this.flags}`;
+        const rows = Array.isArray(c.cases) ? (c.cases as Record<string, unknown>[]) : [];
+        const ports = casePorts(c);
+        this.line(`const ${value} = ${template(c.value)};`);
+        rows.forEach((row, index) => {
+          const port = ports[index] as string;
+          this.block(`${index === 0 ? '' : 'else '}if (compare(${value}, ${js(row.operator)}, ${template(row.value)})) {`, () => {
+            this.line(`// case "${commentText(port)}"`);
+            continueWith(port);
+          });
+        });
+        if (rows.length === 0) continueWith('default');
+        else if (this.targets(node, 'default').length > 0) this.block('else {', () => continueWith('default'));
+        return;
+      }
+      case 'repeat': {
+        const mode = c.mode === 'until' || c.mode === 'while' ? c.mode : 'times';
+        if (mode === 'times') {
+          const times = Number(c.times) || 1;
+          this.block('{', () => {
+            this.line('const input = data;');
+            this.block(`for (let iteration = 1; iteration <= ${times}; iteration += 1) {`, () => {
+              this.line('data = { ...input, iteration };');
+              continueWith('each');
+            });
+            this.line(`data = { ...input, iterations: ${times} };`);
+          });
+          continueWith('done');
+          return;
+        }
+        // Until / while: the condition sees the data the last iteration ended with (like the engine).
+        const max = Math.max(1, Math.floor(Number(c.max) || 100));
+        const holds = `compare(${template(c.left)}, ${js(c.operator)}, ${template(c.right)})`;
+        const atMax =
+          c.failAtMax === false
+            ? 'break;'
+            : `throw new Error(${js(`Repeat ${mode}: the condition ${mode === 'until' ? 'was still false' : 'still held'} after ${max} times`)});`;
         this.block('{', () => {
           this.line('const input = data;');
-          this.block(`for (let iteration = 1; iteration <= ${Number(c.times) || 1}; iteration += 1) {`, () => {
+          this.line('let iteration = 0;');
+          this.line('data = { ...input, iteration };');
+          this.block('for (;;) {', () => {
+            if (mode === 'while') this.line(`if (!${holds}) break;`);
+            this.line(`if (iteration >= ${max}) ${atMax}`);
+            this.line('iteration += 1;');
             this.line('data = { ...input, iteration };');
             continueWith('each');
+            this.line('data = { ...data, iteration };');
+            if (mode === 'until') this.line(`if (${holds}) break;`);
           });
-          this.line('data = input;');
+          this.line('data = { ...data, iterations: iteration };');
         });
         continueWith('done');
         return;
+      }
       case 'paginate':
         this.block('{', () => {
           this.line('const input = data;');

@@ -188,7 +188,7 @@ src/
     script.ts            the script format (a list of steps): compile to a graph, decompile back
     layout.ts            automatic left-to-right layout (scripts, imports, Tidy up)
     samples.ts           the example workflows seeded on first install
-    ports.ts             block outputs (out / true / false / error) and routeTo()
+    ports.ts             block outputs (out / true / false / error, or from settings) and routeTo()
     runs.ts              run and step records, secret masking
     condition.ts         comparisons shared by If and Assert
     report.ts            JUnit XML and HTML reports from runs

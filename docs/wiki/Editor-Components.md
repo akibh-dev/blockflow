@@ -70,8 +70,9 @@ How one block looks on the canvas. Registered in `Editor` as `nodeTypes = { bloc
   (the problems are the node's `title` tooltip).
 - `def.summary(config)` with `defaultConfig` merged in, the step note, and "Disabled: passes data through".
 - Handles: one target on the left. On the right, one source handle per port from
-  `nodePorts(def, { step })` in `src/core/ports.ts`; the handle `id` is the port name, which becomes the
-  edge's `sourceHandle`. With a single `out` port it draws one plain handle; otherwise labelled handles
+  `nodePorts(def, { config, step })` in `src/core/ports.ts` (so a Switch shows one per case plus `default`);
+  the handle `id` is the port name, which becomes the edge's `sourceHandle`. When the port list changes
+  it calls React Flow's `updateNodeInternals(id)` so new handles can be connected. With a single `out` port it draws one plain handle; otherwise labelled handles
   spread evenly down the right side and the node gets a `minHeight` of `22 + 20 × ports`.
 - CSS classes: `bf-node` + `selected`, `has-problem`, `disabled`, `run-<status>`, `multi-port`; the block's
   colour arrives as `--accent`.
@@ -90,7 +91,7 @@ The right column on the canvas view: settings of the selected block, generated f
 | --- | --- | --- |
 | `node` | `BlockFlowNode \| undefined` | Selected node (first with `selected`). Undefined shows "Select a block…". |
 | `problems` | `string[]` | Validation messages for this node. |
-| `onChange(nodeId, patch)` | callback | Shallow-merges into `data.config` (`Editor.updateConfig`). |
+| `onChange(nodeId, patch)` | callback | Shallow-merges into `data.config` (`Editor.updateConfig`; for blocks with dynamic ports it also moves or removes the connections of renamed / removed outputs via `followPortChanges`). |
 | `onStepChange(nodeId, patch)` | callback | Merges into `data.step` (`Editor.updateStep`). |
 | `onDelete(nodeId)` | callback | Removes the node and its edges. |
 | `lastStep` | `StepRecord \| undefined` | This node's last step in the inspected run. |
@@ -149,7 +150,7 @@ Open Tab blocks also get [SnapshotButton](#snapshotbutton) below their settings.
 
 | Function | Purpose |
 | --- | --- |
-| `RowsInput` | Table editor for `rows` fields (Fill Form, Extract List, Manual Start, Transform). Cells are TemplateInputs (suggestions only for `column.templated`), 🎯 per `column.locator` cell, `+ Add row`, ✕ remove, and **Detect fields** when `field.detectForm`. A row's `hint` becomes the value placeholder. Rows are keyed by index. |
+| `RowsInput` | Table editor for `rows` fields (Fill Form, Extract List, Manual Start, Transform). Cells are TemplateInputs (suggestions only for `column.templated`), or a `<select>` for a column with `options` (Switch's Condition; a new row starts with the first option, an unknown stored value stays shown), 🎯 per `column.locator` cell, `+ Add row`, ✕ remove, and **Detect fields** when `field.detectForm`. A row's `hint` becomes the value placeholder. Rows are keyed by index. |
 | `FieldInput` | The scalar control table above. |
 | `StepSettingsEditor` | "Step settings" `<details>`, open when anything is set. On error (`stop`/`continue`/`port`), Retries (0..`MAX_RETRIES`), Timeout (placeholder = `def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS`), Screenshot (`error`/`always`/`never`), **Use real mouse and keyboard** (only for blocks with `realInput: true` in their definition, or when already set; asks for the `debugger` permission first; stays off if refused), Disabled, Note. Semantics: [ARCHITECTURE.md, Engine model](../ARCHITECTURE.md#engine-model-srccoreenginets). |
 | `StepResult` | "Last run" `<details>`: status, duration, attempts, chosen port, error, `ErrorDetails`, [Screenshot](#screenshot), input and output as JSON. |

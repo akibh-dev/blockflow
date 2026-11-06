@@ -1836,6 +1836,90 @@
       ]
     },
     {
+      "type": "switch",
+      "label": "Switch",
+      "category": "logic",
+      "description": "Go one of several ways: the first case that matches the value picks the output, else \"default\".",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "first",
+        "second",
+        "default"
+      ],
+      "dynamicPorts": true,
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "value": "{{value}}",
+        "cases": [
+          {
+            "port": "first",
+            "operator": "equals",
+            "value": "1"
+          },
+          {
+            "port": "second",
+            "operator": "equals",
+            "value": "2"
+          }
+        ]
+      },
+      "fields": [
+        {
+          "key": "value",
+          "label": "Value",
+          "kind": "text",
+          "templated": true,
+          "help": "What the cases look at."
+        },
+        {
+          "key": "cases",
+          "label": "Cases (first match wins)",
+          "kind": "rows",
+          "required": true,
+          "columns": [
+            {
+              "key": "port",
+              "label": "Output"
+            },
+            {
+              "key": "operator",
+              "label": "Condition",
+              "options": [
+                "equals",
+                "not-equals",
+                "contains",
+                "not-contains",
+                "starts-with",
+                "ends-with",
+                "matches",
+                "greater",
+                "greater-equal",
+                "less",
+                "less-equal",
+                "empty",
+                "not-empty",
+                "true",
+                "false"
+              ]
+            },
+            {
+              "key": "value",
+              "label": "Compare to",
+              "templated": true
+            }
+          ],
+          "help": "Each case is an output named after it (letters, digits, \"_\" and \"-\"; not \"default\", \"error\", \"out\" or \"done\"). No match goes to \"default\". For a pattern, write /text/i."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, unchanged, out of the matching case or \"default\"."
+        }
+      ]
+    },
+    {
       "type": "for-each",
       "label": "For Each",
       "category": "logic",
@@ -1888,7 +1972,7 @@
       "type": "repeat",
       "label": "Repeat",
       "category": "logic",
-      "description": "Run the blocks on \"each\" a number of times, then continue from \"done\".",
+      "description": "Run the blocks on \"each\" a number of times, or until / while a condition holds, then continue from \"done\".",
       "canStart": true,
       "canTakeInput": true,
       "ports": [
@@ -1897,21 +1981,93 @@
       ],
       "timeoutSeconds": 3600,
       "defaultConfig": {
-        "times": 3
+        "mode": "times",
+        "times": 3,
+        "left": "{{iteration}}",
+        "operator": "equals",
+        "right": "",
+        "max": 100,
+        "failAtMax": true
       },
       "fields": [
+        {
+          "key": "mode",
+          "label": "Repeat",
+          "kind": "select",
+          "options": [
+            "times",
+            "until",
+            "while"
+          ]
+        },
         {
           "key": "times",
           "label": "Times",
           "kind": "number",
           "min": 1,
-          "max": 1000
+          "max": 1000,
+          "help": "For \"a number of times\"."
+        },
+        {
+          "key": "left",
+          "label": "Value",
+          "kind": "text",
+          "templated": true,
+          "perItem": true,
+          "help": "Until / while: rendered at every check against the data the last time ended with ({{iteration}} = times run so far)."
+        },
+        {
+          "key": "operator",
+          "label": "Condition",
+          "kind": "select",
+          "options": [
+            "equals",
+            "not-equals",
+            "contains",
+            "not-contains",
+            "starts-with",
+            "ends-with",
+            "matches",
+            "greater",
+            "greater-equal",
+            "less",
+            "less-equal",
+            "empty",
+            "not-empty",
+            "true",
+            "false"
+          ]
+        },
+        {
+          "key": "right",
+          "label": "Compare to",
+          "kind": "text",
+          "templated": true,
+          "perItem": true
+        },
+        {
+          "key": "max",
+          "label": "At most (times)",
+          "kind": "number",
+          "min": 1,
+          "max": 10000,
+          "help": "Until / while: a safety limit."
+        },
+        {
+          "key": "failAtMax",
+          "label": "Fail when the limit is reached",
+          "kind": "boolean",
+          "help": "Off: continue from \"done\" instead."
         }
       ],
       "outputs": [
         {
           "key": "iteration",
           "description": "On \"each\": 1, 2, 3…"
+        },
+        {
+          "key": "iterations",
+          "description": "On \"done\": how many times it ran. Until / while: \"done\" also carries the data the last round ended with."
         }
       ]
     },
