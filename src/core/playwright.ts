@@ -1,7 +1,11 @@
-import { parseLocatorSteps } from './locatorSyntax';
+import { clickOptions } from './blocks/click';
+import { modifiersOf, parsePosition } from './blocks/pageCommon';
+import { nestedLocator, parseLocatorSteps, parseRoleSelector, roleState, splitAlternatives, unquoteValue, visibleFilter } from './locatorSyntax';
+import type { ClickConfig } from './blocks/click';
 import { runtimeSource } from './playwrightRuntime';
 import { edgePort, nodePorts } from './ports';
 import type { BlockRegistry } from './registry';
+import { casePorts } from './blocks/switchBlock';
 import type { NodeDef, Workflow } from './types';
 
 /**
@@ -21,9 +25,31 @@ export interface ExportOptions {
 /** A value as a JS string literal. */
 const js = (text: unknown) => JSON.stringify(String(text ?? ''));
 
-/** A BlockFlow locator as a Playwright locator expression on `base` (a page or locator expression). */
+/** A regular expression literal that matches exactly `text` (whole string). */
+const exactRegex = (text: string) => `/^${text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$/`;
+
+/** Text for a `filter({ hasText })`: /regex/ stays, a quoted body must equal the whole text, else substring. */
+function filterText(body: string): string {
+  const regex = /^\/([\s\S]+)\/([dgimsuyv]*)$/.exec(body.trim());
+  if (regex) return `/${regex[1]}/${regex[2]}`;
+  const quoted = /^(["'])([\s\S]*)\1$/.exec(body.trim());
+  return quoted ? exactRegex(unquoteValue(body).replace(/\s+/g, ' ').trim()) : js(body.trim());
+}
+
+/**
+ * A BlockFlow locator as a Playwright locator expression on `base` (a page or locator expression).
+ * `A || B` becomes `A.or(B)`, filters become `.filter({ hasText | hasNotText | has | hasNot | visible })`.
+ */
 export function toPlaywrightLocator(locator: string, base: string): string {
+  const [first, ...others] = splitAlternatives(locator).map((alternative) => chainToPlaywright(alternative, base));
+  return others.reduce((code, other) => `${code}.or(${other})`, first as string);
+}
+
+/** One `||` alternative as a Playwright locator chain. */
+function chainToPlaywright(locator: string, base: string): string {
   let code = base;
+  // `has` locators are built from the page, or from the frame they are in.
+  let root = base;
   for (const { engine, body } of parseLocatorSteps(locator)) {
     const quoted = /^(["'])([\s\S]*)\1$/.exec(body.trim());
     const regex = /^\/([\s\S]+)\/([dgimsuyv]*)$/.exec(body.trim());
@@ -57,25 +83,41 @@ export function toPlaywrightLocator(locator: string, base: string): string {
         break;
       case 'frame':
         code += `.frameLocator(${js(body)})`;
+        root = code;
         break;
       case 'nth': {
         const index = Number(body);
         code += index === -1 ? '.last()' : index === 0 ? '.first()' : `.nth(${index})`;
         break;
       }
+      case 'has-text':
+        code += `.filter({ hasText: ${filterText(body)} })`;
+        break;
+      case 'has-not-text':
+        code += `.filter({ hasNotText: ${filterText(body)} })`;
+        break;
+      case 'has':
+        code += `.filter({ has: ${toPlaywrightLocator(nestedLocator(body), root)} })`;
+        break;
+      case 'has-not':
+        code += `.filter({ hasNot: ${toPlaywrightLocator(nestedLocator(body), root)} })`;
+        break;
+      case 'visible':
+        code += `.filter({ visible: ${visibleFilter(body)} })`;
+        break;
       case 'role': {
-        const match = /^([a-z-]+)\s*([\s\S]*)$/i.exec(body.trim());
-        const role = match?.[1] ?? body;
+        const { role, options: parsed } = parseRoleSelector(body);
         const options: string[] = [];
-        for (const attr of (match?.[2] ?? '').matchAll(/\[\s*([a-z-]+)\s*(?:=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/(?:[^/\\]|\\.)+\/[a-z]*|[^\]]*?))?\s*\]/gi)) {
-          const key = (attr[1] as string).toLowerCase();
-          const value = attr[2];
-          if (key === 'name' && value) {
+        for (const option of parsed) {
+          const { key, value } = option;
+          if (key === 'name') {
+            if (!value) continue;
             const named = /^\/([\s\S]+)\/([dgimsuyv]*)$/.exec(value);
-            options.push(`name: ${named ? `/${named[1]}/${named[2]}` : js(value.replace(/^(["'])([\s\S]*)\1$/, '$2'))}`);
+            options.push(`name: ${named ? `/${named[1]}/${named[2]}` : js(unquoteValue(value))}`);
           } else if (key === 'exact') options.push('exact: true');
-          else if (key === 'checked') options.push(`checked: ${value === undefined || !/false/.test(value)}`);
-          else if (key === 'level') options.push(`level: ${Number(String(value).replace(/["']/g, ''))}`);
+          else if (key === 'level') options.push(`level: ${Number(unquoteValue(value ?? ''))}`);
+          else if (key === 'include-hidden') options.push('includeHidden: true');
+          else options.push(`${key}: ${roleState(option)}`);
         }
         code += `.getByRole(${js(role)}${options.length ? `, { ${options.join(', ')} }` : ''})`;
         break;
@@ -110,7 +152,7 @@ const firstOf = (code: string) => (/\.(first|last|nth)\([^()]*\)$/.test(code) ? 
 const commentText = (text: unknown) => String(text ?? '').replace(/\*\//g, '* /').replace(/\s*\n\s*/g, ' ');
 
 /** Blocks that write their own continuation (branches, loops, Stop); step settings do not wrap them. */
-const CONTROL = new Set(['if', 'for-each', 'repeat', 'paginate', 'stop']);
+const CONTROL = new Set(['if', 'switch', 'for-each', 'repeat', 'paginate', 'stop']);
 
 /** Builds the test body: walks the graph from each root and writes one statement (or block) per node. */
 class Writer {
@@ -244,17 +286,64 @@ class Writer {
         });
         continueWith('done');
         return;
-      case 'repeat':
+      case 'switch': {
+        // An if / else-if chain over the cases in order; the value is rendered once.
+        this.flags += 1;
+        const value = `switchValue${this.flags}`;
+        const rows = Array.isArray(c.cases) ? (c.cases as Record<string, unknown>[]) : [];
+        const ports = casePorts(c);
+        this.line(`const ${value} = ${template(c.value)};`);
+        rows.forEach((row, index) => {
+          const port = ports[index] as string;
+          this.block(`${index === 0 ? '' : 'else '}if (compare(${value}, ${js(row.operator)}, ${template(row.value)})) {`, () => {
+            this.line(`// case "${commentText(port)}"`);
+            continueWith(port);
+          });
+        });
+        if (rows.length === 0) continueWith('default');
+        else if (this.targets(node, 'default').length > 0) this.block('else {', () => continueWith('default'));
+        return;
+      }
+      case 'repeat': {
+        const mode = c.mode === 'until' || c.mode === 'while' ? c.mode : 'times';
+        if (mode === 'times') {
+          const times = Number(c.times) || 1;
+          this.block('{', () => {
+            this.line('const input = data;');
+            this.block(`for (let iteration = 1; iteration <= ${times}; iteration += 1) {`, () => {
+              this.line('data = { ...input, iteration };');
+              continueWith('each');
+            });
+            this.line(`data = { ...input, iterations: ${times} };`);
+          });
+          continueWith('done');
+          return;
+        }
+        // Until / while: the condition sees the data the last iteration ended with (like the engine).
+        const max = Math.max(1, Math.floor(Number(c.max) || 100));
+        const holds = `compare(${template(c.left)}, ${js(c.operator)}, ${template(c.right)})`;
+        const atMax =
+          c.failAtMax === false
+            ? 'break;'
+            : `throw new Error(${js(`Repeat ${mode}: the condition ${mode === 'until' ? 'was still false' : 'still held'} after ${max} times`)});`;
         this.block('{', () => {
           this.line('const input = data;');
-          this.block(`for (let iteration = 1; iteration <= ${Number(c.times) || 1}; iteration += 1) {`, () => {
+          this.line('let iteration = 0;');
+          this.line('data = { ...input, iteration };');
+          this.block('for (;;) {', () => {
+            if (mode === 'while') this.line(`if (!${holds}) break;`);
+            this.line(`if (iteration >= ${max}) ${atMax}`);
+            this.line('iteration += 1;');
             this.line('data = { ...input, iteration };');
             continueWith('each');
+            this.line('data = { ...data, iteration };');
+            if (mode === 'until') this.line(`if (${holds}) break;`);
           });
-          this.line('data = input;');
+          this.line('data = { ...data, iterations: iteration };');
         });
         continueWith('done');
         return;
+      }
       case 'paginate':
         this.block('{', () => {
           this.line('const input = data;');
@@ -299,7 +388,51 @@ class Writer {
         break;
       case 'click': {
         const action = c.action === 'double' ? 'dblclick' : c.action === 'hover' ? 'hover' : 'click';
-        this.line(`await ${loc()}.${action}(${this.opt([c.action === 'right' ? "button: 'right'" : '', c.force ? 'force: true' : ''].filter(Boolean))});`);
+        const mouse = clickOptions({ ...c, action: c.action === 'right' ? 'click' : (c.action as ClickConfig['action']), button: c.action === 'right' ? 'right' : (c.button as ClickConfig['button']) });
+        const count = action === 'dblclick' ? 0 : (mouse.clickCount ?? 0);
+        this.line(
+          `await ${loc()}.${action}(${this.opt(
+            [
+              action !== 'hover' && mouse.button ? `button: '${mouse.button}'` : '',
+              mouse.modifiers ? `modifiers: ${JSON.stringify(mouse.modifiers)}` : '',
+              mouse.position ? `position: { x: ${mouse.position.x}, y: ${mouse.position.y} }` : '',
+              count > 1 ? `clickCount: ${count}` : '',
+              c.force ? 'force: true' : '',
+            ].filter(Boolean),
+          )});`,
+        );
+        break;
+      }
+      case 'element-action':
+        switch (c.action) {
+          case 'blur':
+            this.line(`await ${loc()}.blur(${this.opt()});`);
+            break;
+          case 'clear':
+            this.line(`await ${loc()}.clear(${this.opt()});`);
+            break;
+          case 'scroll-into-view':
+            this.line(`await ${loc()}.scrollIntoViewIfNeeded(${this.opt()});`);
+            break;
+          case 'dispatch-event': {
+            const detail = String(c.detail ?? '').trim() ? `JSON.parse(${template(c.detail)})` : 'undefined';
+            this.line(`data = { ...data, defaultPrevented: await dispatchEvent(${loc()}, ${js(String(c.eventType ?? '').trim())}, ${detail}) };`);
+            break;
+          }
+          default:
+            this.line(`await ${loc()}.focus(${this.opt()});`);
+        }
+        break;
+      case 'drag': {
+        const from = parsePosition(c.fromPosition);
+        const to = parsePosition(c.toPosition);
+        this.line(
+          `await ${loc('from')}.dragTo(${loc('to')}${this.optArg(
+            [from ? `sourcePosition: { x: ${from.x}, y: ${from.y} }` : '', to ? `targetPosition: { x: ${to.x}, y: ${to.y} }` : ''].filter(Boolean),
+          )});`,
+        );
+        if (modifiersOf(c.modifiers)) this.line('// BlockFlow: the drag held modifier keys; dragTo cannot, use page.keyboard.down/up around it.');
+        this.line("data = { ...data, dragMode: 'pointer' };");
         break;
       }
       case 'fill':
@@ -319,6 +452,11 @@ class Writer {
         this.line(`await ${loc()}.setChecked(${c.state !== 'uncheck'}${this.optArg()});`);
         break;
       case 'press-key':
+        if (c.mode === 'text') {
+          if (c.locator) this.line(`await ${loc()}.focus(${this.opt()});`);
+          this.line(`await ${tab(c)}.keyboard.insertText(${template(c.text)});`);
+          break;
+        }
         this.line(c.locator ? `await ${loc()}.press(${js(c.key)}${this.optArg()});` : `await ${tab(c)}.keyboard.press(${js(c.key)});`);
         break;
       case 'scroll':
@@ -383,7 +521,9 @@ class Writer {
         break;
       case 'http-request':
         this.line(`{ const response = await request.fetch(${template(c.url)}, { method: ${js(c.method || 'GET')}${c.body ? `, data: ${template(c.body)}` : ''}${this.timeoutMs !== undefined ? `, timeout: ${this.timeoutMs}` : ''} });`);
-        this.line('  data = { ...data, status: response.status(), ok: response.ok(), body: await response.text() }; try { data.data = JSON.parse(data.body); } catch {} }');
+        if (c.responseType === 'base64') {
+          this.line("  data = { ...data, status: response.status(), ok: response.ok(), body: '', body64: (await response.body()).toString('base64'), mime: (response.headers()['content-type'] ?? '').split(';')[0]!.trim() }; }");
+        } else this.line('  data = { ...data, status: response.status(), ok: response.ok(), body: await response.text() }; try { data.data = JSON.parse(data.body); } catch {} }');
         break;
       case 'run-workflow': {
         const called = this.options.lookup?.(String(c.workflow));
@@ -408,8 +548,11 @@ class Writer {
         const file =
           c.source === 'url'
             ? `await fileFromUrl(request, ${template(c.url)}, ${template(c.filename)})`
-            : `{ name: ${template(String(c.filename ?? '').trim() || 'upload.txt')}, mimeType: ${js(String(c.mime ?? '').trim() || 'text/plain')}, buffer: Buffer.from(${template(c.content)}) }`;
-        this.line(`{ const file = ${file}; await ${loc()}.setInputFiles(file${this.optArg()}); data = { ...data, uploaded: file.name }; }`);
+            : c.source === 'data'
+              ? `fileFromData(${template(c.data)}, ${template(String(c.filename ?? '').trim() || 'upload.bin')}, ${template(String(c.mime ?? '').trim() || 'application/octet-stream')})`
+              : `{ name: ${template(String(c.filename ?? '').trim() || 'upload.txt')}, mimeType: ${template(String(c.mime ?? '').trim() || 'text/plain')}, buffer: Buffer.from(${template(c.content)}) }`;
+        const put = c.target === 'dropzone' ? `await dropFiles(${loc()}, file)` : `await ${loc()}.setInputFiles(file${this.optArg()})`;
+        this.line(`{ const file = ${file}; ${put}; data = { ...data, uploaded: file.name }; }`);
         break;
       }
       case 'wait-for-popup': {
@@ -425,6 +568,36 @@ class Writer {
         for (const codeLine of String(c.code ?? '').split('\n')) this.line(codeLine);
         this.depth -= 1;
         this.line('}, data)) ?? null };');
+        break;
+      }
+      case 'screenshot': {
+        const target = c.area === 'element' ? firstOf(loc()) : tab(c);
+        const jpeg = c.format === 'jpeg';
+        const options = [c.area === 'full' ? 'fullPage: true' : '', jpeg ? `type: 'jpeg', quality: ${Number(c.quality) || 80}` : ''].filter(Boolean);
+        this.line(`{ const shot = await ${target}.screenshot(${this.opt(options)}); await test.info().attach(${js(label)}, { body: shot, contentType: ${js(jpeg ? 'image/jpeg' : 'image/png')} }); data = { ...data, screenshotId: ${js(node.id)} }; }`);
+        break;
+      }
+      case 'wait-for-download':
+        this.line(`data = { ...data, ...(await waitForDownload(${tab(c)}, ${template(c.url)}, ${js(c.read || 'none')}${this.timeoutMs !== undefined ? `, ${this.timeoutMs}` : ''})) };`);
+        if (String(c.dataset ?? '').trim() && (c.read === 'csv' || c.read === 'json')) this.line(`// BlockFlow-only: saving the rows to the dataset ${commentText(c.dataset)} (use data.rows / data.data).`);
+        break;
+      case 'cookies-storage': {
+        const action = js(c.action || 'get');
+        if ((c.area ?? 'cookies') === 'cookies') {
+          const site = String(c.url ?? '').trim() ? template(c.url) : `${tab(c)}.url()`;
+          const set = [
+            `name: ${template(c.name)}`,
+            `value: ${template(c.value)}`,
+            String(c.domain ?? '').trim() ? `domain: ${template(c.domain)}, path: ${js(String(c.path ?? '').trim() || '/')}` : `url: ${site}`,
+            Number(c.maxAgeSeconds) > 0 ? `expires: Math.round(Date.now() / 1000) + ${Number(c.maxAgeSeconds)}` : '',
+            c.httpOnly ? 'httpOnly: true' : '',
+            c.secure ? 'secure: true' : '',
+            c.sameSite ? `sameSite: ${js(c.sameSite)}` : '',
+          ].filter(Boolean);
+          this.line(`data = { ...data, ...(await cookies(context, ${site}, ${action}, ${template(c.name)}${c.action === 'set' ? `, { ${set.join(', ')} }` : ''})) };`);
+        } else {
+          this.line(`data = { ...data, ...(await pageStorage(${tab(c)}, ${js(c.area)}, ${action}, ${template(c.name)}, ${template(c.value)})) };`);
+        }
         break;
       }
       case 'timer':
@@ -465,13 +638,20 @@ class Writer {
       case 'url':
         this.line(`await ${tab(c)}.waitForURL(urlPattern(${template(c.url)})${this.optArg()});`);
         break;
-      case 'response':
-        this.line(`data = { ...data, response: await waitForResponse(${tab(c)}, ${template(c.url)}, ${js(c.status)}${this.timeoutMs !== undefined ? `, ${this.timeoutMs}` : ''}) };`);
+      case 'response': {
+        const method = String(c.method ?? '').trim();
+        const extra = method || c.captureBody ? `, ${js(method)}, ${c.captureBody ? 'true' : 'false'}` : '';
+        const timeout = this.timeoutMs !== undefined ? `, ${this.timeoutMs}` : extra ? ', undefined' : '';
+        this.line(`data = { ...data, response: await waitForResponse(${tab(c)}, ${template(c.url)}, ${js(c.status)}${timeout}${extra}) };`);
+        break;
+      }
+      case 'request':
+        this.line(`data = { ...data, request: await waitForRequest(${tab(c)}, ${template(c.url)}, ${js(String(c.method ?? '').trim())}${this.timeoutMs !== undefined ? `, ${this.timeoutMs}` : ''}) };`);
         break;
       default:
         this.line(`await ${tab(c)}.waitForLoadState(${js(mode === 'networkidle' ? 'networkidle' : 'load')}${this.optArg()});`);
     }
-    if (mode !== 'response') this.line(`data = { ...data, url: ${tab(c)}.url() };`);
+    if (mode !== 'response' && mode !== 'request') this.line(`data = { ...data, url: ${tab(c)}.url() };`);
   }
 
   /**
@@ -493,6 +673,9 @@ class Writer {
       unchecked: 'not.toBeChecked',
       enabled: 'toBeEnabled',
       disabled: 'toBeDisabled',
+      focused: 'toBeFocused',
+      editable: 'toBeEditable',
+      'in-viewport': 'toBeInViewport',
     };
     const element = () => firstOf(loc());
     const direct = (target: string, matcher: string, args: string) =>
@@ -509,15 +692,26 @@ class Writer {
     }
     // Matchers by subject: [equals, not-equals, matches] (+ contains for text).
     const page = tab(c);
-    const matchers: Record<string, { target: () => string; matcher: string; contains?: string; arg?: (value: string) => string }> = {
+    const matchers: Record<string, { target: () => string; matcher: string; contains?: string; arg?: (value: string) => string; pattern?: boolean }> = {
       text: { target: element, matcher: 'toHaveText', contains: 'toContainText' },
       input: { target: element, matcher: 'toHaveValue' },
       attribute: { target: element, matcher: 'toHaveAttribute', arg: (value) => `${js(c.name)}, ${value}` },
       count: { target: () => loc(), matcher: 'toHaveCount', arg: (value) => `Number(${value})` },
       url: { target: () => page, matcher: 'toHaveURL' },
       title: { target: () => page, matcher: 'toHaveTitle' },
+      // "class contains a b" = has both classes, as in BlockFlow.
+      class: { target: element, matcher: 'toHaveClass', contains: 'toContainClass' },
+      css: { target: element, matcher: 'toHaveCSS', arg: (value) => `${js(c.name)}, ${value}`, pattern: true },
+      'accessible-name': { target: element, matcher: 'toHaveAccessibleName', pattern: true },
+      'accessible-description': { target: element, matcher: 'toHaveAccessibleDescription', pattern: true },
     };
     const found = matchers[subject];
+    // Matchers that take a RegExp: contains / starts-with / ends-with become an escaped pattern.
+    if (found?.pattern && ['contains', 'not-contains', 'starts-with', 'ends-with'].includes(operator)) {
+      const arg = found.arg ?? ((value: string) => value);
+      const pattern = `textPattern(${js(operator === 'not-contains' ? 'contains' : operator)}, ${expected})`;
+      return direct(found.target(), operator === 'not-contains' ? `not.${found.matcher}` : found.matcher, arg(pattern));
+    }
     if (found) {
       const arg = found.arg ?? ((value: string) => value);
       if (operator === 'equals') return direct(found.target(), found.matcher, arg(expected));
@@ -613,6 +807,12 @@ function regexOf(pattern: string): RegExp {
   return literal ? new RegExp(literal[1] as string, literal[2]) : new RegExp(pattern);
 }
 
+/** A RegExp for text operators Playwright matchers only take as a pattern (contains, starts-with, ends-with). */
+function textPattern(operator: string, text: string): RegExp {
+  const escaped = text.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
+  return new RegExp(operator === 'starts-with' ? '^' + escaped : operator === 'ends-with' ? escaped + '$' : escaped);
+}
+
 /** Wait For text: "/re/i" is a pattern, anything else plain text. */
 function textOrRegex(text: string): string | RegExp {
   return /^\\/.+\\/[dgimsuyv]*$/s.test(text) ? regexOf(text) : text;
@@ -635,16 +835,29 @@ async function retry<T>(retries: number, action: () => Promise<T>): Promise<T> {
 }
 
 /** What happened in the browser so far: new pages (popups), responses (Wait For response), dialogs. */
-const seen = { pages: [] as { page: Page; at: number }[], responses: [] as { response: Response; at: number }[], ours: new WeakSet<Page>() };
+const seen = {
+  pages: [] as { page: Page; at: number }[],
+  responses: [] as { response: Response; at: number }[],
+  requests: [] as { request: Request; at: number }[],
+  downloads: [] as { download: Download; at: number }[],
+  used: new WeakSet<object>(),
+  ours: new WeakSet<Page>(),
+};
 const dialogAnswers = new WeakMap<Page, { action: string; text: string; shown: { type: string; message: string }[] }>();
 
 /** Starts recording; called first thing in the test. */
 function watch(context: BrowserContext, page: Page) {
   seen.ours.add(page);
   trackDialogs(page);
+  trackDownloads(page);
   context.on('page', (opened) => {
     seen.pages.push({ page: opened, at: Date.now() });
     trackDialogs(opened);
+    trackDownloads(opened);
+  });
+  context.on('request', (request) => {
+    seen.requests.push({ request, at: Date.now() });
+    if (seen.requests.length > 500) seen.requests.shift();
   });
   context.on('response', (response) => {
     seen.responses.push({ response, at: Date.now() });
@@ -676,10 +889,16 @@ function statusFits(status: number, wanted: string): boolean {
   return options.some((option) => (/^\\dxx$/.test(option) ? Math.floor(status / 100) === Number(option[0]) : Number(option) === status));
 }
 
+/** "POST", "get,post" or "" for any. */
+function methodFits(method: string, wanted: string): boolean {
+  const options = wanted.split(',').map((part) => part.trim().toUpperCase()).filter(Boolean);
+  return options.length === 0 || options.includes(method.toUpperCase());
+}
+
 /** Wait For "a network request finishes": a matching response of this tab in the last 10 s, or the next one. */
-async function waitForResponse(tab: Page, pattern: string, status = '', timeout?: number) {
+async function waitForResponse(tab: Page, pattern: string, status = '', timeout?: number, method = '', withBody = false) {
   const fits = (response: Response) => {
-    if (!statusFits(response.status(), status) || !urlPatternModule.urlMatches(response.url(), pattern)) return false;
+    if (!statusFits(response.status(), status) || !urlPatternModule.urlMatches(response.url(), pattern) || !methodFits(response.request().method(), method)) return false;
     try {
       return response.frame().page() === tab;
     } catch {
@@ -689,7 +908,82 @@ async function waitForResponse(tab: Page, pattern: string, status = '', timeout?
   const since = Date.now() - 10_000;
   const response = seen.responses.find(({ response, at }) => at >= since && fits(response))?.response ?? (await tab.waitForResponse(fits, timeout ? { timeout } : {}));
   await response.finished();
-  return { url: response.url(), status: response.status(), method: response.request().method() };
+  const result: any = { url: response.url(), status: response.status(), method: response.request().method() };
+  if (withBody) result.body = await response.text();
+  return result;
+}
+
+/** Wait For "the page sends a request": a matching request of this tab in the last 10 s, or the next one. */
+async function waitForRequest(tab: Page, pattern: string, method = '', timeout?: number) {
+  const fits = (request: Request) => {
+    if (seen.used.has(request) || !urlPatternModule.urlMatches(request.url(), pattern) || !methodFits(request.method(), method)) return false;
+    try {
+      return request.frame().page() === tab;
+    } catch {
+      return false;
+    }
+  };
+  const since = Date.now() - 10_000;
+  const request = seen.requests.find(({ request, at }) => at >= since && fits(request))?.request ?? (await tab.waitForRequest(fits, timeout ? { timeout } : {}));
+  seen.used.add(request);
+  const postData = request.postData();
+  return { url: request.url(), method: request.method(), type: request.resourceType(), ...(postData !== null ? { postData } : {}) };
+}
+
+function trackDownloads(tab: Page) {
+  tab.on('download', (download) => seen.downloads.push({ download, at: Date.now() }));
+}
+
+/** Wait for Download: a download of this tab in the last 15 s (or the next one), optionally read. */
+async function waitForDownload(tab: Page, pattern: string, read: string, timeout?: number) {
+  const fits = (download: Download) => !seen.used.has(download) && (!pattern || urlPatternModule.urlMatches(download.url(), pattern) || urlPatternModule.urlMatches(download.suggestedFilename(), pattern));
+  const since = Date.now() - 15_000;
+  const download = seen.downloads.find(({ download, at }) => at >= since && fits(download))?.download ?? (await tab.waitForEvent('download', { predicate: fits, ...(timeout ? { timeout } : {}) }));
+  seen.used.add(download);
+  const path = await download.path();
+  const { readFile, stat } = await import('node:fs/promises');
+  const result: any = { download: { filename: download.suggestedFilename(), url: download.url(), path, size: (await stat(path)).size, mime: '' } };
+  if (read === 'none') return result;
+  const text = await readFile(path, 'utf8');
+  if (read === 'csv') result.rows = csvModule.csvToObjects(text);
+  else if (read === 'json') result.data = JSON.parse(text);
+  else result.content = text;
+  return result;
+}
+
+/** Cookies & Storage, cookies: get / set / delete / clear for one site (like the extension's cookies API). */
+async function cookies(context: BrowserContext, url: string, action: string, name = '', cookie?: any) {
+  if (action === 'set') {
+    await context.addCookies([cookie]);
+    return { value: cookie.value };
+  }
+  const found = (await context.cookies(url)).filter((candidate) => !name || candidate.name === name);
+  if (action === 'get') return { value: name ? (found[0]?.value ?? null) : Object.fromEntries(found.map((candidate) => [candidate.name, candidate.value])), cookies: found };
+  for (const candidate of found) await context.clearCookies({ name: candidate.name, domain: candidate.domain, path: candidate.path });
+  return { deleted: found.length };
+}
+
+/** Cookies & Storage, localStorage / sessionStorage: get / set / delete / clear in the page. */
+async function pageStorage(tab: Page, area: string, action: string, key = '', value = '') {
+  return tab.evaluate(([area, action, key, value]) => {
+    const store = area === 'local' ? localStorage : sessionStorage;
+    if (action === 'set') {
+      store.setItem(key, value);
+      return { value };
+    }
+    if (action === 'delete') {
+      const deleted = store.getItem(key) === null ? 0 : 1;
+      store.removeItem(key);
+      return { deleted };
+    }
+    if (action === 'clear') {
+      const deleted = store.length;
+      store.clear();
+      return { deleted };
+    }
+    if (key) return { value: store.getItem(key) };
+    return { value: Object.fromEntries(Object.keys(store).map((name) => [name, store.getItem(name)])) };
+  }, [area, action, key, value]);
 }
 
 /** Records a page's dialogs and answers them with its latest Dialogs choice (dismiss until one). */
@@ -721,6 +1015,44 @@ async function fileFromUrl(request: APIRequestContext, url: string, name: string
   return { name: name.trim() || fallback, mimeType, buffer: await response.body() };
 }
 
+/** Upload File from base64 data (or a data: URL), as BlockFlow's source "data". */
+function fileFromData(text: string, name: string, mimeType: string) {
+  const dataUrl = /^data:([^;,]*)((?:;[^;,]*)*),/i.exec(text.trim());
+  if (dataUrl && !/;base64/i.test(dataUrl[2] ?? '')) {
+    return { name, mimeType: dataUrl[1] || 'text/plain', buffer: Buffer.from(decodeURIComponent(text.trim().slice(dataUrl[0].length))) };
+  }
+  const base64 = dataUrl ? text.trim().slice(dataUrl[0].length) : text;
+  return { name, mimeType: dataUrl?.[1] || mimeType, buffer: Buffer.from(base64.replace(/\\s+/g, ''), 'base64') };
+}
+
+/** Upload File with target "dropzone": dragenter, dragover and drop with a DataTransfer carrying the file. */
+async function dropFiles(zone: Locator, file: { name: string; mimeType: string; buffer: Buffer }) {
+  await zone.evaluate(
+    (element: any, [name, type, base64]: string[]) => {
+      const binary = atob(base64!);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], name!, { type }));
+      for (const type of ['dragenter', 'dragover', 'drop']) {
+        element.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, composed: true, dataTransfer: transfer }));
+      }
+    },
+    [file.name, file.mimeType, file.buffer.toString('base64')],
+  );
+}
+
+/** Element Action "dispatch an event": Playwright's dispatchEvent for built-in types, a CustomEvent (with detail) otherwise. */
+async function dispatchEvent(target: Locator, type: string, detail?: unknown): Promise<boolean> {
+  if (/^(click|dblclick|auxclick|contextmenu|mouse|pointer|key|focus|blur|drag|drop|wheel|input|beforeinput|touch)/.test(type)) {
+    await target.dispatchEvent(type, detail && typeof detail === 'object' ? detail : {});
+    return false;
+  }
+  return target.evaluate(
+    (element: any, [type, detail]: any[]) => !element.dispatchEvent(new CustomEvent(type, { bubbles: true, cancelable: true, composed: true, detail: detail ?? null })),
+    [type, detail],
+  );
+}
+
 /** Sets any form field from text, like BlockFlow's Fill Form. */
 async function setField(field: Locator, value: string) {
   const kind = await field.evaluate((element: any) => \`\${element.tagName.toLowerCase()}:\${element.type ?? ''}\`);
@@ -748,6 +1080,20 @@ async function read(element: Locator, kind: string, name = ''): Promise<string> 
   if (kind === 'visible') return String(await first.isVisible());
   if (kind === 'checked') return String(await first.isChecked());
   if (kind === 'enabled') return String(await first.isEnabled());
+  if (kind === 'focused') return String(await first.evaluate((el) => el === el.ownerDocument.activeElement));
+  if (kind === 'editable') return String(await first.isEditable());
+  if (kind === 'class') return ((await first.getAttribute('class')) ?? '').replace(/\\s+/g, ' ').trim();
+  if (kind === 'css') return await first.evaluate((el, property) => getComputedStyle(el).getPropertyValue(property).trim(), name);
+  if (kind === 'accessible-name' || kind === 'accessible-description') {
+    // Playwright has matchers for these but no getter: a simplified reading of the ARIA attributes.
+    return await first.evaluate((el, which) => {
+      const byIds = (ids: string | null) => (ids ?? '').split(/\\s+/).map((id) => el.ownerDocument.getElementById(id)?.textContent ?? '').join(' ').trim();
+      const text = which === 'accessible-name'
+        ? byIds(el.getAttribute('aria-labelledby')) || el.getAttribute('aria-label') || (el as HTMLElement).innerText || el.getAttribute('title') || ''
+        : byIds(el.getAttribute('aria-describedby')) || el.getAttribute('aria-description') || el.getAttribute('title') || '';
+      return text.replace(/\\s+/g, ' ').trim();
+    }, kind);
+  }
   return ((await first.textContent()) ?? '').replace(/\\s+/g, ' ').trim();
 }
 
@@ -814,7 +1160,7 @@ export function workflowToPlaywright(workflow: Workflow, options: ExportOptions)
   return `// Exported from BlockFlow: "${workflow.name.replace(/\n/g, ' ')}".
 // Run with: npx playwright test${secretNames.length ? `\n// Secrets come from environment variables: ${secretNames.map(envName).join(', ')}` : ''}
 import { expect, test } from '@playwright/test';
-import type { APIRequestContext, BrowserContext, Locator, Page, Response } from '@playwright/test';
+import type { APIRequestContext, BrowserContext, Download, Locator, Page, Request, Response } from '@playwright/test';
 
 /** {{secret.name}} values. */
 const SECRETS: Record<string, string> = {${secrets.length ? ` ${secrets.join(', ')} ` : ''}};

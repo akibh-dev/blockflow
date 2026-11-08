@@ -39,6 +39,7 @@ missing keys take the block's default. A step may also have:
 | `id` | Optional name of the step, unique in the script. Without one, the Nth step from the top of the file (nested steps count too) is `s<N>`. Import keeps it as the block's `origin`, so results can point back to the script. |
 | `step` | [Step settings](../guide/README.md#7-step-settings-every-block): `timeoutSeconds`, `retries`, `onError`, `screenshot`, `disabled`, `note`, `realInput`. |
 | `true`, `false` | If only: the steps for each answer. |
+| case names, `default` | Switch only: the steps for each case (its `cases[].port`) and for no match. Any other key holding a list is refused as `edge.port.unknown`, with a did-you-mean over the real case names. |
 | `each` | For Each, Repeat, Paginate: the steps run once per item / time / page. |
 | `onError` | Any block: the steps that run when it fails. Sets `step.onError` to `"port"` for you. |
 
@@ -52,7 +53,10 @@ missing keys take the block's default. A step may also have:
 3. **If rejoins.** The step after an If runs after whichever branch ran: it is connected from the last
    step of `true` and of `false`. A missing (or empty) branch goes straight to the next step, so
    "if without else" works as in code. This also holds for an If nested inside a branch.
-4. A list's last step connects to nothing, unless the list is an If branch (rule 3).
+4. **Switch rejoins the same way**: the step after it is connected from the last step of every case list
+   and of `default`, and straight from every case without a list. Its outputs come from its settings, so
+   the compiler reads the step's `cases` (defaults filled in) before it looks at the branch keys.
+5. A list's last step connects to nothing, unless the list is an If or Switch branch (rules 3 and 4).
 
 ```json
 { "id": "big", "if": { "left": "{{count}}", "operator": "greater", "right": "100" },
@@ -62,6 +66,18 @@ missing keys take the block's default. A step may also have:
 
 Here `log` runs in both cases: after the notification when the count is over 100, straight from If's
 `false` output otherwise.
+
+```json
+{ "id": "route", "switch": { "value": "{{status}}", "cases": [
+    { "port": "ok", "operator": "equals", "value": "200" },
+    { "port": "server", "operator": "matches", "value": "/^5/" } ] },
+  "server": [ { "notify": "API down: {{status}}" } ] },
+{ "log": "checked {{status}}" }
+```
+
+`log` runs after every outcome: after the notification for a 5xx, straight from `ok` and `default`
+otherwise. A loop that stops on a condition is Repeat with `"mode": "until"` (or `"while"`), see
+[guide §6](../guide/README.md#6-branching).
 
 ### Aliases and shorthands
 
@@ -169,7 +185,7 @@ What each part means:
 | `nodes[].config` | The block's settings. Keys come from the block reference; missing keys take the default. |
 | `nodes[].position` | Where the block sits on the canvas. About 260 px apart left to right reads well. Leave `position` out of every node and import lays the workflow out for you. |
 | `nodes[].step` | Optional per-block settings: `timeoutSeconds`, `retries`, `onError`, `screenshot`, `disabled`, `note`, `realInput`. See [step settings](../guide/README.md#7-step-settings-every-block). |
-| `edges` | Connections. `sourcePort` picks an output on blocks that have several: `"true"`/`"false"` on If, `"each"`/`"done"` on loops, `"error"` when the source has `"step": { "onError": "port" }`. |
+| `edges` | Connections. `sourcePort` picks an output on blocks that have several: `"true"`/`"false"` on If, the case names and `"default"` on Switch, `"each"`/`"done"` on loops, `"error"` when the source has `"step": { "onError": "port" }`. |
 
 A graph can do what a script cannot: several start blocks, one output feeding several blocks, joins
 anywhere, loops back. A workflow like that has no script form ("Export as script" is greyed out).
@@ -264,7 +280,7 @@ import can never start something by surprise or overwrite a workflow.
 **Export**: hover a workflow in the sidebar → export, or select several on **All workflows** → Export.
 You get `<name>.blockflow.json` (several workflows: `blockflow-workflows.blockflow.json`), a graph.
 **Export as script** in the canvas header downloads the open workflow as `<name>.script.json`, when it
-can be written as one (one start block, every output feeding at most one block, joins only after an If).
+can be written as one (one start block, every output feeding at most one block, joins only after an If or a Switch).
 The export uses aliases and shorthands, leaves out settings at their default and keeps your step ids.
 Exported workflows are always marked off. Secrets are never part of the file, only their
 `{{secret.name}}` references.
@@ -380,6 +396,9 @@ Chrome 135+) covers some of them.
 | `page.frameLocator('#pay').getByLabel('Card')` | locator `frame=#pay >> label=Card` |
 | `page.setViewportSize`, `emulateMedia`, geolocation, locale | no equivalent yet |
 | new browser context per test, `storageState` | no equivalent yet (runs share your browser profile) |
+| `context.cookies()`, `addCookies`, `clearCookies` | **Cookies & Storage** `cookies-storage`, `area: "cookies"`, `action` `get` / `set` / `delete` / `clear` |
+| `page.evaluate(() => localStorage.setItem(…))` | **Cookies & Storage** `area: "local"` / `"session"` |
+| `page.screenshot({ fullPage })`, `locator.screenshot()` | **Screenshot** `screenshot`, `area` `visible` / `full` / `element` |
 
 ### Locators
 
@@ -390,7 +409,12 @@ Chrome 135+) covers some of them.
 | `getByLabel`, `getByPlaceholder`, `getByTestId`, `getByAltText`, `getByTitle` | `label=`, `placeholder=`, `testid=`, `alt=`, `title=` |
 | `locator('css')`, `locator('xpath=…')` | the CSS itself, `xpath=…` |
 | `a.locator(b)`, `.first()`, `.last()`, `.nth(n)` | `a >> b`, `>> nth=0`, `>> nth=-1`, `>> nth=n` |
-| `filter({ hasText })`, `has`, `or`, `and`, `visible` | no equivalent yet |
+| `filter({ hasText })` / `{ hasNotText }` | `>> has-text=…` / `>> has-not-text=…` |
+| `filter({ has })` / `{ hasNot }` | `>> has=<locator>` / `>> has-not=<locator>` (quote it when it has steps) |
+| `filter({ visible: true })` / `false` | `>> visible` / `>> visible=false` |
+| `a.or(b)` | `a \|\| b` |
+| `getByRole(…, { pressed, expanded, selected, disabled, includeHidden })` | `[pressed]`, `[expanded=false]`, `[selected]`, `[disabled]`, `[include-hidden]` |
+| `a.and(b)` | no equivalent yet |
 
 ### Actions
 
@@ -398,18 +422,21 @@ Chrome 135+) covers some of them.
 | --- | --- |
 | `locator.click()` / `dblclick()` / `click({ button: 'right' })` / `hover()` | **Click** `click`, `action`: `click` / `double` / `right` / `hover` |
 | `click({ force: true })` | **Click** `force: true` |
-| `click({ modifiers })`, `click({ position })`, middle button | no equivalent yet |
+| `click({ button, modifiers, position, clickCount })` | **Click** `button` (`left`/`middle`/`right`), `modifiers` (`"Control+Shift"`), `position` (`"x,y"`), `clickCount` |
 | `locator.fill(value)` | **Fill** `fill` |
 | `locator.pressSequentially(text)`, `keyboard.type` | **Fill** `mode: "type"` |
 | several `fill`s and a submit click | **Fill Form** `fill-form` (`fields`, `submit`) |
 | `locator.selectOption(label)` | **Select Option** `select-option` (text or value; `a\|b` for multi) |
 | `check()` / `uncheck()` / `setChecked()` | **Check** `check`, `state` |
-| `locator.press('Enter')`, `keyboard.press('Control+A')` | **Press Key** `press-key` (`locator` optional) |
-| `setInputFiles` | **Upload File** `upload-file` (one file, from text or a URL) |
+| `locator.press('Enter')`, `keyboard.press('Control+Shift+K')`, `'ControlOrMeta+A'` | **Press Key** `press-key` (`locator` optional) |
+| `keyboard.insertText(text)` | **Press Key** `mode: "text"`, `text` |
+| `setInputFiles` | **Upload File** `upload-file` (one file, from text, a URL or base64 `data`) |
+| a `drop` event with a DataTransfer (drop zones) | **Upload File** `target: "dropzone"` |
 | `page.on('dialog', d => d.accept())` | **Dialogs** `dialogs`, placed **before** the click that opens the dialog |
 | `scrollIntoViewIfNeeded()`, `mouse.wheel` | **Scroll** `scroll` (`to`: `element`, `end`, `bottom`, `top`) |
 | `page.evaluate(fn)` | **Run Script** `run-script` (Chrome 135+, needs the userScripts permission) |
-| `dragTo`, `focus`, `blur`, `clear`, `dispatchEvent` | no equivalent yet |
+| `locator.dragTo(target, { sourcePosition, targetPosition })` | **Drag** `drag` (`from`, `to`, `fromPosition`, `toPosition`) |
+| `focus()`, `blur()`, `clear()`, `scrollIntoViewIfNeeded()`, `dispatchEvent(type, init)` | **Element Action** `element-action`, `action`: `focus`, `blur`, `clear`, `scroll-into-view`, `dispatch-event` (`eventType`, `detail`) |
 | `isTrusted` input (Playwright's input is always trusted) | step setting `"realInput": true` (Chromium only) |
 
 ### Waiting
@@ -420,9 +447,9 @@ Chrome 135+) covers some of them.
 | `locator.waitFor({ state })` | **Wait For** `wait-for`, `mode`: `visible` / `hidden` / `attached` / `detached` / `enabled` |
 | `page.waitForURL(pattern)` | **Wait For** `mode: "url"` (contains, `*`/`**` globs, `/regex/`) |
 | `page.waitForLoadState('load' \| 'networkidle')` | **Wait For** `mode: "load"` / `"networkidle"` |
-| `page.waitForResponse(url)` | **Wait For** `mode: "response"`, `url`, `status` (`201`, `2xx`). Status only, no body |
-| `page.waitForRequest` | no equivalent yet |
-| `page.waitForEvent('download')` | no equivalent yet |
+| `page.waitForResponse(url)` | **Wait For** `mode: "response"`, `url`, `status` (`201`, `2xx`), `method`. `captureBody: true` adds `response.body` (Chromium) |
+| `page.waitForRequest` | **Wait For** `mode: "request"`, `url`, `method`; `request.postData` |
+| `page.waitForEvent('download')` | **Wait for Download** `wait-for-download` (`url` pattern; `read` csv / json / text) |
 | `page.waitForTimeout(ms)` | **Timer** after a block delays the flow (exported back as `page.waitForTimeout`) |
 
 ### Reading and assertions
@@ -432,7 +459,10 @@ Chrome 135+) covers some of them.
 | `expect(l).toHaveText` / `toContainText` | **Assert** `assert`, `subject: "text"`, `operator: "equals"` / `"contains"` (also `matches`, `starts-with`…) |
 | `toHaveValue` | **Assert** `subject: "input"` |
 | `toHaveAttribute(name, v)` | **Assert** `subject: "attribute"`, `name` |
-| `toHaveClass` | **Assert** `subject: "attribute"`, `name: "class"`, `operator: "contains"` |
+| `toHaveClass` / `toContainClass` | **Assert** `subject: "class"`, `operator: "equals"` / `"contains"` (has the classes) |
+| `toHaveCSS(name, v)` | **Assert** `subject: "css"`, `name` = the property |
+| `toHaveAccessibleName` / `toHaveAccessibleDescription` | **Assert** `subject: "accessible-name"` / `"accessible-description"` |
+| `toBeFocused` / `toBeEditable` / `toBeInViewport` | **Assert** `subject: "focused"` / `"editable"` / `"in-viewport"` |
 | `toHaveCount` | **Assert** `subject: "count"` |
 | `toBeVisible` / `toBeHidden` / `toBeChecked` / `toBeEnabled` / `toBeDisabled` | **Assert** `subject` of the same name (`unchecked` for not checked) |
 | `expect(page).toHaveURL` / `toHaveTitle` | **Assert** `subject: "url"` / `"title"` |
@@ -486,19 +516,33 @@ What it does:
 - Wait For `mode: "response"` → `waitForResponse(tab, pattern, status)`: a matching response of that tab
   from the last 10 s (usually triggered by the click before) or the next one, through
   `page.waitForResponse`; the pattern works like BlockFlow's (contains, `*`/`**` globs, `/regex/`) and
-  `status` accepts `201`, `2xx`, `200,201`. `data.response` gets `{ url, status, method }`.
+  `status` accepts `201`, `2xx`, `200,201`. `data.response` gets `{ url, status, method }` (and `body`
+  with `captureBody`, from `response.text()`). `method` filters too. Wait For `mode: "request"` →
+  `waitForRequest(tab, pattern, method)`, the same with `context.on('request')` / `page.waitForRequest`.
+- Wait for Download → `waitForDownload(tab, pattern, read)`: a `download` event of that page from the last
+  15 s, or `page.waitForEvent('download')`; `read` reads the saved file (`download.path()`). Saving rows to a
+  dataset becomes a comment.
+- Screenshot → `page.screenshot({ fullPage })` / `locator.first().screenshot()`, attached to the test
+  report with `test.info().attach`.
+- Cookies & Storage → `cookies(context, url, action, name, cookie)` (`context.cookies(url)`, `addCookies`,
+  `clearCookies` per matching cookie) and `pageStorage(page, area, action, key, value)` (`page.evaluate`).
 - Open Tab: `where: "current"` / `"workflow"` reuse the test's `page`; `"new"` / `"window"` open
   `context.newPage()`.
 - Dialogs → one `page.on('dialog')` handler per page that answers with the latest Dialogs choice and
   records what was shown (`read` returns `dialogs` / `lastDialog`). Upload File → `setInputFiles` with a
-  `Buffer` (text) or a file downloaded with `request.get` (URL). Wait for Popup → a page the site opened in
+  `Buffer` (text), a file downloaded with `request.get` (URL) or `fileFromData` (base64 / `data:` URL); with
+  `target: "dropzone"` → `dropFiles(zone, file)` (dragenter, dragover, drop with a DataTransfer in the page).
+  Click options → the same `click`/`dblclick`/`hover` options. Drag → `dragTo` (held modifiers become a
+  comment). Element Action → `focus`/`blur`/`clear`/`scrollIntoViewIfNeeded`, and `dispatchEvent(locator,
+  type, detail)`: Playwright's `dispatchEvent` for built-in types, a `CustomEvent` with `detail` otherwise.
+  HTTP Request `responseType: "base64"` → `body64` from `response.body()`. Wait for Popup → a page the site opened in
   the last 15 s, or `context.waitForEvent('page')`. Run Script → `page.evaluate(async (data) => { …your
   code… }, data)`. A Timer after another block → `page.waitForTimeout(ms)`.
 - Step settings: `timeoutSeconds` → `{ timeout }` on the action or expect; `retries` → `retry(n, …)` around
   the step (1 s, 2 s, 4 s… like the engine); `onError: "continue"` → `try/catch` that logs; `onError:
   "port"` with an `error` edge → `try/catch` that runs the error branch with `error` / `errorBlock` in the
   data (the normal path continues only on success); `disabled` → a comment.
-- If becomes `if/else`; For Each, Repeat and Paginate become loops.
+- If becomes `if/else`, Switch an `if / else if` chain over its cases; For Each, Repeat (also until / while, with `max`) and Paginate become loops.
 - Run Workflow becomes a call to a generated function for the called workflow.
 - Helper functions (`read`, `compare`, `extractList`, `extractTable`, `setField`…) are appended so the test
   keeps BlockFlow's behaviour.

@@ -1,5 +1,9 @@
 import type {
+  CookieInfo,
+  CookieSetOptions,
+  DownloadInfo,
   Host,
+  ScreenshotOptions,
   HttpRequestOptions,
   HttpResult,
   NavigateOptions,
@@ -122,8 +126,12 @@ export class FakeHost implements Host {
   readonly tabUrls = new Map<number, string>();
   /** Popups pages "opened", for Wait for Popup. */
   readonly popups: { openerTabId: number; tabId: number; url: string }[] = [];
-  /** Network responses tabs "received", for Wait For response. */
-  readonly responses: { tabId: number; url: string; status: number }[] = [];
+  /** Network responses tabs "received", for Wait For response (`body` is returned with captureBody). */
+  readonly responses: { tabId: number; url: string; status: number; method?: string; body?: string }[] = [];
+  /** Requests tabs "sent", for Wait For request. */
+  readonly sentRequests: { tabId: number; url: string; method: string; type?: string; postData?: string }[] = [];
+  /** Options Wait For response passed, in order. */
+  readonly responseOptions: ({ method?: string; captureBody?: boolean } | undefined)[] = [];
   /** Dialog settings sent per tab, and what dialogs "were shown". */
   readonly dialogSettings: { tabId: number; options: unknown }[] = [];
   shownDialogs: { type: string; message: string }[] = [];
@@ -179,10 +187,20 @@ export class FakeHost implements Host {
       this.tabUrls.set(popup.tabId, popup.url);
       return popup.tabId;
     },
-    waitForResponse: async (tabId: number, pattern: string, status: string) => {
-      const found = this.responses.find((response) => response.tabId === tabId && urlMatches(response.url, pattern) && (!status || String(response.status) === status));
+    waitForResponse: async (tabId: number, pattern: string, status: string, _lookBackMs: number, _timeoutMs: number, options?: { method?: string; captureBody?: boolean }) => {
+      this.responseOptions.push(options);
+      const method = (options?.method ?? '').toUpperCase();
+      const found = this.responses.find(
+        (response) => response.tabId === tabId && urlMatches(response.url, pattern) && (!status || String(response.status) === status) && (!method || (response.method ?? 'GET') === method),
+      );
       if (!found) throw new Error(`Timed out waiting for a response from ${pattern}`);
-      return { url: found.url, status: found.status, method: 'GET' };
+      return { url: found.url, status: found.status, method: found.method ?? 'GET', ...(options?.captureBody ? { body: found.body ?? '' } : {}) };
+    },
+    waitForRequest: async (tabId: number, pattern: string, method: string) => {
+      const found = this.sentRequests.find((request) => request.tabId === tabId && urlMatches(request.url, pattern) && (!method || request.method === method.toUpperCase()));
+      if (!found) throw new Error(`Timed out waiting for a request to ${pattern}`);
+      this.sentRequests.splice(this.sentRequests.indexOf(found), 1);
+      return { url: found.url, method: found.method, type: found.type ?? 'xmlhttprequest', ...(found.postData !== undefined ? { postData: found.postData } : {}) };
     },
     waitForUrl: async (tabId: number, pattern: string, timeoutMs: number) => {
       const url = this.tabUrls.get(tabId) ?? '';
@@ -226,10 +244,47 @@ export class FakeHost implements Host {
 
   /** Screenshots taken: tab ids, in order. Return null from `screenshotResult` to simulate failure. */
   readonly screenshotsTaken: { tabId: number; runId: string }[] = [];
+  /** Screenshot block requests, in order. */
+  readonly screenshotRequests: { tabId: number; options: ScreenshotOptions }[] = [];
   screenshots = {
     capture: async (tabId: number, runId: string) => {
       this.screenshotsTaken.push({ tabId, runId });
       return `shot-${this.screenshotsTaken.length}`;
+    },
+    take: async (tabId: number, options: ScreenshotOptions) => {
+      if (!this.tabUrls.has(tabId)) throw new Error('The tab was closed');
+      this.screenshotRequests.push({ tabId, options });
+      return { id: `block-shot-${this.screenshotRequests.length}`, width: 800, height: options.area === 'full' ? 2400 : 600 };
+    },
+  };
+
+  /** The cookie jar: cookies by URL origin (a simple model: a cookie belongs to the origin it was set for). */
+  readonly cookieJar: (CookieInfo & { origin: string })[] = [];
+  cookies = {
+    get: async (url: string, name?: string): Promise<CookieInfo[]> =>
+      this.cookieJar.filter((cookie) => cookie.origin === new URL(url).origin && (!name || cookie.name === name)).map(({ origin: _origin, ...cookie }) => cookie),
+    set: async (options: CookieSetOptions): Promise<CookieInfo> => {
+      const origin = new URL(options.url).origin;
+      const cookie: CookieInfo = {
+        name: options.name,
+        value: options.value,
+        domain: options.domain ?? new URL(options.url).hostname,
+        path: options.path ?? '/',
+        expires: options.expires ?? -1,
+        httpOnly: options.httpOnly ?? false,
+        secure: options.secure ?? false,
+        sameSite: options.sameSite ?? '',
+      };
+      const existing = this.cookieJar.findIndex((candidate) => candidate.origin === origin && candidate.name === options.name);
+      if (existing >= 0) this.cookieJar.splice(existing, 1);
+      this.cookieJar.push({ ...cookie, origin });
+      return cookie;
+    },
+    remove: async (url: string, name?: string) => {
+      const origin = new URL(url).origin;
+      const gone = this.cookieJar.filter((cookie) => cookie.origin === origin && (!name || cookie.name === name));
+      for (const cookie of gone) this.cookieJar.splice(this.cookieJar.indexOf(cookie), 1);
+      return gone.length;
     },
   };
 
@@ -246,11 +301,28 @@ export class FakeHost implements Host {
 
   /** Files "saved" by Download, in order. */
   readonly downloaded: { filename: string; content: string; mime: string }[] = [];
+  /** Downloads the "page" made, for Wait for Download (consumed in order), with their content. */
+  readonly pageDownloads: (DownloadInfo & { content?: string })[] = [];
+  /** readText calls: download id and the tab id passed. */
+  readonly downloadReads: { downloadId: number; tabId?: number }[] = [];
   downloads = {
     save: async (filename: string, content: string, mime: string) => {
       this.downloaded.push({ filename, content, mime });
     },
+    waitFor: async (pattern: string) => {
+      const found = this.pageDownloads.find((download) => !pattern || urlMatches(download.url, pattern) || urlMatches(download.filename, pattern));
+      if (!found) throw new Error(`Timed out: no download${pattern ? ` matching ${pattern}` : ''} started`);
+      this.pageDownloads.splice(this.pageDownloads.indexOf(found), 1);
+      const { content: _content, ...info } = found;
+      this.readable.set(found.downloadId, found.content ?? '');
+      return info;
+    },
+    readText: async (download: DownloadInfo, tabId?: number) => {
+      this.downloadReads.push({ downloadId: download.downloadId, ...(tabId !== undefined ? { tabId } : {}) });
+      return this.readable.get(download.downloadId) ?? '';
+    },
   };
+  private readonly readable = new Map<number, string>();
 
   /** HTML scraping runs the real page agent on jsdom-free input: tests replace this. */
   htmlAgent: (html: string, baseUrl: string, request: AgentRequest) => Promise<Record<string, unknown>> = async () => ({});

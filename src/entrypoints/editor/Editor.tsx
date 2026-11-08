@@ -14,7 +14,7 @@ import type { DragEvent } from 'react';
 import { browser } from 'wxt/browser';
 import { clearLogs, clearRuns, loadWorkflows, saveWorkflows } from '../../browser/stores';
 import { migrateWorkflows } from '../../core/migrate';
-import { edgePort, nodePorts } from '../../core/ports';
+import { edgePort, hasDynamicPorts, nodePorts } from '../../core/ports';
 import type { StepStatus } from '../../core/runs';
 import { validateWorkflow } from '../../core/validate';
 import { duplicateWorkflow, exportWorkflows, parseImport, uniqueName } from '../../core/library';
@@ -30,7 +30,7 @@ import { DRAG_MIME, Sidebar } from './components/Sidebar';
 import type { WorkflowActions } from './components/WorkflowActions';
 import { WorkflowsPage } from './components/WorkflowsPage';
 import { downloadText, fileNameFor, readFiles } from './files';
-import { fromFlow, sameGraph, toFlow } from './flow/convert';
+import { followPortChanges, fromFlow, sameGraph, toFlow } from './flow/convert';
 import { useLogs, usePrompts, useRuns, useStorageValue } from './hooks';
 import { recordingIntoWorkflow } from '../../core/recording';
 import { workflowToPlaywright } from '../../core/playwright';
@@ -309,6 +309,14 @@ export function Editor() {
   );
 
   const updateConfig = useCallback((nodeId: string, patch: Record<string, unknown>) => {
+    // Outputs that depend on settings (Switch cases): connections follow a rename and go with a removal.
+    const node = nodesRef.current.find((candidate) => candidate.id === nodeId);
+    const def = node ? registry.get(node.data.blockType) : undefined;
+    if (node && hasDynamicPorts(def)) {
+      const before = nodePorts(def, { config: node.data.config });
+      const after = nodePorts(def, { config: { ...node.data.config, ...patch } });
+      setEdges((current) => followPortChanges(current, nodeId, before, after));
+    }
     setNodes((current) =>
       current.map((node) =>
         node.id === nodeId ? { ...node, data: { ...node.data, config: { ...node.data.config, ...patch } } } : node,

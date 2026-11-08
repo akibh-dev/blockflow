@@ -1,7 +1,7 @@
 # Implementation plan
 
-> **Status:** 2026-11-06. **M0 done** (v0.2.0), **M1 done** (branch `m1-script-first`, v0.3.0); M2 is next
-> (M3 and M4 may start in parallel). This is the
+> **Status:** 2026-11-06. **M0 done** (v0.2.0), **M1 done** (v0.3.0), **M2 done** (branch `m2-essentials`,
+> v0.4.0); M3 and M4 are next (independent of each other). This is the
 > task-level plan for [PLAN.md](PLAN.md): *what* to build is decided there (goal, gaps, decisions in §8).
 > This file says *how*, in which order, with which files, tests and docs. Tick tasks off here as they
 > land, and update the matching wiki pages in the same change.
@@ -229,21 +229,21 @@ Workflows-as-Scripts, Troubleshooting, Core-Modules, Page-Protocol updated.
 
 | ID | Feature | Design | Tests | Size |
 | --- | --- | --- | --- | --- |
-| M2.1 | **Locator filters** | `locatorSyntax.ts` grammar: `>> has-text=…`, `>> has=<locator>`, `>> has-not=…`, `>> visible`, `A \|\| B` (or). `locator.ts` applies them as filters on the current match set, like Playwright's `filter()`. Readable locators from `bestLocator.ts` may use `has-text` to disambiguate | jsdom unit tests per filter; guide §4 table | M |
-| M2.2 | **Role options** `pressed`, `expanded`, `selected`, `disabled` | `aria.ts` state readers; `parseRole` accepts them | jsdom | S |
-| M2.3 | **Click options** | Click config: `button` (left/middle/right), `modifiers` (Alt, Control, Meta, Shift), `position` (x,y in element), `clickCount`. Synthetic path sets the event fields; real input passes them to `Input.dispatchMouseEvent` | jsdom + e2e (trusted.html logs modifiers) | M |
-| M2.4 | **Element Action block** (`element-action`) | One block, `action`: focus, blur, clear, scroll-into-view, dispatch-event (`eventType`, `detail` JSON). New page ops `focus`, `blur`, `clear`, `dispatch` | jsdom + e2e | M |
-| M2.5 | **Drag and drop** (`drag`) | Config `from`, `to` locators (+ optional offsets). Synthetic: pointerdown/mousedown, dragstart with a shared `DataTransfer`, dragenter/dragover on target, drop, dragend, pointer/mouse up; works for HTML5 DnD. Real input: CDP `Input.dispatchMouseEvent` moves with `Input.setInterceptDrags` + `dispatchDragEvent` for native DnD. New op `drag` | new fixture `dnd.html` (HTML5 list + a pointer-events slider); e2e both modes | L |
-| M2.6 | **Drop zones** | Upload File `target: input \| dropzone`; dropzone mode dispatches dragenter/dragover/drop with a `DataTransfer` carrying the `File` | fixture `upload.html` gets a drop zone | S |
-| M2.7 | **Wait for Download** (`wait-for-download`) | `Host.downloads.waitFor(pattern, timeoutMs)` on `downloads.onCreated`/`onChanged` with a look-back like Wait for Popup; output `filename`, `url`, `size`, `mime`, `downloadId`. Optional `saveAs` into a dataset (text files) | e2e with a fixture link to a generated CSV | M |
-| M2.8 | **Screenshot block** (`screenshot`) | `area`: visible (captureVisibleTab), full-page and element (CDP `Page.captureScreenshot` with `captureBeyondViewport` / `clip`, Chromium; Firefox: `tabs.captureTab` has a `rect` option for element and full page). Stored in `blobStore`, shown in the step and report; output `screenshotId` | e2e per mode | M |
-| M2.9 | **More Assert subjects** | `class` (has/contains), `css` (`name` = property), `focused`, `editable`, `in-viewport` (ratio > 0, IntersectionObserver once), `accessible-name`, `accessible-description`. Agent `read` kinds extended | jsdom + e2e | M |
-| M2.10 | **Cookies & Storage block** (`cookies-storage`) | `action`: get/set/delete/clear on `area` cookies (`cookies` permission, optional) or local/session storage (page op `storage`). Clearing cookies for an origin uses `cookies.getAll({ url })` + `remove` | e2e on fixture origin | M |
-| M2.11 | **Switch block** (`switch`) | Dynamic ports: `ports` becomes `ports?: string[] \| ((config) => string[])`; `nodePorts` and the editor read it. Config rows `{port name, operator, value}` evaluated in order + `default` port | unit + editor convert test | M |
-| M2.12 | **Repeat until / while** | Repeat gets `until` condition (left/operator/right, templated per iteration) and `max` iterations; same evaluator as If | unit | S |
-| M2.13 | **Wait For `request`** and response body | `mode: request` (method, url pattern); `response` mode can capture the body (`captureBody: true`, CDP `Network.getResponseBody` when real input/debugger is granted, else not available) | e2e on api.html | M |
-| M2.14 | **Keyboard chords** | Verify `Control+Shift+K`, `Meta+A` in both input modes; add `insertText` mode to Press Key | jsdom + e2e | S |
-| M2.15 | **Upload from data** | Upload File `source: data` (base64 from a previous block, e.g. HTTP Request `body64`) | unit | S |
+| M2.1 | ✅ **Locator filters** | `locatorSyntax.ts` grammar: `>> has-text=…`, `>> has=<locator>`, `>> has-not=…`, `>> visible`, `A \|\| B` (or). `locator.ts` applies them as filters on the current match set, like Playwright's `filter()`. Readable locators from `bestLocator.ts` may use `has-text` to disambiguate | jsdom unit tests per filter; guide §4 table | M · **Done** |
+| M2.2 | ✅ **Role options** `pressed`, `expanded`, `selected`, `disabled` | `aria.ts` state readers; `parseRole` accepts them | jsdom | S · **Done** |
+| M2.3 | ✅ **Click options** | Click config: `button` (left/middle/right), `modifiers` (Alt, Control, Meta, Shift), `position` (x,y in element), `clickCount`. Synthetic path sets the event fields; real input passes them to `Input.dispatchMouseEvent` | jsdom + e2e (trusted.html logs modifiers) | M · **Done** (fixture `clicks.html`) |
+| M2.4 | ✅ **Element Action block** (`element-action`) | One block, `action`: focus, blur, clear, scroll-into-view, dispatch-event (`eventType`, `detail` JSON). New page ops `focus`, `blur`, `clear`, `dispatch` | jsdom + e2e | M · **Done** |
+| M2.5 | ✅ **Drag and drop** (`drag`) | Config `from`, `to` locators (+ optional offsets). Synthetic: pointerdown/mousedown, dragstart with a shared `DataTransfer`, dragenter/dragover on target, drop, dragend, pointer/mouse up; works for HTML5 DnD. Real input: CDP `Input.dispatchMouseEvent` moves with `Input.setInterceptDrags` + `dispatchDragEvent` for native DnD. New op `drag` | new fixture `dnd.html` (HTML5 list + a pointer-events slider); e2e both modes | L · **Done** |
+| M2.6 | ✅ **Drop zones** | Upload File `target: input \| dropzone`; dropzone mode dispatches dragenter/dragover/drop with a `DataTransfer` carrying the `File` | fixture `upload.html` gets a drop zone | S · **Done** |
+| M2.7 | ✅ **Wait for Download** (`wait-for-download`) | `Host.downloads.waitFor(pattern, timeoutMs)` on `downloads.onCreated`/`onChanged` with a look-back like Wait for Popup; output `filename`, `url`, `size`, `mime`, `downloadId`. Optional `saveAs` into a dataset (text files) | e2e with a fixture link to a generated CSV | M · **Done**: the look-back is `downloads.search({startedAfter})` (the browser's own list; no listener, nothing lost while the worker sleeps), claimed ids in `bf:downloads-claimed`; output `download {filename, url, path, size, mime, downloadId}`; `read: text/csv/json` re-fetches the address (extensions cannot open files on disk; `blob:` read in the page), `dataset` replaces rows |
+| M2.8 | ✅ **Screenshot block** (`screenshot`) | `area`: visible (captureVisibleTab), full-page and element (CDP `Page.captureScreenshot` with `captureBeyondViewport` / `clip`, Chromium; Firefox: `tabs.captureTab` has a `rect` option for element and full page). Stored in `blobStore`, shown in the step and report; output `screenshotId` | e2e per mode | M · **Done**: Firefox uses `captureTab` + `rect` for all three areas (verified); new agent op `measure`; the engine shows an output `screenshotId` on the step |
+| M2.9 | ✅ **More Assert subjects** | `class` (has/contains), `css` (`name` = property), `focused`, `editable`, `in-viewport` (ratio > 0, IntersectionObserver once), `accessible-name`, `accessible-description`. Agent `read` kinds extended | jsdom + e2e | M · **Done** |
+| M2.10 | ✅ **Cookies & Storage block** (`cookies-storage`) | `action`: get/set/delete/clear on `area` cookies (`cookies` permission, optional) or local/session storage (page op `storage`). Clearing cookies for an origin uses `cookies.getAll({ url })` + `remove` | e2e on fixture origin | M · **Done**: optional `cookies` permission (Chrome and Firefox; regular in e2e builds), `storage` op gained `action` / `value` |
+| M2.11 | ✅ **Switch block** (`switch`) | Dynamic ports: `ports` becomes `ports?: string[] \| ((config) => string[])`; `nodePorts` and the editor read it. Config rows `{port name, operator, value}` evaluated in order + `default` port | unit + editor convert test | M |
+| M2.12 | ✅ **Repeat until / while** | Repeat gets `until` condition (left/operator/right, templated per iteration) and `max` iterations; same evaluator as If | unit | S |
+| M2.13 | ✅ **Wait For `request`** and response body | `mode: request` (method, url pattern); `response` mode can capture the body (`captureBody: true`, CDP `Network.getResponseBody` when real input/debugger is granted, else not available) | e2e on api.html | M · **Done** (fixture `m2-browser.html`): `method` filter for both modes; `captureBody` attaches CDP when the block starts, so only responses starting after it can be read (per-run CDP sessions in M3 would lift this) |
+| M2.14 | ✅ **Keyboard chords** | Verify `Control+Shift+K`, `Meta+A` in both input modes; add `insertText` mode to Press Key | jsdom + e2e | S · **Done** |
+| M2.15 | ✅ **Upload from data** | Upload File `source: data` (base64 from a previous block, e.g. HTTP Request `body64`) | unit | S · **Done** (HTTP Request `responseType: base64` → `body64`, `mime`) |
 
 **M2 done when:** every M2 row in PLAN §4 is ✅, each with guide + block reference + recipes updated,
 Playwright export covers the new blocks (or marks them), and Capabilities-and-Limitations is refreshed.
@@ -355,7 +355,7 @@ site, the CLI runs the guide examples in CI, and suites produce a combined JUnit
 | --- | --- | --- |
 | M0 | `m0-stabilise` | ✅ Done: 395 unit tests, 122 Chromium e2e checks (Brave), 14 Firefox e2e checks |
 | M1 | `m1-script-first` | ✅ Done: 544 unit tests, 154 Chromium e2e checks in 14 specs (system Chromium), 14 Firefox e2e checks; eval set: 10/10 reference solutions pass |
-| M2 | `m2-essentials` | Not started |
+| M2 | `m2-essentials` | ✅ Done: 680 unit tests, 207 Chromium e2e checks in 18 specs (system Chromium), 30 Firefox e2e checks; 6 new blocks (Switch, Element Action, Drag, Wait for Download, Screenshot, Cookies & Storage) |
 | M3 | `m3-network` | Not started |
 | M4 | `m4-outside-access` | Not started |
 | M5 | `m5-debugging` | Not started |

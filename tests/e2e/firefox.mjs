@@ -157,11 +157,14 @@ function workflow(name, nodes, edges) {
   };
 }
 async function run(wf) {
+  // Runs of this workflow from before: the same workflow may run twice in a row (see harness.mjs).
+  const readRuns = async () => (await bridge('get', 'bf:runs'))['bf:runs'] ?? [];
+  const seen = new Set((await readRuns()).filter((candidate) => candidate.workflowId === wf.id).map((candidate) => candidate.id));
   await bridge('send', { type: 'bf:run-workflow', workflow: wf });
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
-    const runs = (await bridge('get', 'bf:runs'))['bf:runs'] ?? [];
-    const done = runs.findLast((candidate) => candidate.workflowId === wf.id && candidate.status !== 'running');
+    const runs = await readRuns();
+    const done = runs.findLast((candidate) => candidate.workflowId === wf.id && !seen.has(candidate.id) && candidate.status !== 'running');
     if (done) return done;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
@@ -288,6 +291,115 @@ try {
       { id: 'c', type: 'click', config: { locator: 'role=button[name="Sign in"]' }, step: { realInput: true, timeoutSeconds: 5 } },
     ]));
     check('real input explains it needs Chromium', real.status === 'failed' && /Chrom|debugger/i.test(step(real, 'c')?.error ?? ''), step(real, 'c')?.error ?? summary(real));
+  }
+
+  {
+    // M2 page work, synthetic input (real input is Chromium-only): locator filters, role states, the new
+    // Assert subjects, click options, Element Action, Drag, drop zones. Same fixtures as the Chromium specs.
+    const locators = await run(workflow('m2 locators', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/m2.html`, active: false } },
+      { id: 'del', type: 'click', config: { locator: 'role=listitem >> has-text=Banana >> role=button[name="Delete"]' } },
+      { id: 'deleted', type: 'assert', config: { subject: 'text', locator: '#status', operator: 'equals', expected: 'deleted Banana' } },
+      { id: 'rows', type: 'assert', config: { subject: 'count', locator: 'li >> visible >> has=button', operator: 'equals', expected: '2' } },
+      { id: 'bold', type: 'click', config: { locator: 'role=button[name="Bold"][pressed=false]' } },
+      { id: 'pressed', type: 'assert', config: { subject: 'text', locator: 'role=button[pressed]', operator: 'equals', expected: 'Bold' } },
+      { id: 'save', type: 'click', config: { locator: '#missing || button >> has-text=Save >> visible' } },
+      { id: 'saved', type: 'assert', config: { subject: 'text', locator: '#status', operator: 'equals', expected: 'saved' } },
+      { id: 'class', type: 'assert', config: { subject: 'class', locator: '#save', operator: 'contains', expected: 'primary' } },
+      { id: 'css', type: 'assert', config: { subject: 'css', locator: '#save', name: 'color', operator: 'equals', expected: 'rgb(0, 128, 0)' } },
+      { id: 'name', type: 'assert', config: { subject: 'accessible-name', locator: '#email', operator: 'equals', expected: 'Email address' } },
+      { id: 'editable', type: 'assert', config: { subject: 'editable', locator: '#email' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    check('locator filters, ||, role states, class / css / accessible-name / editable asserts', locators.status === 'passed', summary(locators));
+
+    const clicks = await run(workflow('m2 clicks', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/clicks.html`, active: false } },
+      { id: 'mid', type: 'click', config: { locator: '#target', button: 'middle', modifiers: 'Shift', position: '5,6' } },
+      { id: 'triple', type: 'click', config: { locator: '#target', clickCount: 3, modifiers: 'Control+Alt', position: '20,10' } },
+      { id: 'read', type: 'read-element', config: { locator: '#log', url: '' } },
+      { id: 'focus', type: 'element-action', config: { locator: 'label=Name', action: 'focus' } },
+      { id: 'r1', type: 'read-element', config: { locator: '#focus-state', url: '' } },
+      { id: 'event', type: 'element-action', config: { locator: '#custom-target', action: 'dispatch-event', eventType: 'my-event', detail: '{"n": 2}' } },
+      { id: 'r2', type: 'read-element', config: { locator: '#custom', url: '' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    const log = String(step(clicks, 'read')?.output?.value ?? '').split(';').map((line) => line.trim()).filter(Boolean);
+    const wanted = ['auxclick 1 1 Shift 5,6 false', 'click 0 1 Alt+Control 20,10 false', 'click 0 2 Alt+Control 20,10 false', 'dblclick 0 2 Alt+Control 20,10 false', 'click 0 3 Alt+Control 20,10 false'];
+    check('click options: middle button, modifiers, position, click count', JSON.stringify(log) === JSON.stringify(wanted), `${JSON.stringify(log)} ${summary(clicks)}`);
+    check('Element Action: focus, CustomEvent with detail', step(clicks, 'r1')?.output?.value === 'focused' && step(clicks, 'r2')?.output?.value === 'custom-target {"n":2}', `${step(clicks, 'r1')?.output?.value} | ${step(clicks, 'r2')?.output?.value} ${summary(clicks)}`);
+
+    const drag = await run(workflow('m2 drag', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/dnd.html`, active: false } },
+      { id: 'sort', type: 'drag', config: { from: '#list >> text=Apple', to: '#list >> text=Cherry' } },
+      { id: 'order', type: 'read-element', config: { locator: '#order', url: '' } },
+      { id: 'slide', type: 'drag', config: { from: 'role=slider', to: '#track', toPosition: '150,10' } },
+      { id: 'value', type: 'read-element', config: { locator: '#value', url: '' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    const dropped = await run(workflow('m2 drop zone', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/upload.html`, active: false } },
+      { id: 'drop', type: 'upload-file', config: { locator: 'text=Drop files here', target: 'dropzone', content: 'hello', filename: 'hi.txt' } },
+      // The page reads the file asynchronously (file.text()): wait for it to show.
+      { id: 'shown', type: 'wait-for', config: { mode: 'text', locator: '#dropped', text: 'hi.txt' }, step: { timeoutSeconds: 5 } },
+      { id: 'read', type: 'read-element', config: { locator: '#dropped', url: '' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    check('Upload File onto a drop zone', step(dropped, 'read')?.output?.value === 'hi.txt|text/plain|hello', `${JSON.stringify(step(dropped, 'read')?.output)} ${summary(dropped)}`);
+    check('Drag: HTML5 sortable list and pointer slider', step(drag, 'order')?.output?.value === 'Banana,Cherry,Apple' && step(drag, 'value')?.output?.value === '75', `${step(drag, 'order')?.output?.value} ${step(drag, 'value')?.output?.value} ${summary(drag)}`);
+  }
+
+  {
+    // M2: downloads, screenshots (tabs.captureTab), cookies and storage, requests.
+    const downloads = await run(workflow('downloads', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/m2-browser.html`, active: false } },
+      { id: 'csv', type: 'click', config: { locator: 'text=Export CSV' } },
+      { id: 'wait', type: 'wait-for-download', config: { url: 'export.csv', read: 'csv' } },
+      { id: 'blob', type: 'click', config: { locator: '#blob' } },
+      { id: 'json', type: 'wait-for-download', config: { url: '*.json', read: 'json' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    const csv = step(downloads, 'wait')?.output;
+    check('Wait for Download: CSV (file name, size, rows)', csv?.download?.filename === 'export.csv' && csv?.download?.size === 21 && csv?.rows?.[1]?.name === 'cup', JSON.stringify(csv ?? summary(downloads)).slice(0, 600));
+    check('Wait for Download: a blob: file read as JSON', step(downloads, 'json')?.output?.download?.filename === 'orders.json' && step(downloads, 'json')?.output?.data?.[1]?.name === 'cup', JSON.stringify(step(downloads, 'json')?.output ?? summary(downloads)).slice(0, 600));
+
+    const shots = await run(workflow('screenshots', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/m2-browser.html`, active: false } },
+      { id: 'visible', type: 'screenshot', config: {} },
+      { id: 'full', type: 'screenshot', config: { area: 'full' } },
+      { id: 'element', type: 'screenshot', config: { area: 'element', locator: '#card', format: 'jpeg' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    const size = (id) => step(shots, id)?.output?.screenshot;
+    const ratio = size('element') ? size('element').width / 300 : 0;
+    check('Screenshot: visible area of a background tab (captureTab)', size('visible')?.width > 0 && Boolean(step(shots, 'visible')?.screenshot), JSON.stringify(size('visible') ?? summary(shots)));
+    check('Screenshot: full page (captureTab rect)', size('full')?.height > 2600 && size('full').height > size('visible')?.height, JSON.stringify(size('full') ?? summary(shots)));
+    check('Screenshot: element (captureTab rect)', ratio > 0 && Math.abs(size('element').height / ratio - 120) <= 2, JSON.stringify(size('element') ?? summary(shots)));
+
+    const cookies = await run(workflow('cookies', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/login-cookie`, active: false } },
+      { id: 'sid', type: 'cookies-storage', config: { action: 'get', name: 'sid' } },
+      { id: 'set', type: 'cookies-storage', config: { action: 'set', name: 'theme', value: 'dark' } },
+      { id: 'go', type: 'navigate', config: { action: 'goto', url: `${base}/whoami` } },
+      { id: 'sent', type: 'read-element', config: { locator: 'body', url: '' } },
+      { id: 'clear', type: 'cookies-storage', config: { action: 'clear' } },
+      { id: 'all', type: 'cookies-storage', config: { action: 'get' } },
+      { id: 'lset', type: 'cookies-storage', config: { area: 'local', action: 'set', name: 'token', value: 'abc' } },
+      { id: 'lget', type: 'cookies-storage', config: { area: 'local', action: 'get', name: 'token' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    check('Cookies: HttpOnly read, set is sent, clear', step(cookies, 'sid')?.output?.value === 's3cret' && /theme=dark/.test(String(step(cookies, 'sent')?.output?.value)) && JSON.stringify(step(cookies, 'all')?.output?.value) === '{}', summary(cookies));
+    check('Storage: localStorage set and get', step(cookies, 'lget')?.output?.value === 'abc', summary(cookies));
+
+    const network = await run(workflow('requests', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/m2-browser.html`, active: false } },
+      { id: 'send', type: 'click', config: { locator: '#send' } },
+      { id: 'req', type: 'wait-for', config: { mode: 'request', url: '/api/save', method: 'POST' } },
+      { id: 'body', type: 'wait-for', config: { mode: 'response', url: '/api/save', captureBody: true }, step: { timeoutSeconds: 5 } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    check('Wait For request: POST with its body (webRequest)', JSON.parse(step(network, 'req')?.output?.request?.postData ?? '{}').item === 'mug', summary(network));
+    check('Wait For response body explains it needs Chromium', step(network, 'body')?.code === 'permission.missing' && /Chrome/.test(step(network, 'body')?.error ?? ''), summary(network));
   }
 
   {

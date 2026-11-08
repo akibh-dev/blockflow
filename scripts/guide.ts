@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createDefaultRegistry } from '../src/core/blocks';
 import { DEFAULT_TIMEOUT_SECONDS } from '../src/core/engine';
-import { nodePorts } from '../src/core/ports';
+import { hasDynamicPorts, nodePorts } from '../src/core/ports';
 import { reportSchemaFiles } from './reportSchema';
 import { CATEGORY_LABELS } from '../src/core/types';
 import { scriptSchema } from './scriptSchema';
@@ -27,7 +27,9 @@ function fieldJson(field: FieldSpec) {
     ...('perItem' in field && field.perItem ? { perItem: true } : {}),
     ...(field.kind === 'select' ? { options: field.options.map((option) => option.value) } : {}),
     ...(field.kind === 'number' ? { min: field.min, max: field.max } : {}),
-    ...(field.kind === 'rows' ? { columns: field.columns.map((column) => ({ key: column.key, label: column.label, ...(column.templated ? { templated: true } : {}) })) } : {}),
+    ...(field.kind === 'rows'
+      ? { columns: field.columns.map((column) => ({ key: column.key, label: column.label, ...(column.templated ? { templated: true } : {}), ...(column.options ? { options: column.options.map((option) => option.value) } : {}) })) }
+      : {}),
     ...(field.help ? { help: field.help } : {}),
   };
 }
@@ -42,6 +44,7 @@ function blockJson(def: AnyBlockDefinition) {
     canStart: Boolean(def.start || def.trigger || def.run),
     canTakeInput: Boolean(def.run),
     ports: nodePorts(def, {}),
+    ...(hasDynamicPorts(def) ? { dynamicPorts: true } : {}),
     timeoutSeconds: def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS,
     ...(def.realInput ? { realInput: true } : {}),
     defaultConfig: def.defaultConfig,
@@ -94,7 +97,7 @@ function blockMarkdown(def: AnyBlockDefinition): string {
     '',
     def.description,
     '',
-    `- Outputs (ports): ${ports.map((port) => `\`${port}\``).join(', ')}${ports.includes('error') ? '' : ' (plus `error` when step.onError is "port")'}`,
+    `- Outputs (ports): ${hasDynamicPorts(def) ? 'set by its settings; with the defaults ' : ''}${ports.map((port) => `\`${port}\``).join(', ')}${ports.includes('error') ? '' : ' (plus `error` when step.onError is "port")'}`,
     `- Default timeout: ${def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS}s`,
     `- Can start a workflow: ${def.start || def.trigger ? 'yes (has its own schedule/trigger)' : def.run ? 'yes (runs once with empty data)' : 'no'}`,
     ...(def.realInput ? ['- Step setting `realInput` ("Use real mouse and keyboard") applies to this block'] : []),
@@ -135,7 +138,7 @@ function schema() {
             else if (field.kind === 'rows') {
               Object.assign(base, {
                 type: 'array',
-                items: { type: 'object', additionalProperties: false, properties: Object.fromEntries(field.columns.map((column) => [column.key, { type: 'string', description: column.label }])) },
+                items: { type: 'object', additionalProperties: false, properties: Object.fromEntries(field.columns.map((column) => [column.key, column.options ? { enum: column.options.map((option) => option.value), description: column.label } : { type: 'string', description: column.label }])) },
               });
             } else base.type = 'string';
             return [field.key, base];

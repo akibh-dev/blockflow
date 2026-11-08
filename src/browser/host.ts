@@ -1,16 +1,17 @@
 import { browser } from 'wxt/browser';
-import { uid } from '../core/id';
 import { CodedError } from '../core/errors';
 import { STORAGE_KEYS } from '../shared/keys';
-import { readDataset, saveScreenshot, writeDataset } from './blobStore';
+import { readDataset, writeDataset } from './blobStore';
 import { actOnHtml } from './htmlParse';
-import { tabInfo, waitForLoad, waitForResponse, waitForUrl, watchNetwork } from './navigation';
+import { tabInfo, waitForLoad, waitForRequest, waitForResponse, waitForUrl, watchNetwork } from './navigation';
 import { addOwnTab } from './ownTabs';
 import { askUser } from './prompts';
 import { loadWorkflows } from './stores';
 import { act } from './pageDriver';
-import { captureWithDebugger } from './cdp';
 import { waitForPopup } from './popups';
+import { capture, take } from './screenshots';
+import { getCookies, removeCookies, setCookie } from './cookies';
+import { readDownloadText, waitForDownload } from './downloads';
 import { readElement } from './pageReader';
 import { requireTabId, sleep } from './tabs';
 import type { Host, HttpRequestOptions, HttpResult, NavigateOptions, NotifyOptions, OpenTabOptions, TabInfo, Scheduler, StateStore } from '../core/types';
@@ -94,11 +95,22 @@ async function navigate(tabId: number, { action, url, waitUntil, timeoutMs }: Na
 const MAX_BODY_CHARS = 200_000;
 
 /** `Host.http.fetch`: plain `fetch` from the extension origin (host permissions bypass CORS). Body capped at MAX_BODY_CHARS. */
-async function httpFetch({ url, method, headers, body }: HttpRequestOptions): Promise<HttpResult> {
+async function httpFetch({ url, method, headers, body, responseType }: HttpRequestOptions): Promise<HttpResult> {
   const response = await fetch(url, { method, headers, ...(body !== undefined ? { body } : {}) });
+  const mime = response.headers.get('content-type')?.split(';')[0]?.trim() || undefined;
+  if (responseType === 'base64') {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length > MAX_BINARY_BYTES) throw new Error(`The response is ${bytes.length} bytes; base64 bodies are limited to ${MAX_BINARY_BYTES} bytes`);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return { status: response.status, ok: response.ok, body: '', base64: btoa(binary), ...(mime ? { mime } : {}) };
+  }
   const text = await response.text();
-  return { status: response.status, ok: response.ok, body: text.slice(0, MAX_BODY_CHARS) };
+  return { status: response.status, ok: response.ok, body: text.slice(0, MAX_BODY_CHARS), ...(mime ? { mime } : {}) };
 }
+
+/** Largest body HTTP Request answers as base64 (it travels in the run's data). */
+const MAX_BINARY_BYTES = 20 * 1024 * 1024;
 
 /** `Host.notify`: a basic system notification. */
 async function notify({ title, message }: NotifyOptions): Promise<void> {
@@ -108,21 +120,6 @@ async function notify({ title, message }: NotifyOptions): Promise<void> {
     title,
     message,
   });
-}
-
-/** `Host.screenshots.capture`: JPEG of the tab saved in IndexedDB; returns its id, or null when it cannot be taken. */
-async function capture(tabId: number, runId: string): Promise<string | null> {
-  const tab = await browser.tabs.get(tabId);
-  // captureVisibleTab only sees the tab that is showing in its window. A background tab needs the
-  // debugger permission (granted for real input); without it there is no screenshot.
-  const dataUrl =
-    tab.active && tab.windowId !== undefined
-      ? await browser.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 60 })
-      : await captureWithDebugger(tabId).catch(() => null);
-  if (!dataUrl) return null;
-  const id = uid();
-  await saveScreenshot({ id, runId, ts: Date.now(), dataUrl });
-  return id;
 }
 
 /** `Host.secrets.all`: the `bf:secrets` map. */
@@ -239,19 +236,21 @@ export function createExtensionHost(scheduler: Scheduler): Host {
       waitForUrl,
       waitForPopup,
       waitForResponse,
+      waitForRequest,
     },
     page: { readElement, act, dialogs, runScript },
     scheduler,
     state: new StorageState(),
     workflows: { get: async (id) => (await loadWorkflows()).find((workflow) => workflow.id === id) },
     secrets: { all: allSecrets },
-    screenshots: { capture },
+    screenshots: { capture, take },
+    cookies: { get: getCookies, set: setCookie, remove: removeCookies },
     prompt: { ask: askUser },
     datasets: {
       read: async (name) => (await readDataset(name))?.rows ?? [],
       write: writeDataset,
     },
-    downloads: { save: saveDownload },
+    downloads: { save: saveDownload, waitFor: waitForDownload, readText: readDownloadText },
     html: { act: actOnHtml },
     now: () => new Date(),
   };

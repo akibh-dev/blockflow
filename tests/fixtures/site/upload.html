@@ -5,6 +5,20 @@
   <label for="cv">Upload CV</label><input id="cv" type="file" hidden>
   <button type="button" onclick="document.getElementById('cv').click()">Choose file</button>
   <pre id="out"></pre>
+  <!-- A drop zone: no file input, files arrive with the drop event. -->
+  <div id="zone" style="width: 240px; height: 80px; border: 2px dashed #888">Drop files here</div>
+  <pre id="dropped"></pre>
+  <script>
+    const zone = document.getElementById('zone');
+    zone.addEventListener('dragover', (event) => {
+      if (event.dataTransfer.types.includes('Files')) event.preventDefault();
+    });
+    zone.addEventListener('drop', async (event) => {
+      event.preventDefault();
+      const file = event.dataTransfer.files[0];
+      document.getElementById('dropped').textContent = `${file.name}|${file.type}|${await file.text()}`;
+    });
+  </script>
   <script>
     document.getElementById('cv').addEventListener('change', async (event) => {
       const file = event.target.files[0];

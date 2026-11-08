@@ -9,8 +9,40 @@
 
 import type { ErrorCode } from './errors';
 
-/** What a `read` request reads from the element. */
-export type ReadKind = 'text' | 'value' | 'attribute' | 'has-class' | 'exists' | 'count' | 'visible' | 'checked' | 'enabled';
+/**
+ * What a `read` request reads from the element. `class` is the class attribute (whitespace collapsed),
+ * `css` the computed value of the CSS property `name`; `focused`, `editable` and `in-viewport` are
+ * yes/no answers ("false" with no match, like `visible`).
+ */
+export type ReadKind =
+  | 'text'
+  | 'value'
+  | 'attribute'
+  | 'has-class'
+  | 'exists'
+  | 'count'
+  | 'visible'
+  | 'checked'
+  | 'enabled'
+  | 'class'
+  | 'css'
+  | 'focused'
+  | 'editable'
+  | 'in-viewport'
+  | 'accessible-name'
+  | 'accessible-description';
+
+/** A mouse button, as Playwright names them. */
+export type MouseButton = 'left' | 'middle' | 'right';
+
+/** A key held during a mouse action, as Playwright names them. */
+export type Modifier = 'Alt' | 'Control' | 'Meta' | 'Shift';
+
+/** CSS pixels. */
+export interface Point {
+  x: number;
+  y: number;
+}
 
 /** Condition a `wait` request waits for. */
 export type WaitState = 'visible' | 'hidden' | 'attached' | 'detached' | 'enabled' | 'text' | 'no-text';
@@ -23,13 +55,45 @@ export type AgentRequest =
       action: 'click' | 'double' | 'right' | 'hover';
       /** Skip the "is it visible, enabled, not covered" checks. */
       force?: boolean;
+      /** Mouse button (default left; `action: 'right'` means right). */
+      button?: MouseButton;
+      /** Keys held during the click: Alt, Control, Meta, Shift. */
+      modifiers?: Modifier[];
+      /** Where to click, in CSS pixels from the element's top-left corner (default: its center). */
+      position?: Point;
+      /** Presses in a row (default 1, `action: 'double'` = 2); `detail` counts up, `dblclick` after the second. */
+      clickCount?: number;
     }
+  /** Element Action: move focus to the element (it waits until it is visible). */
+  | { op: 'focus'; locator: string }
+  /** Element Action: take focus away from the element (if it has it). */
+  | { op: 'blur'; locator: string }
+  /** Element Action: empty a text field or contenteditable (input + change events), like Playwright's `clear()`. */
+  | { op: 'clear'; locator: string }
+  /**
+   * Element Action: dispatch one event (bubbles, cancelable, composed). Known types get their own class
+   * (MouseEvent for click, KeyboardEvent for keydown…) with `detail` (an object) as the event init;
+   * any other type is a CustomEvent with `detail` as its `event.detail`.
+   */
+  | { op: 'dispatch'; locator: string; eventType: string; detail?: unknown }
+  /**
+   * Drag the element `locator` onto `to`. Synthetic: pointer and mouse down on the source, then HTML5
+   * drag events (dragstart … drop, dragend) with one shared DataTransfer when the source is draggable and
+   * the page lets the drag start, otherwise pointer/mouse moves to the target and pointer/mouse up there
+   * (sliders, sortables built on pointer events). Positions are from each element's top-left corner.
+   */
+  | { op: 'drag'; locator: string; to: string; fromPosition?: Point; toPosition?: Point; modifiers?: Modifier[] }
   | { op: 'fill'; locator: string; value: string; mode: 'fill' | 'type' }
   /** Set any form field from text: fills inputs, picks select options, ticks checkboxes ("true"/"false"). */
   | { op: 'set-field'; locator: string; value: string }
   | { op: 'select'; locator: string; values: string[] }
   | { op: 'check'; locator: string; checked: boolean }
   | { op: 'press'; key: string; locator?: string }
+  /**
+   * Type text at the caret as one input (no key events), like Playwright's `keyboard.insertText`:
+   * into `locator` (focused first) or whatever has focus. Replaces the selection.
+   */
+  | { op: 'insert-text'; text: string; locator?: string }
   | { op: 'read'; locator: string; kind: ReadKind; name?: string }
   | { op: 'wait'; state: WaitState; locator?: string; text?: string }
   | { op: 'detect-form'; locator: string }
@@ -46,15 +110,35 @@ export type AgentRequest =
   | { op: 'table'; locator: string }
   /** URL, title, description, canonical, language, meta tags, JSON-LD. */
   | { op: 'page-info' }
-  | { op: 'storage'; area: 'local' | 'session' | 'cookies'; key?: string }
+  /**
+   * localStorage / sessionStorage (and `document.cookie`, read only). `action` defaults to `get`: one
+   * `key`, or every entry. `set` needs `key` and `value`; `delete` removes `key`; `clear` empties the area.
+   */
+  | { op: 'storage'; area: 'local' | 'session' | 'cookies'; key?: string; action?: 'get' | 'set' | 'delete' | 'clear'; value?: string }
+  /**
+   * Geometry for screenshots. With `locator`: waits until the element is visible and still, scrolls it
+   * into view, and answers its box `{ x, y, width, height }` in the tab's viewport (frames added up).
+   * Without: `{ scrollX, scrollY, viewportWidth, viewportHeight, pageWidth, pageHeight, devicePixelRatio }`.
+   */
+  | { op: 'measure'; locator?: string }
   | { op: 'scroll'; to: 'bottom' | 'top' | 'element'; locator?: string }
-  /** Put files on an <input type=file> (also a hidden one, as custom upload buttons use). */
-  | { op: 'upload'; locator: string; files: UploadFile[] }
+  /**
+   * Put files on an <input type=file> (also a hidden one, as custom upload buttons use). With `dropzone`,
+   * drop them on the element instead: dragenter, dragover and drop with a DataTransfer carrying the files.
+   */
+  | { op: 'upload'; locator: string; files: UploadFile[]; dropzone?: boolean }
   /**
    * For real (debugger) input: wait until the element is ready, scroll it into view, and return
    * its center in viewport pixels plus what kind of field it is.
    */
-  | { op: 'locate'; locator: string; purpose: 'click' | 'fill' | 'set-field' | 'check' | 'press' }
+  | {
+      op: 'locate';
+      locator: string;
+      /** `drop`: a drag's target, only waited for to be visible and still. */
+      purpose: 'click' | 'fill' | 'set-field' | 'check' | 'press' | 'drop';
+      /** Answer this point (from the element's top-left corner) instead of the center. */
+      position?: Point;
+    }
   /**
    * What is on the page, for authoring: an outline of the accessibility tree with a ready-made locator per
    * element (see {@link SnapshotResult}). `locator` limits it to one part of the page (first match);
@@ -147,7 +231,7 @@ export type AgentResponse =
   | ({ status: 'error'; message: string } & AgentErrorInfo)
   /**
    * The locator enters an iframe from another site: run `rest` inside the frame showing `src`.
-   * `offset` (for `locate` only) is where the frame's content starts in this frame's viewport, so
+   * `offset` (for `locate` and `measure` only) is where the frame's content starts in this frame's viewport, so
    * the driver can turn the inner frame's coordinates into the tab's.
    */
   | { status: 'frame'; src: string; rest: string; offset?: { x: number; y: number } };

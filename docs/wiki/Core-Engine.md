@@ -36,7 +36,7 @@ comes through `Host`.
 | --- | --- |
 | `type`, `label`, `description`, `icon`, `accent`, `category?` | Identity and editor look. `category` is set at registration (`BLOCK_GROUPS` in `blocks/index.ts`). |
 | `defaultConfig: C`, `fields: FieldSpec[]`, `outputs: OutputSpec[]`, `summary?(config)` | Settings and documentation shown in the editor and generated guide. |
-| `ports?: string[]` | Named outputs; default `['out']`. The engine appends `error` when the node's `onError` is `port`. |
+| `ports?: string[] \| ((config: C) => string[])` | Named outputs; default `['out']`. The engine appends `error` when the node's `onError` is `port`. A function makes them **dynamic** (Switch: one per case + `default`): it gets the config with defaults, not rendered, must not throw, and should keep names stable while a setting is being typed. Read ports only through `nodePorts(def, node)`. |
 | `timeoutSeconds?` | Default step timeout for this block type (page actions use 30). |
 | `permissions?` | Optional browser permissions (`debugger`, `userScripts`) the editor offers to grant. |
 | `start?(ctx)` | Root block started with the workflow: schedule timers, register watchers. Never called for non-roots. |
@@ -64,7 +64,7 @@ Built per call by the private `makeContext()`; do not keep it between calls.
 | `softFail(failure)` | Marks the step and run failed but lets the block return normally (soft Assert). `failure` is a message or an `Error`; a `CodedError` also records its code. Outside a run it only logs. |
 | `callWorkflow(id, input)` | Runs another workflow as a child run and resolves with its last output. Throws outside a run, when nested ≥ `MAX_CALL_DEPTH` (8), when the workflow is missing, or when the child did not pass. |
 | `host` | The `Host` (below). |
-| `emit(payload, port = 'out')` | Inside a run: runs the downstream subtree now and awaits it (loops use this with `each`). Outside a run (`start`/`onTimer`): starts a **new run** whose first step is this block, trigger `start` or `timer`. |
+| `emit(payload, port = 'out')` | Inside a run: runs the downstream subtree now and awaits it (loops use this with `each`), resolving with the data at the end of the last path it reached (the payload itself when nothing is connected; `undefined` when every path stopped). Repeat until/while tests its condition on that. Outside a run (`start`/`onTimer`): starts a **new run** whose first step is this block, trigger `start` or `timer`. |
 | `log(level, message)` | Masked log line tagged with the node. |
 | `timers.set(name, options, data?)` / `clear(name)` | `Host.scheduler` with key `makeTimerKey(workflowId, nodeId, name)`. |
 | `state.get(key)` / `set(key, value)` | `Host.state` with key `stateKey(workflowId, nodeId, key)`; survives worker restarts. |
@@ -77,7 +77,7 @@ Implemented by `src/browser/host.ts` ([Browser Host](Browser-Host.md)) and by
 | Member | Signature | Used by |
 | --- | --- | --- |
 | `sleep` | `(ms) => Promise<void>` | Step timeouts, retry backoff, screenshot race. |
-| `http.fetch` | `(HttpRequestOptions) => Promise<HttpResult>` | HTTP Request. Body is cut to a safe size. |
+| `http.fetch` | `(HttpRequestOptions) => Promise<HttpResult>` | HTTP Request. Body is cut to a safe size; `responseType: 'base64'` answers the whole body as `base64` (+ `mime`). |
 | `http.download` | `(url) => Promise<{ base64, mime, name }>` | Upload File from a URL. |
 | `notify` | `({ title, message }) => Promise<void>` | Notify. |
 | `tabs.open` | `(OpenTabOptions) => Promise<{ tabId }>` | Open Tab. Options: `url`, `newTab`, `active`, `reuseTabId?`, `newWindow?`, `waitUntil?` (default `none`), `timeoutMs?`. |
@@ -88,7 +88,8 @@ Implemented by `src/browser/host.ts` ([Browser Host](Browser-Host.md)) and by
 | `tabs.waitForLoad` | `(tabId, until, timeoutMs)` | Wait For load / network idle. |
 | `tabs.waitForUrl` | `(tabId, pattern, timeoutMs) => Promise<string>` | Wait For URL ([`urlMatches`](Core-Modules.md#urlpattern)). |
 | `tabs.waitForPopup` | `(openerTabId, lookBackMs, timeoutMs) => Promise<number>` | Wait For Popup. |
-| `tabs.waitForResponse` | `(tabId, pattern, status, lookBackMs, timeoutMs) => Promise<{ url, status, method }>` | Wait For response. |
+| `tabs.waitForResponse` | `(tabId, pattern, status, lookBackMs, timeoutMs, { method?, captureBody? }?) => Promise<ResponseInfo>` | Wait For response. `ResponseInfo` = `{ url, status, method, body?, bodyBase64? }` (body only with `captureBody`, Chromium). |
+| `tabs.waitForRequest` | `(tabId, pattern, method, lookBackMs, timeoutMs) => Promise<RequestInfo>` | Wait For request. `RequestInfo` = `{ url, method, type, postData? }`. |
 | `page.readElement` | `(ReadElementOptions) => Promise<ReadElementResult>` | Watch / Read Element with a URL (BlockFlow's own background tab). |
 | `page.act` | `(tabId, AgentRequest, timeoutMs, { realInput? }) => Promise<Record<string, unknown>>` | Every page block. See [Page Protocol](Page-Protocol.md). Throws with the agent's last reason on timeout. |
 | `page.dialogs` | `(tabId, { mode, text } \| { read: true })` | Dialogs block. |
@@ -98,8 +99,12 @@ Implemented by `src/browser/host.ts` ([Browser Host](Browser-Host.md)) and by
 | `workflows.get` | `(id) => Promise<Workflow \| undefined>` | Run Workflow (`callWorkflow`). |
 | `secrets.all` | `() => Promise<Record<string, string>>` | Loaded once per run. |
 | `screenshots.capture` | `(tabId, runId) => Promise<string \| null>` | After-step screenshots. |
+| `screenshots.take` | `(tabId, ScreenshotOptions) => Promise<{ id, width, height }>` | Screenshot block. Options: `runId`, `area` (`visible` / `full` / `element`), `locator?`, `format` (`png` / `jpeg`), `quality?`, `timeoutMs`. Throws when it cannot be taken. |
+| `cookies.get` / `set` / `remove` | `(url, name?) => Promise<CookieInfo[]>`, `(CookieSetOptions) => Promise<CookieInfo>`, `(url, name?) => Promise<number>` | Cookies & Storage. `CookieInfo` = `{ name, value, domain, path, expires (s, -1 = session), httpOnly, secure, sameSite }`; `remove` without `name` clears the site. |
 | `datasets.read` / `write` | `(name)`, `(name, rows, 'append' \| 'replace') => Promise<number>` | Save Dataset and friends. |
 | `downloads.save` | `(filename, content, mime)` | Download. |
+| `downloads.waitFor` | `(pattern, lookBackMs, timeoutMs) => Promise<DownloadInfo>` | Wait for Download. `DownloadInfo` = `{ downloadId, url, filename, path, size, mime }`, once finished; each download returned once. |
+| `downloads.readText` | `(DownloadInfo, tabId?) => Promise<string>` | Wait for Download `read`: the content, fetched again from its URL. |
 | `html.act` | `(html, baseUrl, AgentRequest)` | Extract from fetched HTML (agent on a parsed document). |
 | `prompt.ask` | `({ runId, workflowName, message, timeoutMs }) => Promise<boolean>` | Manual Step. |
 | `now` | `() => Date` | All engine timestamps. |
@@ -172,7 +177,9 @@ getting a shallow copy `{ ...payload }`. If no edge leaves that port, the payloa
 
 **Screenshots** (`afterStep`): by `step.screenshot` (default only when something went wrong), of the tab
 named by `config.tab` (else `main`) looked up in the payload's `$session`. Raced against 8 s; errors are
-swallowed.
+swallowed. A block that took a picture itself puts its id in its output as `screenshotId` (Screenshot):
+`runStep` then sets `step.screenshot` to it (when it differs from the input's, so blocks after it that pass
+the payload on do not claim it), and `afterStep` takes no second one.
 
 ### Timers and state
 
@@ -254,10 +261,21 @@ block colours, the step inspector and reports ([Core Modules: report](Core-Modul
 | --- | --- |
 | `DEFAULT_PORT = 'out'`, `ERROR_PORT = 'error'` | |
 | `class Routed { port; payload }`, `routeTo(port, payload)` | Returned from `run` to choose an output. |
-| `nodePorts(def, node)` | `def.ports` (or `['out']`) plus `error` when `node.step.onError === 'port'`. |
+| `declaredPorts(def, config?)` | The block's own outputs: `def.ports`, or `def.ports(config)` with defaults filled in for dynamic ports; de-duplicated, empty names and `error` dropped, `['out']` when none (or when the function throws). |
+| `nodePorts(def, node)` | `declaredPorts(def, node.config)` plus `error` when `node.step.onError === 'port'`. Pass the node's `config` (a `NodeDef` already has it); without it a dynamic block shows its default config's ports. |
+| `hasDynamicPorts(def)` | `def.ports` is a function (the editor re-wires edges on setting changes, the script schema allows any branch key). |
 | `edgePort(edge, ports)` | `edge.sourcePort ?? 'out'`; a legacy `out` on a block without `out` maps to its first port. |
 
-Used by the engine, `validate.ts`, `playwright.ts` and the editor (`BlockNode`, `flow/convert.ts`).
+Used by the engine, `validate.ts`, `check.ts`, `script.ts`, `layout.ts`, `playwright.ts`, `scripts/guide.ts`,
+`scripts/scriptSchema.ts` and the editor (`BlockNode`, `Editor.tsx`'s `portOfEdge` and `updateConfig`).
+
+**Dynamic ports and dead edges.** An edge whose port a block no longer has never runs; the engine skips
+it, `validate.ts` warns ("The "x" output is not in use"), `check.ts` refuses it on import
+(`edge.port.unknown`, did-you-mean over the node's real ports). The editor keeps them from appearing:
+`updateConfig` calls `followPortChanges` (`flow/convert.ts`) with the outputs before and after a change,
+so when one output disappears and one appears (a case renamed) its edges move to the new name, and edges
+from outputs that disappear otherwise (a case removed) are deleted. Switch gives a nameless, invalid or
+repeated case a stand-in output `case<N>` so that typing a name over an old one is a chain of renames.
 
 ## Session tabs (`session.ts`)
 

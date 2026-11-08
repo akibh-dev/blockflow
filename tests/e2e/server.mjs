@@ -14,7 +14,8 @@ export const PASSWORD = 'Op3n-Sesame!';
  * (read the port from `server.address().port`). Static files come from tests/fixtures/site
  * (`/` is login.html, `/spa/*` is spa.html); a few routes are dynamic:
  * POST /login (303 to /welcome.html or back with ?error=1), GET /api/slow (700 ms, rising order number),
- * POST /api/save (400 ms, 201), /frames.html (same-origin and cross-origin iframe), /products?page=1..3.
+ * POST /api/save (400 ms, 201), GET /export.csv (a CSV download), /whoami (the Cookie
+ * header, as HTML), /login-cookie (sets an HttpOnly cookie), /frames.html (same-origin and cross-origin iframe), /products?page=1..3.
  */
 export function startServer() {
   let orders = 1000;
@@ -40,6 +41,22 @@ export function startServer() {
       await new Promise((resolve) => setTimeout(resolve, 400));
       res.writeHead(201, { 'content-type': 'application/json' });
       return res.end('{"saved":true}');
+    }
+    // A generated CSV, served as a download (Wait for Download).
+    if (url.pathname === '/export.csv') {
+      res.writeHead(200, { 'content-type': 'text/csv', 'content-disposition': 'attachment; filename="export.csv"' });
+      return res.end('name,qty\nmug,2\ncup,3\n');
+    }
+    // The cookies the browser sent (Cookies & Storage). HTML, not JSON: Firefox's JSON viewer cannot be scripted.
+    if (url.pathname === '/whoami') {
+      res.setHeader('content-type', 'text/html; charset=utf-8');
+      const cookie = (req.headers.cookie ?? '').replace(/[<&]/g, '');
+      return res.end(`<!doctype html><title>Who am I</title><p id="cookie">${cookie}</p>`);
+    }
+    // Sets an HttpOnly cookie, which only the cookies API (not document.cookie) can see.
+    if (url.pathname === '/login-cookie') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'set-cookie': 'sid=s3cret; Path=/; HttpOnly' });
+      return res.end('<!doctype html><title>Logged in</title><p>Logged in</p>');
     }
     // One same-origin frame, and one from another origin (localhost vs 127.0.0.1, same server).
     if (url.pathname === '/frames.html') {

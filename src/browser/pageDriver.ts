@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { mouseClick, pressKey, typeInto, withDebugger } from './cdp';
+import { insertText, mouseClick, mouseDrag, pressKey, typeInto, withDebugger } from './cdp';
 import { sleep, tabExists } from './tabs';
 import { CodedError } from '../core/errors';
 import type { AgentCall, AgentErrorInfo, AgentRequest, AgentResponse } from '../core/page';
@@ -17,7 +17,9 @@ import type { ErrorCode } from '../core/errors';
 
 const AGENT_FILE = '/content-scripts/agent.js';
 const SLICE_MS = 2_000;
-const ACTIONS = new Set<AgentRequest['op']>(['click', 'fill', 'set-field', 'select', 'check', 'press']);
+const ACTIONS = new Set<AgentRequest['op']>(['click', 'fill', 'set-field', 'select', 'check', 'press', 'insert-text', 'drag']);
+/** Requests that are done once their page navigated away mid-call (repeating them could act twice). */
+const ONCE = new Set<AgentRequest['op']>([...ACTIONS, 'focus', 'blur', 'clear', 'dispatch']);
 
 /** What one call can return: the agent's answer, `missing` (no agent in the page yet) or `vanished` (the page went away mid-call). */
 type Outcome = AgentResponse | { status: 'missing' } | { status: 'vanished' };
@@ -84,18 +86,26 @@ function locatorOf(request: AgentRequest): string | undefined {
 async function actWithRealInput(tabId: number, request: AgentRequest, timeoutMs: number): Promise<Record<string, unknown>> {
   if (!('locator' in request) || !request.locator) {
     if (request.op === 'press') await withDebugger(tabId, (send) => pressKey(send, request.key));
+    if (request.op === 'insert-text') await withDebugger(tabId, (send) => insertText(send, request.text));
     return { real: true };
   }
-  const purpose = request.op === 'click' || request.op === 'fill' || request.op === 'set-field' || request.op === 'check' || request.op === 'press' ? request.op : 'click';
-  const where = await actInTab(tabId, { op: 'locate', locator: request.locator, purpose }, timeoutMs);
+  const purpose = request.op === 'click' || request.op === 'fill' || request.op === 'set-field' || request.op === 'check' || request.op === 'press' ? request.op : request.op === 'insert-text' ? 'fill' : 'click';
+  const position = request.op === 'click' ? request.position : request.op === 'drag' ? request.fromPosition : undefined;
+  const where = await actInTab(tabId, { op: 'locate', locator: request.locator, purpose, ...(position ? { position } : {}) }, timeoutMs);
   const x = Number(where.x);
   const y = Number(where.y);
   switch (request.op) {
-    case 'click':
-      await withDebugger(tabId, (send) =>
-        mouseClick(send, x, y, { button: request.action === 'right' ? 'right' : 'left', clicks: request.action === 'double' ? 2 : 1, hoverOnly: request.action === 'hover' }),
-      );
+    case 'click': {
+      const clicks = Math.max(request.action === 'double' ? 2 : 1, Math.floor(request.clickCount ?? 1));
+      const button = request.action === 'right' ? 'right' : (request.button ?? 'left');
+      await withDebugger(tabId, (send) => mouseClick(send, x, y, { button, clicks, hoverOnly: request.action === 'hover', modifiers: request.modifiers }));
       return { clicked: request.locator, real: true };
+    }
+    case 'drag': {
+      const target = await actInTab(tabId, { op: 'locate', locator: request.to, purpose: 'drop', ...(request.toPosition ? { position: request.toPosition } : {}) }, timeoutMs);
+      const mode = await mouseDrag(tabId, { x, y }, { x: Number(target.x), y: Number(target.y) }, { modifiers: request.modifiers });
+      return { dragged: request.locator, to: request.to, mode, real: true };
+    }
     case 'fill':
       await withDebugger(tabId, (send) => typeInto(send, x, y, request.value));
       return { value: request.value, real: true };
@@ -115,6 +125,13 @@ async function actWithRealInput(tabId: number, request: AgentRequest, timeoutMs:
         await pressKey(send, request.key);
       });
       return { key: request.key, real: true };
+    case 'insert-text':
+      // Clicking puts the caret where it lands (the middle of the field), as a person would.
+      await withDebugger(tabId, async (send) => {
+        await mouseClick(send, x, y);
+        await insertText(send, request.text);
+      });
+      return { text: request.text, real: true };
     default:
       return actInTab(tabId, request, timeoutMs);
   }
@@ -142,7 +159,7 @@ export async function actInTab(tabId: number, original: AgentRequest, timeoutMs:
   // Changes when the locator crosses into a cross-origin iframe.
   let request = original;
   let frameId: number | undefined;
-  // For `locate`: where the frame we moved into starts in the tab's viewport (frames add up).
+  // For `locate` / `measure`: where the frame we moved into starts in the tab's viewport (frames add up).
   const offset = { x: 0, y: 0 };
   for (;;) {
     const budgetMs = Math.max(0, Math.min(SLICE_MS, deadline - Date.now() - 150));
@@ -163,7 +180,11 @@ export async function actInTab(tabId: number, original: AgentRequest, timeoutMs:
         last = { code: 'frame.unreachable' };
       } else {
         frameId = inner;
-        request = { ...request, locator: outcome.rest } as AgentRequest;
+        const current = locatorOf(request) ?? '';
+        const crossed = current.endsWith(outcome.rest) ? current.slice(0, current.length - outcome.rest.length) : '';
+        // A drag's target in the same frame: drop the frame part from it too.
+        const to = request.op === 'drag' && crossed && request.to.startsWith(crossed) ? { to: request.to.slice(crossed.length) } : {};
+        request = { ...request, locator: outcome.rest, ...to } as AgentRequest;
         offset.x += outcome.offset?.x ?? 0;
         offset.y += outcome.offset?.y ?? 0;
         continue;
@@ -171,7 +192,7 @@ export async function actInTab(tabId: number, original: AgentRequest, timeoutMs:
     }
     if (outcome?.status === 'done') {
       // The agent in a frame answers in that frame's coordinates; real input needs the tab's.
-      if (request.op === 'locate' && typeof outcome.result.x === 'number' && typeof outcome.result.y === 'number') {
+      if ((request.op === 'locate' || request.op === 'measure') && typeof outcome.result.x === 'number' && typeof outcome.result.y === 'number') {
         return { ...outcome.result, x: outcome.result.x + offset.x, y: outcome.result.y + offset.y };
       }
       return outcome.result;
@@ -186,7 +207,7 @@ export async function actInTab(tabId: number, original: AgentRequest, timeoutMs:
     if (outcome?.status === 'vanished') {
       // The page navigated while the agent was answering. An action has then almost certainly
       // happened (and caused the navigation); repeating it could submit a form twice.
-      if (ACTIONS.has(request.op)) return { navigated: true };
+      if (ONCE.has(request.op)) return { navigated: true };
       reason = 'the page navigated';
       last = { code: 'timeout' };
     }

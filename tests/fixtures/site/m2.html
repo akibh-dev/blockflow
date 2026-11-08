@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture: M2 locators</title>
+    <style>
+      .primary { color: rgb(0, 128, 0); }
+      #far { margin-top: 3000px; }
+    </style>
+  </head>
+  <body>
+    <!-- For tests/e2e/specs/m2-locators.mjs: locator filters, ||, role states, Assert subjects, key chords. -->
+    <h1 id="top">M2 locators</h1>
+    <ul id="cart">
+      <li><span>Apple</span> <button>Delete</button></li>
+      <li><span>Banana</span> <button>Delete</button></li>
+      <li><span>Cherry</span> <em>sold out</em></li>
+      <li hidden><span>Banana (old)</span> <button>Delete</button></li>
+    </ul>
+    <p id="status">idle</p>
+
+    <div role="toolbar">
+      <button id="bold" aria-pressed="false">Bold</button>
+      <button id="italic">Italic</button>
+      <button id="menu-button" aria-expanded="false" aria-controls="menu">Menu</button>
+      <button id="off" disabled>Archive</button>
+    </div>
+    <ul id="menu" role="menu" hidden><li role="menuitem">Open</li></ul>
+
+    <div role="tablist">
+      <button role="tab" aria-selected="true">One</button>
+      <button role="tab" aria-selected="false">Two</button>
+    </div>
+
+    <button id="save-old" hidden>Save</button>
+    <button id="save" class="btn primary">Save</button>
+
+    <p id="hint">We never share it</p>
+    <label for="email">Email address</label>
+    <input id="email" aria-describedby="hint" />
+    <input id="ro" readonly value="fixed" />
+
+    <input id="keys" aria-label="Keys" />
+    <p id="log">no keys</p>
+
+    <p id="far">Far below</p>
+
+    <script>
+      const status = document.getElementById('status');
+      for (const button of document.querySelectorAll('#cart button')) {
+        button.addEventListener('click', () => {
+          status.textContent = `deleted ${button.previousElementSibling.textContent}`;
+        });
+      }
+      const bold = document.getElementById('bold');
+      bold.addEventListener('click', () => bold.setAttribute('aria-pressed', String(bold.getAttribute('aria-pressed') !== 'true')));
+      const menuButton = document.getElementById('menu-button');
+      menuButton.addEventListener('click', () => {
+        const open = menuButton.getAttribute('aria-expanded') !== 'true';
+        menuButton.setAttribute('aria-expanded', String(open));
+        document.getElementById('menu').hidden = !open;
+      });
+      for (const tab of document.querySelectorAll('[role=tab]')) {
+        tab.addEventListener('click', () => {
+          for (const other of document.querySelectorAll('[role=tab]')) other.setAttribute('aria-selected', String(other === tab));
+        });
+      }
+      document.getElementById('save').addEventListener('click', () => {
+        status.textContent = 'saved';
+      });
+      // Every non-modifier keydown on #keys: key, held modifiers, and whether the modifier keys went down first.
+      const keys = document.getElementById('keys');
+      const log = document.getElementById('log');
+      const entries = [];
+      let modifiersDown = 0;
+      keys.addEventListener('keydown', (event) => {
+        if (['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) {
+          modifiersDown += 1;
+          return;
+        }
+        const held = ['ctrl', 'shift', 'alt', 'meta'].filter((name) => event[`${name}Key`]);
+        entries.push(`${event.key}${held.map((name) => `+${name}`).join('')} (${modifiersDown} down)`);
+        modifiersDown = 0;
+        log.textContent = entries.slice(-3).join(' | ');
+      });
+      keys.addEventListener('select', () => {
+        status.textContent = `selected ${keys.selectionEnd - keys.selectionStart} of ${keys.value.length}`;
+      });
+    </script>
+  </body>
+</html>

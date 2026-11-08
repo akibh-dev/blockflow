@@ -20,7 +20,14 @@ export type AssertSubject =
   | 'checked'
   | 'unchecked'
   | 'enabled'
-  | 'disabled';
+  | 'disabled'
+  | 'class'
+  | 'css'
+  | 'focused'
+  | 'editable'
+  | 'in-viewport'
+  | 'accessible-name'
+  | 'accessible-description';
 
 /** Assert settings. `operator` / `expected` are ignored by the yes/no subjects. */
 export interface AssertConfig {
@@ -43,10 +50,24 @@ const STATES: Partial<Record<AssertSubject, { kind: ReadKind; wanted: string }>>
   unchecked: { kind: 'checked', wanted: 'false' },
   enabled: { kind: 'enabled', wanted: 'true' },
   disabled: { kind: 'enabled', wanted: 'false' },
+  focused: { kind: 'focused', wanted: 'true' },
+  editable: { kind: 'editable', wanted: 'true' },
+  'in-viewport': { kind: 'in-viewport', wanted: 'true' },
 };
 
 /** Read kind for the comparing subjects (url/title/value are not read through the agent). */
-const READS: Partial<Record<AssertSubject, ReadKind>> = { text: 'text', input: 'value', attribute: 'attribute', count: 'count' };
+const READS: Partial<Record<AssertSubject, ReadKind>> = {
+  text: 'text',
+  input: 'value',
+  attribute: 'attribute',
+  count: 'count',
+  class: 'class',
+  css: 'css',
+  'accessible-name': 'accessible-name',
+  'accessible-description': 'accessible-description',
+};
+/** Subjects that read something named by `name`: the attribute, or the CSS property. */
+const NEEDS_NAME: Partial<Record<AssertSubject, string>> = { attribute: 'Attribute name', css: 'CSS property' };
 /** Subjects that do not look at an element (everything else needs `locator`). */
 const NO_ELEMENT: AssertSubject[] = ['value', 'url', 'title'];
 const RETRY_EVERY_MS = 250;
@@ -79,6 +100,12 @@ function passes(config: AssertConfig, value: string | null): boolean {
   const state = STATES[config.subject];
   if (state) return value === state.wanted;
   if (value === null) return false;
+  // "class contains active" means it has the class (every listed one), not a substring of another (inactive).
+  if (config.subject === 'class' && (config.operator === 'contains' || config.operator === 'not-contains')) {
+    const classes = value.split(/\s+/);
+    const has = config.expected.split(/\s+/).filter(Boolean).every((name) => classes.includes(name));
+    return config.operator === 'contains' ? has : !has;
+  }
   return testClause({ left: value, operator: config.operator, right: config.expected });
 }
 
@@ -91,7 +118,8 @@ function describe(config: AssertConfig): string {
 
 /**
  * Assert — the test step. Checks a value from the data, or something on the page (text, input
- * value, attribute, count, visible, checked, enabled, URL, title). Page checks are retried until the
+ * value, attribute, count, visible, checked, enabled, focused, editable, in viewport, class, CSS,
+ * accessible name / description, URL, title). Page checks are retried until the
  * step's timeout, like Playwright's expect(), because pages change after clicks.
  * Failing fails the run (and takes a screenshot); "soft" records the failure and keeps going.
  */
@@ -119,13 +147,20 @@ export const assertBlock: BlockDefinition<AssertConfig> = {
         { value: 'unchecked', label: 'checkbox is not checked' },
         { value: 'enabled', label: 'element is enabled' },
         { value: 'disabled', label: 'element is disabled' },
+        { value: 'focused', label: 'element has focus' },
+        { value: 'editable', label: 'field is editable (enabled, not read-only)' },
+        { value: 'in-viewport', label: 'element is in the viewport (scrolled into view)' },
+        { value: 'class', label: 'class of an element (contains = has the class)' },
+        { value: 'css', label: 'CSS value of an element (computed)' },
+        { value: 'accessible-name', label: 'accessible name of an element' },
+        { value: 'accessible-description', label: 'accessible description of an element' },
         { value: 'url', label: 'page URL' },
         { value: 'title', label: 'page title' },
         { value: 'value', label: 'a value from the data ({{…}})' },
       ],
     },
     { ...locatorField('locator', 'Element', false), help: 'For element checks.' },
-    { key: 'name', label: 'Attribute name', kind: 'text', placeholder: 'aria-pressed', help: 'Only for "attribute of an element".' },
+    { key: 'name', label: 'Attribute or CSS property', kind: 'text', placeholder: 'aria-pressed', help: 'The attribute name for "attribute of an element", the CSS property (color, display…) for "CSS value".' },
     { key: 'value', label: 'Value', kind: 'text', templated: true, placeholder: '{{status}}', help: 'Only for "a value from the data".' },
     { key: 'operator', label: 'Must', kind: 'select', options: OPERATOR_OPTIONS, help: 'Not used by the yes/no checks (visible, checked…).' },
     { key: 'expected', label: 'Expected', kind: 'text', templated: true, placeholder: 'Welcome' },
@@ -138,8 +173,8 @@ export const assertBlock: BlockDefinition<AssertConfig> = {
     ...(!NO_ELEMENT.includes(config.subject) && !String(config.locator ?? '').trim()
       ? [{ key: 'locator', code: 'config.required', message: `Element is required to check "${config.subject}"` }]
       : []),
-    ...(config.subject === 'attribute' && !String(config.name ?? '').trim()
-      ? [{ key: 'name', code: 'config.required', message: 'Attribute name is required for "attribute of an element"' }]
+    ...(NEEDS_NAME[config.subject] && !String(config.name ?? '').trim()
+      ? [{ key: 'name', code: 'config.required', message: `${NEEDS_NAME[config.subject]} is required (in "name") to check "${config.subject}"` }]
       : []),
   ],
   outputs: [{ key: 'actual', description: 'What was found.' }],
@@ -149,7 +184,7 @@ export const assertBlock: BlockDefinition<AssertConfig> = {
     if (!NO_ELEMENT.includes(subject) && !locator.trim()) {
       throw new Error('Element is required for this check');
     }
-    if (subject === 'attribute' && !ctx.config.name.trim()) throw new Error('Attribute name is required');
+    if (NEEDS_NAME[subject] && !ctx.config.name.trim()) throw new Error(`${NEEDS_NAME[subject]} is required`);
 
     // Page checks retry until the step's time is nearly up; data checks are answered at once.
     // (Counted in attempts, not wall-clock time, so the engine's own clock stays the only clock.)

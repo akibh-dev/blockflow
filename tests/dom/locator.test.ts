@@ -101,7 +101,7 @@ describe('resolveLocator', () => {
   it('explains invalid locators', () => {
     expect(() => resolveLocator('css=##')).toThrow('Invalid CSS selector');
     expect(() => resolveLocator('text=/(/')).toThrow('Invalid regular expression');
-    expect(() => resolveLocator('role=button[bogus]')).toThrow('Unknown role option [bogus]. Use name, exact, checked, level, include-hidden.');
+    expect(() => resolveLocator('role=button[bogus]')).toThrow('Unknown role option [bogus]. Use name, exact, checked, pressed, expanded, selected, disabled, level, include-hidden.');
   });
 });
 

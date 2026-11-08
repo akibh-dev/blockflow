@@ -1,0 +1,70 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "API status router",
+  "steps": [
+    {
+      "id": "start",
+      "start": {}
+    },
+    {
+      "id": "retry",
+      "repeat": {
+        "mode": "until",
+        "left": "{{status}}",
+        "operator": "less",
+        "right": "500",
+        "max": 3,
+        "failAtMax": false
+      },
+      "each": [
+        {
+          "id": "call",
+          "http-request": {
+            "url": "https://api.example.com/health",
+            "failOnError": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "route",
+      "switch": {
+        "value": "{{status}}",
+        "cases": [
+          { "port": "ok", "operator": "equals", "value": "200" },
+          { "port": "missing", "operator": "equals", "value": "404" },
+          { "port": "server", "operator": "matches", "value": "/^5\\d\\d$/" }
+        ]
+      },
+      "ok": [
+        {
+          "id": "healthy",
+          "log": "Healthy after {{iterations}} tries"
+        }
+      ],
+      "missing": [
+        {
+          "id": "gone",
+          "notify": {
+            "title": "Health endpoint missing",
+            "message": "GET /health answered 404"
+          }
+        }
+      ],
+      "server": [
+        {
+          "id": "down",
+          "notify": {
+            "title": "API is down",
+            "message": "Still {{status}} after {{iterations}} tries"
+          }
+        }
+      ]
+    },
+    {
+      "id": "done",
+      "log": "Checked: {{status}}"
+    }
+  ]
+}

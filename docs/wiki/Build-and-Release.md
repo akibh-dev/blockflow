@@ -63,12 +63,13 @@ are the same everywhere. `version` comes from `package.json`. Icons are picked u
 | `tabs` | Open / update / close / query tabs, read URLs and titles, `captureVisibleTab` |
 | `scripting` | Inject the page agent, picker and recorder |
 | `notifications` | Notify block, Manual Step prompts with buttons |
-| `webRequest` | Wait For response (per-tab response log) and `networkidle` waiting (`src/browser/navigation.ts`) |
-| `downloads` | Download block |
+| `webRequest` | Wait For response / request (per-tab logs, request bodies) and `networkidle` waiting (`src/browser/navigation.ts`) |
+| `downloads` | Download block, Wait for Download (`downloads.search`) |
 | `webNavigation` | Page Visited trigger, SPA URL changes, popup detection, frame ids for iframes |
 | `contextMenus` | Context Menu trigger |
 | `offscreen` | **Chrome/Safari only.** HTML parsing for Extract List/Table on fetched HTML. Firefox's background page has a DOM, so it is left out there |
-| `debugger` (optional) | Real (trusted) mouse/keyboard input and background-tab screenshots via the Chrome DevTools Protocol (`src/browser/cdp.ts`) |
+| `debugger` (optional) | Real (trusted) mouse/keyboard input, background-tab, full-page and element screenshots, and response bodies via the Chrome DevTools Protocol (`src/browser/cdp.ts`, `screenshots.ts`, `navigation.ts`) |
+| `cookies` (optional, Chrome and Firefox) | Cookies & Storage block on cookies (`src/browser/cookies.ts`). Regular in e2e builds |
 | `userScripts` (optional) | Run Script block (Chrome 135+, also needs "Allow User Scripts" in `chrome://extensions`) |
 | host `<all_urls>` | Watch/act on any site. Prototype choice; the comment in the config notes the plan to move to `optional_host_permissions` per workflow |
 

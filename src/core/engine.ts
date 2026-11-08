@@ -360,6 +360,8 @@ export class WorkflowRunner {
       await this.handleFailure(run, step, node, def, input, `sent data to an output it does not have: "${port}"`, ports, { code: 'step.failed' });
       return;
     }
+    // A block that took a picture itself (Screenshot) shows it on its step.
+    if (typeof payload.screenshotId === 'string' && payload.screenshotId !== input.screenshotId) step.screenshot = payload.screenshotId;
     this.endStep(run, step, outcome.softError ? 'failed' : 'passed', { output: payload, port, ...soft });
     await this.afterStep(run, step, node, payload, Boolean(outcome.softError));
     await this.emitFrom(node.id, payload, port, run);
@@ -474,7 +476,7 @@ export class WorkflowRunner {
   /** Screenshot of the step's tab, by its step setting (default: only when something went wrong). */
   private async afterStep(run: ActiveRun, step: StepRecord, node: NodeDef, payload: Payload, wentWrong: boolean): Promise<void> {
     const when = node.step?.screenshot ?? 'error';
-    if (when === 'never' || (when === 'error' && !wentWrong)) return;
+    if (when === 'never' || (when === 'error' && !wentWrong) || step.screenshot) return;
     const tabName = typeof node.config.tab === 'string' && node.config.tab.trim() ? node.config.tab : 'main';
     const tabId = sessionTab(payload, tabName);
     if (tabId === undefined) return;
@@ -627,11 +629,17 @@ export class WorkflowRunner {
       this.log('warn', node.id, `${what} ignored: this step already timed out`);
       throw new Error('This step already timed out');
     };
-    const emit = async (payload: Payload, port: string = DEFAULT_PORT): Promise<void> => {
+    const emit = async (payload: Payload, port: string = DEFAULT_PORT): Promise<Payload | undefined> => {
       refuseIfAbandoned('Output');
       if (run) {
+        // What reaches the end of a path under this emit (steps run one after another, so the
+        // run's lastOutput after it returns is that); the run keeps its earlier one otherwise.
+        const before = run.lastOutput;
+        run.lastOutput = undefined;
         await this.emitFrom(node.id, payload, port, run);
-        return;
+        const reached = run.lastOutput;
+        if (reached === undefined) run.lastOutput = before;
+        return reached;
       }
       await this.inRun(trigger, async (fresh) => {
         // The start block's firing is the run's first step, so the run shows what it sent.

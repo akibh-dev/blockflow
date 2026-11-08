@@ -605,6 +605,168 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "wait-for-download"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Wait until the page downloads a file (an export, a report) and get its name, size and type. Can read CSV / JSON / text files.",
+                    "properties": {
+                      "url": {
+                        "description": "Empty = the first download. Plain text: the address or file name contains it; * and /regex/ as in Wait For.",
+                        "type": "string"
+                      },
+                      "read": {
+                        "description": "Extensions cannot open files on disk, so the file is fetched again from its address (with the site's cookies). Fine for exports; a link that makes a new file each time gives that new file.",
+                        "enum": [
+                          "none",
+                          "text",
+                          "csv",
+                          "json"
+                        ]
+                      },
+                      "dataset": {
+                        "description": "CSV rows, or a JSON list, replace this dataset.",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The tab that starts the download. Needed only to read files the page made itself (blob: addresses).",
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "cookies-storage"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Read, set, delete or clear a site's cookies, or the page's localStorage / sessionStorage.",
+                    "properties": {
+                      "action": {
+                        "description": "Do",
+                        "enum": [
+                          "get",
+                          "set",
+                          "delete",
+                          "clear"
+                        ]
+                      },
+                      "area": {
+                        "description": "In",
+                        "enum": [
+                          "cookies",
+                          "local",
+                          "session"
+                        ]
+                      },
+                      "name": {
+                        "description": "Needed to set or delete. For get: empty = all of them.",
+                        "type": "string"
+                      },
+                      "value": {
+                        "description": "For set.",
+                        "type": "string"
+                      },
+                      "url": {
+                        "description": "Whose cookies. Empty = the page open in the tab.",
+                        "type": "string"
+                      },
+                      "domain": {
+                        "description": "With a leading dot the cookie is also sent to subdomains.",
+                        "type": "string"
+                      },
+                      "path": {
+                        "description": "Path (set, optional)",
+                        "type": "string"
+                      },
+                      "maxAgeSeconds": {
+                        "description": "0 = a session cookie, gone when the browser closes.",
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "httpOnly": {
+                        "description": "HttpOnly (set)",
+                        "type": "boolean"
+                      },
+                      "secure": {
+                        "description": "Secure (set)",
+                        "type": "boolean"
+                      },
+                      "sameSite": {
+                        "description": "SameSite (set)",
+                        "enum": [
+                          "",
+                          "Lax",
+                          "Strict",
+                          "None"
+                        ]
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "close-tab"
                   },
                   "position": {
@@ -663,7 +825,7 @@
                   },
                   "config": {
                     "type": "object",
-                    "description": "Click (or double-click, right-click, hover) an element. Waits until it can be clicked.",
+                    "description": "Click (or double-click, right-click, hover) an element, with any button, modifier keys and position. Waits until it can be clicked.",
                     "properties": {
                       "locator": {
                         "description": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick.",
@@ -677,6 +839,28 @@
                           "right",
                           "hover"
                         ]
+                      },
+                      "button": {
+                        "description": "For \"click\". Right-click always uses the right button.",
+                        "enum": [
+                          "left",
+                          "middle",
+                          "right"
+                        ]
+                      },
+                      "modifiers": {
+                        "description": "Modifier keys held during the click: Alt, Control, Meta, Shift (joined with + or commas). Empty = none.",
+                        "type": "string"
+                      },
+                      "position": {
+                        "description": "Where to click: x,y in pixels from the element’s top-left corner. Empty = its center.",
+                        "type": "string"
+                      },
+                      "clickCount": {
+                        "description": "Presses in a row (3 = triple click, selects a paragraph). Double-click means at least 2.",
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 10
                       },
                       "force": {
                         "description": "Click even if the element looks hidden, disabled or covered. Only for stubborn pages.",
@@ -962,10 +1146,21 @@
                   },
                   "config": {
                     "type": "object",
-                    "description": "Press a key or shortcut: Enter, Tab, Escape, Control+A…",
+                    "description": "Press a key or shortcut (Enter, Tab, Escape, Control+A…), or insert text at the caret.",
                     "properties": {
+                      "mode": {
+                        "description": "Do",
+                        "enum": [
+                          "key",
+                          "text"
+                        ]
+                      },
                       "key": {
-                        "description": "Key names as on the keyboard: Enter, Tab, Escape, Backspace, ArrowDown, a, Control+A, Shift+Tab.",
+                        "description": "Key names as on the keyboard: Enter, Tab, Escape, Backspace, ArrowDown, a, Control+A, Shift+Tab, Control+Shift+K. ControlOrMeta+A is ⌘A on a Mac, Ctrl+A elsewhere.",
+                        "type": "string"
+                      },
+                      "text": {
+                        "description": "For \"insert text\": typed at the caret in one go, like pasting.",
                         "type": "string"
                       },
                       "locator": {
@@ -977,8 +1172,139 @@
                         "type": "string"
                       }
                     },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "drag"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Drag an element onto another one: sortable lists, kanban cards, sliders, drop targets.",
+                    "properties": {
+                      "from": {
+                        "description": "The element to pick up (a card, a list item, a slider handle).",
+                        "type": "string"
+                      },
+                      "to": {
+                        "description": "The element to drop it on (another item, a column, a spot on the slider track).",
+                        "type": "string"
+                      },
+                      "fromPosition": {
+                        "description": "x,y in pixels from the top-left corner of \"Drag this\". Empty = its center.",
+                        "type": "string"
+                      },
+                      "toPosition": {
+                        "description": "x,y in pixels from the top-left corner of \"Drop on\". Empty = its center.",
+                        "type": "string"
+                      },
+                      "modifiers": {
+                        "description": "Modifier keys held during the drag: Alt, Control, Meta, Shift.",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
                     "required": [
-                      "key"
+                      "from",
+                      "to"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "element-action"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Focus, blur, clear, scroll into view, or dispatch an event (click, input, a custom event) on an element.",
+                    "properties": {
+                      "locator": {
+                        "description": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick.",
+                        "type": "string"
+                      },
+                      "action": {
+                        "description": "Action",
+                        "enum": [
+                          "focus",
+                          "blur",
+                          "clear",
+                          "scroll-into-view",
+                          "dispatch-event"
+                        ]
+                      },
+                      "eventType": {
+                        "description": "For \"dispatch an event\". Bubbles, cancelable and composed.",
+                        "type": "string"
+                      },
+                      "detail": {
+                        "description": "For \"dispatch an event\". Built-in types (click, keydown, input, focus, drag…): the event’s properties. Other types are a CustomEvent and this is its event.detail.",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "locator"
                     ],
                     "additionalProperties": false
                   },
@@ -1015,17 +1341,25 @@
                   },
                   "config": {
                     "type": "object",
-                    "description": "Choose a file for a file input, without the file dialog: text you write, or a file from a URL.",
+                    "description": "Choose a file for a file input or drop it on a drop zone, without the file dialog: text you write, a file from a URL, or base64 data.",
                     "properties": {
                       "locator": {
-                        "description": "The <input type=\"file\"> (hidden ones work too), or its label.",
+                        "description": "The <input type=\"file\"> (hidden ones work too) or its label; with \"drop zone\", the area files are dropped on.",
                         "type": "string"
+                      },
+                      "target": {
+                        "description": "Put it",
+                        "enum": [
+                          "input",
+                          "dropzone"
+                        ]
                       },
                       "source": {
                         "description": "File",
                         "enum": [
                           "text",
-                          "url"
+                          "url",
+                          "data"
                         ]
                       },
                       "content": {
@@ -1036,12 +1370,16 @@
                         "description": "For \"download\".",
                         "type": "string"
                       },
+                      "data": {
+                        "description": "For \"base64 data\": base64 or a data: URL, usually {{body64}} from HTTP Request with \"Response as: base64\".",
+                        "type": "string"
+                      },
                       "filename": {
                         "description": "Empty with a URL = the name in the URL.",
                         "type": "string"
                       },
                       "mime": {
-                        "description": "For \"text\". With a URL the server says.",
+                        "description": "For \"text\" and \"base64 data\" ({{mime}} after HTTP Request; a data: URL brings its own). With a URL the server says.",
                         "type": "string"
                       },
                       "tab": {
@@ -1223,7 +1561,8 @@
                           "url",
                           "load",
                           "networkidle",
-                          "response"
+                          "response",
+                          "request"
                         ]
                       },
                       "locator": {
@@ -1235,12 +1574,20 @@
                         "type": "string"
                       },
                       "url": {
-                        "description": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression. Also the request address for \"a network request finishes\".",
+                        "description": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression. Also the request address for the network modes.",
                         "type": "string"
                       },
                       "status": {
                         "description": "For \"a network request finishes\".",
                         "type": "string"
+                      },
+                      "method": {
+                        "description": "For the network modes. Empty = any.",
+                        "type": "string"
+                      },
+                      "captureBody": {
+                        "description": "For \"a network request finishes\". Chrome, Edge, Brave only (debugger permission). Only responses that start after this block starts can be read, so it suits slow or later requests.",
+                        "type": "boolean"
                       },
                       "tab": {
                         "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
@@ -1719,6 +2066,74 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "screenshot"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Take a picture of what the tab shows, the whole page, or one element. Shown on the step and in the report.",
+                    "properties": {
+                      "area": {
+                        "description": "Take",
+                        "enum": [
+                          "visible",
+                          "full",
+                          "element"
+                        ]
+                      },
+                      "locator": {
+                        "description": "For \"one element\". It is scrolled into view first.",
+                        "type": "string"
+                      },
+                      "format": {
+                        "description": "Format",
+                        "enum": [
+                          "png",
+                          "jpeg"
+                        ]
+                      },
+                      "quality": {
+                        "description": "JPEG quality",
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 100
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "assert"
                   },
                   "position": {
@@ -1749,6 +2164,13 @@
                           "unchecked",
                           "enabled",
                           "disabled",
+                          "focused",
+                          "editable",
+                          "in-viewport",
+                          "class",
+                          "css",
+                          "accessible-name",
+                          "accessible-description",
                           "url",
                           "title",
                           "value"
@@ -1759,7 +2181,7 @@
                         "type": "string"
                       },
                       "name": {
-                        "description": "Only for \"attribute of an element\".",
+                        "description": "The attribute name for \"attribute of an element\", the CSS property (color, display…) for \"CSS value\".",
                         "type": "string"
                       },
                       "value": {
@@ -1986,6 +2408,89 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "switch"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Go one of several ways: the first case that matches the value picks the output, else \"default\".",
+                    "properties": {
+                      "value": {
+                        "description": "What the cases look at.",
+                        "type": "string"
+                      },
+                      "cases": {
+                        "description": "Each case is an output named after it (letters, digits, \"_\" and \"-\"; not \"default\", \"error\", \"out\" or \"done\"). No match goes to \"default\". For a pattern, write /text/i.",
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "port": {
+                              "type": "string",
+                              "description": "Output"
+                            },
+                            "operator": {
+                              "enum": [
+                                "equals",
+                                "not-equals",
+                                "contains",
+                                "not-contains",
+                                "starts-with",
+                                "ends-with",
+                                "matches",
+                                "greater",
+                                "greater-equal",
+                                "less",
+                                "less-equal",
+                                "empty",
+                                "not-empty",
+                                "true",
+                                "false"
+                              ],
+                              "description": "Condition"
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "Compare to"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "required": [
+                      "cases"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "for-each"
                   },
                   "position": {
@@ -2050,13 +2555,59 @@
                   },
                   "config": {
                     "type": "object",
-                    "description": "Run the blocks on \"each\" a number of times, then continue from \"done\".",
+                    "description": "Run the blocks on \"each\" a number of times, or until / while a condition holds, then continue from \"done\".",
                     "properties": {
+                      "mode": {
+                        "description": "Repeat",
+                        "enum": [
+                          "times",
+                          "until",
+                          "while"
+                        ]
+                      },
                       "times": {
-                        "description": "Times",
+                        "description": "For \"a number of times\".",
                         "type": "number",
                         "minimum": 1,
                         "maximum": 1000
+                      },
+                      "left": {
+                        "description": "Until / while: rendered at every check against the data the last time ended with ({{iteration}} = times run so far).",
+                        "type": "string"
+                      },
+                      "operator": {
+                        "description": "Condition",
+                        "enum": [
+                          "equals",
+                          "not-equals",
+                          "contains",
+                          "not-contains",
+                          "starts-with",
+                          "ends-with",
+                          "matches",
+                          "greater",
+                          "greater-equal",
+                          "less",
+                          "less-equal",
+                          "empty",
+                          "not-empty",
+                          "true",
+                          "false"
+                        ]
+                      },
+                      "right": {
+                        "description": "Compare to",
+                        "type": "string"
+                      },
+                      "max": {
+                        "description": "Until / while: a safety limit.",
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 10000
+                      },
+                      "failAtMax": {
+                        "description": "Off: continue from \"done\" instead.",
+                        "type": "boolean"
                       }
                     },
                     "required": [],
@@ -2575,6 +3126,13 @@
                       "failOnError": {
                         "description": "Stop the flow on HTTP errors (4xx, 5xx)",
                         "type": "boolean"
+                      },
+                      "responseType": {
+                        "description": "Response as",
+                        "enum": [
+                          "text",
+                          "base64"
+                        ]
                       }
                     },
                     "required": [

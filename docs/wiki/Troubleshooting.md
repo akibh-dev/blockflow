@@ -48,6 +48,7 @@ The code says what kind of failure it was; the message says the details. Defined
 | `page.restricted` | Use a normal web page (not chrome://, the web store, about:) | [Permissions](#permissions) |
 | `permission.missing` | Grant the permission on the block or in the extension settings | [Permissions](#permissions) |
 | `script.error` | Fix the Run Script code | [Other messages](#other-messages) |
+| `download.failed` | The download was interrupted, or its content cannot be read: check the link in a normal tab | [Downloads](#downloads) |
 | `config.invalid` | Fix the setting the message names | [Importing a file fails](#importing-a-file-fails) |
 | `workflow.failed` | Open the called run and fix its failing step | [Other messages](#other-messages) |
 | `step.failed` | Anything else: read the message | |
@@ -188,9 +189,23 @@ as a new run.
 | --- | --- | --- |
 | Real mouse and keyboard (`realInput`) | `debugger` (optional) | `Real input needs the "debugger" permission (Chrome, Edge, Brave). Tick "Use real mouse and keyboard" in the step settings again to grant it.` The browser only asks after a click in the editor. Not available in Firefox. |
 | Run Script | `userScripts` (optional) | `Run Script needs Chrome 135 or newer, the "userScripts" permission (press Grant on the block), and "Allow User Scripts" (or developer mode) switched on for BlockFlow in chrome://extensions.` Not available in Firefox. |
+| Cookies & Storage on `cookies` | `cookies` (optional, Chrome and Firefox) | `Cookies need the "cookies" permission: press Grant on the Cookies & Storage block …`. localStorage / sessionStorage need nothing extra. |
+| Screenshot `full`, `element` of a tab that is not showing, any tab that is not showing (Chromium) | `debugger` (optional) | `A full-page screenshot needs the "debugger" permission …`. Firefox takes all of them with `tabs.captureTab`, no extra permission. Without the permission in Chromium, `visible` and `element` work on a tab that is showing (Open Tab with "bring to front"). |
+| Wait For `captureBody` | `debugger` (optional) | `Reading a response body needs the "debugger" permission, which only Chrome, Edge and Brave have …`. Not available in Firefox: switch it off; URL, status and method still work. |
 | Any page access in **Firefox** | host access | Firefox does not grant site access on install: `about:addons` → BlockFlow → Permissions → allow all sites. Without it the picker, Watch Element and page blocks fail with a permissions error. Not yet verified on a real Firefox install. |
 
 Blocks that need an optional permission show a **Grant** button in their settings until it is granted.
+
+## Downloads
+
+Wait for Download (`download.failed`, `timeout`):
+
+| Message | Meaning |
+| --- | --- |
+| `Timed out after Ns: no download matching … started (saw …)` | No download (other than BlockFlow's own) started in the 15 s before the block or during it. Check the click before it really downloads; `saw` lists the file names that did. |
+| `The download of … failed: …` | The browser interrupted it (network error, server error, the user cancelled). |
+| `The page has already released the file it downloaded …` | `read` on a file the page built itself (a `blob:` link) after the page let go of it, or after it navigated away. Read it right after the click. |
+| `Reading the download again from … failed: HTTP …` | `read` fetches the file's address again (extensions cannot open files on disk); the site refused the second request (a one-time link, a POST form). |
 
 ## Iframes
 
@@ -265,6 +280,8 @@ the toast's **Details** shows them. Every code is explained in the guide's
 | `Failed by the user at a manual step` | Someone pressed Fail on a Manual Step. |
 | `Element is required for this check` / `Attribute name is required` | Assert settings missing for the chosen `subject`. |
 | `Element is required for "visible"` / `Text is required for the text modes` / `URL pattern is required for …` | Wait For settings missing for the chosen `mode`. |
+| `Timed out … waiting for a response from … to read its body (only responses that start after the Wait For starts can be read)` | Wait For with `captureBody` attaches the debugger when it starts; a response that started before (during the Click) cannot be read. Use it for slow or later requests, or call the API with HTTP Request. |
+| `The browser refused the cookie "…"` | Cookies & Storage `set`: the cookie does not fit the site (a `domain` of another site, `secure` on http, `SameSite=None` without `secure`). |
 | `sent data to an output it does not have: "x"` | An internal block error; report it. |
 
 HTTP Request with **Stop the flow on HTTP errors** on currently ends the path without marking the run

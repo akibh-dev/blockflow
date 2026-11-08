@@ -510,6 +510,210 @@
       ]
     },
     {
+      "type": "wait-for-download",
+      "label": "Wait for Download",
+      "category": "browser",
+      "description": "Wait until the page downloads a file (an export, a report) and get its name, size and type. Can read CSV / JSON / text files.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "tab": "main",
+        "url": "",
+        "read": "none",
+        "dataset": ""
+      },
+      "fields": [
+        {
+          "key": "url",
+          "label": "URL or file name (optional)",
+          "kind": "text",
+          "templated": true,
+          "help": "Empty = the first download. Plain text: the address or file name contains it; * and /regex/ as in Wait For."
+        },
+        {
+          "key": "read",
+          "label": "Read the file",
+          "kind": "select",
+          "options": [
+            "none",
+            "text",
+            "csv",
+            "json"
+          ],
+          "help": "Extensions cannot open files on disk, so the file is fetched again from its address (with the site's cookies). Fine for exports; a link that makes a new file each time gives that new file."
+        },
+        {
+          "key": "dataset",
+          "label": "Save rows to dataset (optional)",
+          "kind": "text",
+          "templated": true,
+          "help": "CSV rows, or a JSON list, replace this dataset."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The tab that starts the download. Needed only to read files the page made itself (blob: addresses)."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "download",
+          "description": "{filename, url, path, size, mime, downloadId} of the finished download."
+        },
+        {
+          "key": "content",
+          "description": "With \"as text\": the file content."
+        },
+        {
+          "key": "rows",
+          "description": "With \"as CSV\": one object per row, by header."
+        },
+        {
+          "key": "data",
+          "description": "With \"as JSON\": the parsed value."
+        },
+        {
+          "key": "datasetSize",
+          "description": "With a dataset: its rows afterwards."
+        }
+      ]
+    },
+    {
+      "type": "cookies-storage",
+      "label": "Cookies & Storage",
+      "category": "browser",
+      "description": "Read, set, delete or clear a site's cookies, or the page's localStorage / sessionStorage.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "action": "get",
+        "area": "cookies",
+        "name": "",
+        "value": "",
+        "url": "",
+        "domain": "",
+        "path": "",
+        "maxAgeSeconds": 0,
+        "httpOnly": false,
+        "secure": false,
+        "sameSite": ""
+      },
+      "fields": [
+        {
+          "key": "action",
+          "label": "Do",
+          "kind": "select",
+          "options": [
+            "get",
+            "set",
+            "delete",
+            "clear"
+          ]
+        },
+        {
+          "key": "area",
+          "label": "In",
+          "kind": "select",
+          "options": [
+            "cookies",
+            "local",
+            "session"
+          ]
+        },
+        {
+          "key": "name",
+          "label": "Name / key",
+          "kind": "text",
+          "templated": true,
+          "help": "Needed to set or delete. For get: empty = all of them."
+        },
+        {
+          "key": "value",
+          "label": "Value",
+          "kind": "text",
+          "templated": true,
+          "help": "For set."
+        },
+        {
+          "key": "url",
+          "label": "Site (cookies, optional)",
+          "kind": "text",
+          "templated": true,
+          "help": "Whose cookies. Empty = the page open in the tab."
+        },
+        {
+          "key": "domain",
+          "label": "Domain (set, optional)",
+          "kind": "text",
+          "templated": true,
+          "help": "With a leading dot the cookie is also sent to subdomains."
+        },
+        {
+          "key": "path",
+          "label": "Path (set, optional)",
+          "kind": "text"
+        },
+        {
+          "key": "maxAgeSeconds",
+          "label": "Expires in seconds (set)",
+          "kind": "number",
+          "min": 0,
+          "help": "0 = a session cookie, gone when the browser closes."
+        },
+        {
+          "key": "httpOnly",
+          "label": "HttpOnly (set)",
+          "kind": "boolean"
+        },
+        {
+          "key": "secure",
+          "label": "Secure (set)",
+          "kind": "boolean"
+        },
+        {
+          "key": "sameSite",
+          "label": "SameSite (set)",
+          "kind": "select",
+          "options": [
+            "",
+            "Lax",
+            "Strict",
+            "None"
+          ]
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "value",
+          "description": "get with a name: the value (null when missing). get without: an object of name → value. set: the value."
+        },
+        {
+          "key": "cookies",
+          "description": "Cookies, get/set: the full cookies [{name, value, domain, path, expires, httpOnly, secure, sameSite}]."
+        },
+        {
+          "key": "deleted",
+          "description": "delete / clear: how many were removed."
+        }
+      ]
+    },
+    {
       "type": "close-tab",
       "label": "Close Tab",
       "category": "browser",
@@ -542,7 +746,7 @@
       "type": "click",
       "label": "Click",
       "category": "page",
-      "description": "Click (or double-click, right-click, hover) an element. Waits until it can be clicked.",
+      "description": "Click (or double-click, right-click, hover) an element, with any button, modifier keys and position. Waits until it can be clicked.",
       "canStart": true,
       "canTakeInput": true,
       "ports": [
@@ -554,7 +758,11 @@
         "tab": "main",
         "locator": "",
         "action": "click",
-        "force": false
+        "force": false,
+        "button": "left",
+        "modifiers": "",
+        "position": "",
+        "clickCount": 1
       },
       "fields": [
         {
@@ -575,6 +783,37 @@
             "right",
             "hover"
           ]
+        },
+        {
+          "key": "button",
+          "label": "Mouse button",
+          "kind": "select",
+          "options": [
+            "left",
+            "middle",
+            "right"
+          ],
+          "help": "For \"click\". Right-click always uses the right button."
+        },
+        {
+          "key": "modifiers",
+          "label": "Keys held",
+          "kind": "text",
+          "help": "Modifier keys held during the click: Alt, Control, Meta, Shift (joined with + or commas). Empty = none."
+        },
+        {
+          "key": "position",
+          "label": "Position",
+          "kind": "text",
+          "help": "Where to click: x,y in pixels from the element’s top-left corner. Empty = its center."
+        },
+        {
+          "key": "clickCount",
+          "label": "Click count",
+          "kind": "number",
+          "min": 1,
+          "max": 10,
+          "help": "Presses in a row (3 = triple click, selects a paragraph). Double-click means at least 2."
         },
         {
           "key": "force",
@@ -811,7 +1050,7 @@
       "type": "press-key",
       "label": "Press Key",
       "category": "page",
-      "description": "Press a key or shortcut: Enter, Tab, Escape, Control+A…",
+      "description": "Press a key or shortcut (Enter, Tab, Escape, Control+A…), or insert text at the caret.",
       "canStart": true,
       "canTakeInput": true,
       "ports": [
@@ -821,16 +1060,33 @@
       "realInput": true,
       "defaultConfig": {
         "tab": "main",
+        "mode": "key",
         "key": "Enter",
+        "text": "",
         "locator": ""
       },
       "fields": [
         {
+          "key": "mode",
+          "label": "Do",
+          "kind": "select",
+          "options": [
+            "key",
+            "text"
+          ]
+        },
+        {
           "key": "key",
           "label": "Key",
           "kind": "text",
-          "required": true,
-          "help": "Key names as on the keyboard: Enter, Tab, Escape, Backspace, ArrowDown, a, Control+A, Shift+Tab."
+          "help": "Key names as on the keyboard: Enter, Tab, Escape, Backspace, ArrowDown, a, Control+A, Shift+Tab, Control+Shift+K. ControlOrMeta+A is ⌘A on a Mac, Ctrl+A elsewhere."
+        },
+        {
+          "key": "text",
+          "label": "Text",
+          "kind": "text",
+          "templated": true,
+          "help": "For \"insert text\": typed at the caret in one go, like pasting."
         },
         {
           "key": "locator",
@@ -854,10 +1110,153 @@
       ]
     },
     {
+      "type": "drag",
+      "label": "Drag",
+      "category": "page",
+      "description": "Drag an element onto another one: sortable lists, kanban cards, sliders, drop targets.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "realInput": true,
+      "defaultConfig": {
+        "tab": "main",
+        "from": "",
+        "to": "",
+        "fromPosition": "",
+        "toPosition": "",
+        "modifiers": ""
+      },
+      "fields": [
+        {
+          "key": "from",
+          "label": "Drag this",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "The element to pick up (a card, a list item, a slider handle)."
+        },
+        {
+          "key": "to",
+          "label": "Drop on",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "The element to drop it on (another item, a column, a spot on the slider track)."
+        },
+        {
+          "key": "fromPosition",
+          "label": "Grab at",
+          "kind": "text",
+          "help": "x,y in pixels from the top-left corner of \"Drag this\". Empty = its center."
+        },
+        {
+          "key": "toPosition",
+          "label": "Drop at",
+          "kind": "text",
+          "help": "x,y in pixels from the top-left corner of \"Drop on\". Empty = its center."
+        },
+        {
+          "key": "modifiers",
+          "label": "Keys held",
+          "kind": "text",
+          "help": "Modifier keys held during the drag: Alt, Control, Meta, Shift."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on."
+        },
+        {
+          "key": "dragMode",
+          "description": "\"html5\" (drag events) or \"pointer\" (pointer/mouse moves): how the page took the drag."
+        }
+      ]
+    },
+    {
+      "type": "element-action",
+      "label": "Element Action",
+      "category": "page",
+      "description": "Focus, blur, clear, scroll into view, or dispatch an event (click, input, a custom event) on an element.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "locator": "",
+        "action": "focus",
+        "eventType": "",
+        "detail": ""
+      },
+      "fields": [
+        {
+          "key": "locator",
+          "label": "Element",
+          "kind": "locator",
+          "required": true,
+          "templated": true,
+          "help": "CSS, or text=…, role=…[name=\"…\"], label=…, placeholder=…, testid=…, A >> B, >> nth=0. Or press 🎯 Pick."
+        },
+        {
+          "key": "action",
+          "label": "Action",
+          "kind": "select",
+          "options": [
+            "focus",
+            "blur",
+            "clear",
+            "scroll-into-view",
+            "dispatch-event"
+          ]
+        },
+        {
+          "key": "eventType",
+          "label": "Event type",
+          "kind": "text",
+          "help": "For \"dispatch an event\". Bubbles, cancelable and composed."
+        },
+        {
+          "key": "detail",
+          "label": "Detail (JSON)",
+          "kind": "text",
+          "templated": true,
+          "help": "For \"dispatch an event\". Built-in types (click, keydown, input, focus, drag…): the event’s properties. Other types are a CustomEvent and this is its event.detail."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, passed on."
+        },
+        {
+          "key": "defaultPrevented",
+          "description": "For \"dispatch an event\": true when the page cancelled the event."
+        }
+      ]
+    },
+    {
       "type": "upload-file",
       "label": "Upload File",
       "category": "page",
-      "description": "Choose a file for a file input, without the file dialog: text you write, or a file from a URL.",
+      "description": "Choose a file for a file input or drop it on a drop zone, without the file dialog: text you write, a file from a URL, or base64 data.",
       "canStart": true,
       "canTakeInput": true,
       "ports": [
@@ -870,17 +1269,28 @@
         "source": "text",
         "content": "",
         "url": "",
+        "data": "",
         "filename": "upload.txt",
-        "mime": "text/plain"
+        "mime": "text/plain",
+        "target": "input"
       },
       "fields": [
         {
           "key": "locator",
-          "label": "File input",
+          "label": "File input or drop zone",
           "kind": "locator",
           "required": true,
           "templated": true,
-          "help": "The <input type=\"file\"> (hidden ones work too), or its label."
+          "help": "The <input type=\"file\"> (hidden ones work too) or its label; with \"drop zone\", the area files are dropped on."
+        },
+        {
+          "key": "target",
+          "label": "Put it",
+          "kind": "select",
+          "options": [
+            "input",
+            "dropzone"
+          ]
         },
         {
           "key": "source",
@@ -888,7 +1298,8 @@
           "kind": "select",
           "options": [
             "text",
-            "url"
+            "url",
+            "data"
           ]
         },
         {
@@ -906,6 +1317,13 @@
           "help": "For \"download\"."
         },
         {
+          "key": "data",
+          "label": "Data",
+          "kind": "text",
+          "templated": true,
+          "help": "For \"base64 data\": base64 or a data: URL, usually {{body64}} from HTTP Request with \"Response as: base64\"."
+        },
+        {
           "key": "filename",
           "label": "File name",
           "kind": "text",
@@ -916,7 +1334,8 @@
           "key": "mime",
           "label": "Type",
           "kind": "text",
-          "help": "For \"text\". With a URL the server says."
+          "templated": true,
+          "help": "For \"text\" and \"base64 data\" ({{mime}} after HTTP Request; a data: URL brings its own). With a URL the server says."
         },
         {
           "key": "tab",
@@ -1063,7 +1482,9 @@
         "locator": "",
         "text": "",
         "url": "",
-        "status": ""
+        "status": "",
+        "method": "",
+        "captureBody": false
       },
       "fields": [
         {
@@ -1081,7 +1502,8 @@
             "url",
             "load",
             "networkidle",
-            "response"
+            "response",
+            "request"
           ]
         },
         {
@@ -1102,13 +1524,25 @@
           "label": "URL pattern",
           "kind": "text",
           "templated": true,
-          "help": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression. Also the request address for \"a network request finishes\"."
+          "help": "Plain text: the URL contains it. * matches any part between slashes, ** anything. /…/ is a regular expression. Also the request address for the network modes."
         },
         {
           "key": "status",
           "label": "Status (optional)",
           "kind": "text",
           "help": "For \"a network request finishes\"."
+        },
+        {
+          "key": "method",
+          "label": "Method (optional)",
+          "kind": "text",
+          "help": "For the network modes. Empty = any."
+        },
+        {
+          "key": "captureBody",
+          "label": "Capture the response body",
+          "kind": "boolean",
+          "help": "For \"a network request finishes\". Chrome, Edge, Brave only (debugger permission). Only responses that start after this block starts can be read, so it suits slow or later requests."
         },
         {
           "key": "tab",
@@ -1124,7 +1558,11 @@
         },
         {
           "key": "response",
-          "description": "For \"a network request finishes\": {url, status, method}."
+          "description": "For \"a network request finishes\": {url, status, method}, plus body (or bodyBase64) with \"Capture the response body\"."
+        },
+        {
+          "key": "request",
+          "description": "For \"the page sends a request\": {url, method, type, postData}."
         }
       ]
     },
@@ -1594,6 +2032,76 @@
       ]
     },
     {
+      "type": "screenshot",
+      "label": "Screenshot",
+      "category": "read",
+      "description": "Take a picture of what the tab shows, the whole page, or one element. Shown on the step and in the report.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "tab": "main",
+        "area": "visible",
+        "locator": "",
+        "format": "png",
+        "quality": 80
+      },
+      "fields": [
+        {
+          "key": "area",
+          "label": "Take",
+          "kind": "select",
+          "options": [
+            "visible",
+            "full",
+            "element"
+          ]
+        },
+        {
+          "key": "locator",
+          "label": "Element",
+          "kind": "locator",
+          "templated": true,
+          "help": "For \"one element\". It is scrolled into view first."
+        },
+        {
+          "key": "format",
+          "label": "Format",
+          "kind": "select",
+          "options": [
+            "png",
+            "jpeg"
+          ]
+        },
+        {
+          "key": "quality",
+          "label": "JPEG quality",
+          "kind": "number",
+          "min": 1,
+          "max": 100
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "screenshotId",
+          "description": "Id of the stored picture (shown on the step and in the report)."
+        },
+        {
+          "key": "screenshot",
+          "description": "{id, width, height, area}: the size in pixels."
+        }
+      ]
+    },
+    {
       "type": "assert",
       "label": "Assert",
       "category": "test",
@@ -1631,6 +2139,13 @@
             "unchecked",
             "enabled",
             "disabled",
+            "focused",
+            "editable",
+            "in-viewport",
+            "class",
+            "css",
+            "accessible-name",
+            "accessible-description",
             "url",
             "title",
             "value"
@@ -1645,9 +2160,9 @@
         },
         {
           "key": "name",
-          "label": "Attribute name",
+          "label": "Attribute or CSS property",
           "kind": "text",
-          "help": "Only for \"attribute of an element\"."
+          "help": "The attribute name for \"attribute of an element\", the CSS property (color, display…) for \"CSS value\"."
         },
         {
           "key": "value",
@@ -1836,6 +2351,90 @@
       ]
     },
     {
+      "type": "switch",
+      "label": "Switch",
+      "category": "logic",
+      "description": "Go one of several ways: the first case that matches the value picks the output, else \"default\".",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "first",
+        "second",
+        "default"
+      ],
+      "dynamicPorts": true,
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "value": "{{value}}",
+        "cases": [
+          {
+            "port": "first",
+            "operator": "equals",
+            "value": "1"
+          },
+          {
+            "port": "second",
+            "operator": "equals",
+            "value": "2"
+          }
+        ]
+      },
+      "fields": [
+        {
+          "key": "value",
+          "label": "Value",
+          "kind": "text",
+          "templated": true,
+          "help": "What the cases look at."
+        },
+        {
+          "key": "cases",
+          "label": "Cases (first match wins)",
+          "kind": "rows",
+          "required": true,
+          "columns": [
+            {
+              "key": "port",
+              "label": "Output"
+            },
+            {
+              "key": "operator",
+              "label": "Condition",
+              "options": [
+                "equals",
+                "not-equals",
+                "contains",
+                "not-contains",
+                "starts-with",
+                "ends-with",
+                "matches",
+                "greater",
+                "greater-equal",
+                "less",
+                "less-equal",
+                "empty",
+                "not-empty",
+                "true",
+                "false"
+              ]
+            },
+            {
+              "key": "value",
+              "label": "Compare to",
+              "templated": true
+            }
+          ],
+          "help": "Each case is an output named after it (letters, digits, \"_\" and \"-\"; not \"default\", \"error\", \"out\" or \"done\"). No match goes to \"default\". For a pattern, write /text/i."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "(same data)",
+          "description": "The input, unchanged, out of the matching case or \"default\"."
+        }
+      ]
+    },
+    {
       "type": "for-each",
       "label": "For Each",
       "category": "logic",
@@ -1888,7 +2487,7 @@
       "type": "repeat",
       "label": "Repeat",
       "category": "logic",
-      "description": "Run the blocks on \"each\" a number of times, then continue from \"done\".",
+      "description": "Run the blocks on \"each\" a number of times, or until / while a condition holds, then continue from \"done\".",
       "canStart": true,
       "canTakeInput": true,
       "ports": [
@@ -1897,21 +2496,93 @@
       ],
       "timeoutSeconds": 3600,
       "defaultConfig": {
-        "times": 3
+        "mode": "times",
+        "times": 3,
+        "left": "{{iteration}}",
+        "operator": "equals",
+        "right": "",
+        "max": 100,
+        "failAtMax": true
       },
       "fields": [
+        {
+          "key": "mode",
+          "label": "Repeat",
+          "kind": "select",
+          "options": [
+            "times",
+            "until",
+            "while"
+          ]
+        },
         {
           "key": "times",
           "label": "Times",
           "kind": "number",
           "min": 1,
-          "max": 1000
+          "max": 1000,
+          "help": "For \"a number of times\"."
+        },
+        {
+          "key": "left",
+          "label": "Value",
+          "kind": "text",
+          "templated": true,
+          "perItem": true,
+          "help": "Until / while: rendered at every check against the data the last time ended with ({{iteration}} = times run so far)."
+        },
+        {
+          "key": "operator",
+          "label": "Condition",
+          "kind": "select",
+          "options": [
+            "equals",
+            "not-equals",
+            "contains",
+            "not-contains",
+            "starts-with",
+            "ends-with",
+            "matches",
+            "greater",
+            "greater-equal",
+            "less",
+            "less-equal",
+            "empty",
+            "not-empty",
+            "true",
+            "false"
+          ]
+        },
+        {
+          "key": "right",
+          "label": "Compare to",
+          "kind": "text",
+          "templated": true,
+          "perItem": true
+        },
+        {
+          "key": "max",
+          "label": "At most (times)",
+          "kind": "number",
+          "min": 1,
+          "max": 10000,
+          "help": "Until / while: a safety limit."
+        },
+        {
+          "key": "failAtMax",
+          "label": "Fail when the limit is reached",
+          "kind": "boolean",
+          "help": "Off: continue from \"done\" instead."
         }
       ],
       "outputs": [
         {
           "key": "iteration",
           "description": "On \"each\": 1, 2, 3…"
+        },
+        {
+          "key": "iterations",
+          "description": "On \"done\": how many times it ran. Until / while: \"done\" also carries the data the last round ended with."
         }
       ]
     },
@@ -2308,7 +2979,8 @@
         "method": "GET",
         "headers": "",
         "body": "",
-        "failOnError": true
+        "failOnError": true,
+        "responseType": "text"
       },
       "fields": [
         {
@@ -2348,6 +3020,15 @@
           "key": "failOnError",
           "label": "Stop the flow on HTTP errors (4xx, 5xx)",
           "kind": "boolean"
+        },
+        {
+          "key": "responseType",
+          "label": "Response as",
+          "kind": "select",
+          "options": [
+            "text",
+            "base64"
+          ]
         }
       ],
       "outputs": [
@@ -2370,6 +3051,14 @@
         {
           "key": "data",
           "description": "Parsed JSON, when the body is JSON."
+        },
+        {
+          "key": "body64",
+          "description": "With \"Response as: base64\": the body, base64 (empty `body`). Upload File takes it as source \"data\"."
+        },
+        {
+          "key": "mime",
+          "description": "With \"Response as: base64\": the response's Content-Type without parameters (Upload File \"Type\": {{mime}})."
         }
       ]
     },

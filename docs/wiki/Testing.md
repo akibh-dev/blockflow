@@ -142,7 +142,11 @@ capability **records** what it was asked in a public array and **answers** throu
 | `notifications` | `notify` |
 | `dialogSettings`, `scripts` | `page.dialogs`, `page.runScript` |
 | `screenshotsTaken` | `screenshots.capture` (returns `shot-1`, `shot-2`, …) |
+| `screenshotRequests` | `screenshots.take` (returns `block-shot-1`, … 800×600, full page 800×2400) |
+| `cookieJar` | `cookies.get/set/remove`: cookies by origin |
 | `downloaded` | `downloads.save` |
+| `pageDownloads`, `downloadReads` | `downloads.waitFor` consumes `pageDownloads` (with an optional `content` for `readText`); `readText` calls |
+| `sentRequests`, `responseOptions` | `tabs.waitForRequest` consumes `sentRequests`; options passed to `waitForResponse` (`responses` entries may carry `method` and `body`) |
 | `prompts` | `prompt.ask` messages |
 | `sleeps` | Every `host.sleep(ms)` (timeouts, retry backoff, Assert polling) |
 | `scheduler.timers`, `state.data` | Pending timers and block state |
@@ -245,7 +249,7 @@ A spec that throws is reported as `<name>: spec crashed` and the run goes on wit
 | Serve fixtures | `startServer()` from `server.mjs` on `127.0.0.1:<random port>` |
 | Launch | `chromium.launchPersistentContext` (playwright-core) with a temp profile, `--load-extension`, headed by default; `BF_HEADLESS=1` adds `--headless=new` |
 | Find the extension | Waits for the service worker; its URL gives the extension id; opens `chrome-extension://<id>/editor.html` |
-| Run a workflow | `run(wf)` sends `{ type: 'bf:run-workflow', workflow }` from the editor page, then polls `bf:runs` in `chrome.storage.local` every 200 ms until a finished run appears (90 s limit). See [Message Protocol](Message-Protocol.md) and [Storage Keys](Storage-Keys.md) |
+| Run a workflow | `run(wf)` sends `{ type: 'bf:run-workflow', workflow }` from the editor page, then polls `bf:runs` in `chrome.storage.local` every 200 ms until a finished run of that workflow appears that was not there before the call (so running the same workflow twice in a row gets the second run; 90 s limit). See [Message Protocol](Message-Protocol.md) and [Storage Keys](Storage-Keys.md) |
 | Seed state | `seedWorkflows(list)` closes the editor (it saves on close), writes `bf:workflows`, reopens it. Secrets go to `bf:secrets` |
 | First-run card | Sets `bf:onboarding` to dismissed before the editor opens, so the "Try it" card does not cover the canvas (the `editor-ux` spec brings it back) |
 | Report | `check(name, ok, detail)` prints ✓/✗; exit code 1 if any check failed. Last check: no uncaught errors in the editor page. |
@@ -270,6 +274,13 @@ Scenarios by spec:
 | Phase E | `login.html`, `welcome.html`, `table.html` | Recorder → blocks and replay, Pick on page with alternatives, undo/redo/copy/paste, templates, `{{` autocomplete, Page Visited trigger |
 | **harder-pages** | | |
 | Phase F | `upload.html`, `popup.html`, `dialogs.html`, `/frames.html` + `frame-inner.html`, `api.html`, `trusted.html`, `login.html` | Upload File, Wait for Popup (`window.open`, `target=_blank`), Dialogs, same- and cross-origin iframes, Wait For response, real (trusted) input via debugger, background-tab screenshot, Run Script (passes or explains Chrome 135+), Playwright export run with `npx playwright test` |
+| **m2-actions** | | |
+| Click options | `clicks.html` | `button` middle (auxclick), `modifiers`, `position` (measured from the padding box, as Playwright), `clickCount` 3 (detail 1–3, dblclick), right-click; synthetic and real input (`isTrusted`, Chrome's own right-click order) |
+| Element Action | `clicks.html` | focus, clear (`change` with the empty value), blur, a CustomEvent with templated JSON `detail`, a built-in `click` with its init, scroll into view |
+| Drag | `dnd.html` | An HTML5 sortable list reorders and a pointer-capture slider moves to 75, synthetic (`dragMode` html5 / pointer) and with real input (CDP drag interception; trusted `dragstart` and `pointerdown`) |
+| Drop zone, upload from data | `upload.html` | Upload File `target: dropzone` (text, and a `data:` URL), HTTP Request `responseType: base64` → Upload File `source: data` with `{{body64}}` and `{{mime}}` |
+| **m2-browser** | | |
+| M2.7, M2.8, M2.10, M2.13 | `m2-browser.html`, `/export.csv`, `/login-cookie`, `/whoami` | Wait for Download of a CSV link (rows into a dataset) and of a page-made `blob:` JSON file; Screenshot visible (background tab), full page (taller than 2600 px), element (300×120 card), stored as PNG in IndexedDB; Cookies & Storage reading an HttpOnly cookie, setting one the server then receives, delete, clear; local/session storage set/get/delete/clear; Wait For request (POST body), response with a method filter and a captured body; the same blocks exported to Playwright and run with `npx playwright test` |
 | **scripts** | | |
 | M1.2 | `table.html` + editor UI | Importing a `.script.json` through the Import button: blocks laid out (If rejoin), the run passes; Export as script enabled; Tidy up after a drag puts the blocks back on the grid, and Undo reverts it |
 | **blocks-coverage** | | |
@@ -289,6 +300,7 @@ Scenarios by spec:
 | Error codes | `snapshot.html` | `locator.not-found` (with locator and page URL), `locator.strict` (two `matches`), `element.disabled`, `assert.failed` (with locator), `timeout` (text never shown), `locator.invalid`; Export JSON has `schemaVersion` 1 and the codes |
 | 📸 Snapshot page | `snapshot.html` | The Open Tab button copies the outline with the title/URL header (the clipboard write is captured in the page: Playwright cannot grant clipboard access to an extension origin) |
 | Editor UX (`editor-ux`) | editor UI; `docs/manual-test/playground.html` via `scripts/playground.mjs` on port 7357 | In-editor toasts and confirm/input dialogs (no native ones), the All workflows switch and Turn all on with a problem workflow, `bf:state` cleanup on delete, recorder start-URL check, real-input setting only on page actions, undo per workflow, paste at the mouse, the Try it card and the playground template passing |
+| Flow control (`m2-flow`) | editor UI | A Switch shows one handle per case plus `default`; a connection dragged from a case handle is saved with that port; adding a case adds a handle; renaming a case key by key keeps its connection; a run goes out of the matching case only, or `default`; removing a case removes its handle and connection. Repeat until stops when the condition holds on what the round produced, and fails at `max` |
 | Import checking (`import-check`) | editor UI | Importing a broken file (unknown type, mistyped config key) opens the issues dialog with each code, JSON path and did-you-mean and imports nothing; a file with only warnings imports and its toast's Details lists `page.no-tab`; Escape closes the dialog |
 | Authoring evals (`evals`) | every page used by [tests/evals/tasks.json](../../tests/evals/tasks.json) | Each reference solution in `tests/evals/solutions/` is imported through the editor (compiled and checked), run, and scored with its task's checks (`status`, `output` at a dot path, `step-type`); the scorer the M4 CLI will reuse |
 
@@ -343,9 +355,13 @@ register a bridge content script on `http://127.0.0.1/*`
 `{ bfE2e, op, arg }` (`send` a runtime message, `get` from `storage.local`, `ping`) and the bridge answers.
 Workflows run through `bf:run-workflow`, exactly like the Chromium specs.
 
-The 14 checks cover forms, HTML parsing without an offscreen document, `storage.session` watch tabs,
-upload, popups, dialogs, IndexedDB datasets, in-run delays, screenshots on failure, Notify, and the
-"Chromium only" errors for Run Script and real input. CI runs it in the `e2e-firefox` job.
+The 30 checks cover forms, HTML parsing without an offscreen document, `storage.session` watch tabs,
+upload, popups, dialogs, IndexedDB datasets, in-run delays, screenshots on failure, Notify, the
+"Chromium only" errors for Run Script, real input and response bodies, and M2: Wait for Download (real file
+names, CSV and `blob:` JSON), Screenshot in all three areas through `tabs.captureTab`, Cookies & Storage,
+Wait For request, locator filters and role states, the new Assert subjects, click options, Element Action
+(focus in a background tab, a CustomEvent), synthetic Drag (HTML5 list and pointer slider) and a drop zone.
+CI runs it in the `e2e-firefox` job.
 
 ## Manual test pages
 

@@ -1,6 +1,6 @@
-import { LocatorSyntaxError, parseLocatorSteps } from '../core/locatorSyntax';
+import { FILTERS, LocatorSyntaxError, nestedLocator, parseLocatorAlternatives, parseLocatorSteps, parseRoleSelector, roleState, unquoteValue, visibleFilter } from '../core/locatorSyntax';
 import type { LocatorStep as Step } from '../core/locatorSyntax';
-import { accessibleName, checkedState, getRole, isHiddenForAria } from './aria';
+import { accessibleName, checkedState, disabledState, expandedState, getRole, isHiddenForAria, pressedState, selectedState } from './aria';
 
 /**
  * Finds elements from a locator string, Playwright style. Runs inside web pages: DOM only.
@@ -9,7 +9,8 @@ import { accessibleName, checkedState, getRole, isHiddenForAria } from './aria';
  *   text=Sign in                                 visible text, case-insensitive, substring
  *   text="Sign in"                               exact text (quotes)
  *   text=/sign\s?in/i                            regular expression
- *   role=button[name="Submit"]                   ARIA role (+ name, checked, level)
+ *   role=button[name="Submit"]                   ARIA role (+ name, exact, checked, pressed, expanded,
+ *                                                selected, disabled, level, include-hidden)
  *   label=Email                                  form control by its label (or aria-label)
  *   placeholder=you@example.com                  by placeholder
  *   testid=login                                 data-testid / data-test / data-cy / data-qa
@@ -17,6 +18,11 @@ import { accessibleName, checkedState, getRole, isHiddenForAria } from './aria';
  *   xpath=//form//button, //form//button         XPath
  *   A >> B                                       B inside A
  *   A >> nth=0, nth=-1                           first / last of the matches so far
+ *   A >> has-text=Apple, has-not-text=…          filters: keep matches whose text has / lacks it
+ *   A >> has=<locator>, has-not=<locator>        keep matches with / without such an element inside
+ *                                                (quote it when it has steps: has="li >> text=x")
+ *   A >> visible, visible=false                  keep visible (or hidden) matches
+ *   A || B                                       what A or B matches (binds loosest)
  */
 
 /** An invalid locator (syntax, unknown engine, bad CSS/XPath/regex). The agent reports it as a Fatal error. */
@@ -40,14 +46,19 @@ export class FrameBoundaryError extends LocatorError {
 const TEST_ID_ATTRIBUTES = ['data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-qa'];
 const SKIP_TEXT = new Set(['script', 'style', 'noscript', 'template', 'head', 'title', 'meta', 'link']);
 
-/** {@link parseLocatorSteps}, with syntax errors rethrown as {@link LocatorError}. */
-export function parseLocator(source: string): Step[] {
+/** Runs `fn`, rethrowing syntax errors from src/core/locatorSyntax.ts as {@link LocatorError}. */
+function syntax<T>(fn: () => T): T {
   try {
-    return parseLocatorSteps(source);
+    return fn();
   } catch (error) {
     if (error instanceof LocatorSyntaxError) throw new LocatorError(error.message);
     throw error;
   }
+}
+
+/** {@link parseLocatorSteps} (one alternative, no `||`), with syntax errors rethrown as {@link LocatorError}. */
+export function parseLocator(source: string): Step[] {
+  return syntax(() => parseLocatorSteps(source));
 }
 
 function normalize(text: string): string {
@@ -135,35 +146,36 @@ function queryText(body: string, scope: ParentNode): Element[] {
   });
 }
 
-/** Parsed `role=name[name=...][exact][checked][level=N][include-hidden]`. */
+/** Parsed `role=name[name=...][exact][checked][pressed][expanded][selected][disabled][level=N][include-hidden]`. */
 interface RoleQuery {
   role: string;
   name?: (text: string) => boolean;
-  checked?: boolean;
+  /** Yes/no states to match, with the reader of each. */
+  states: { read: (element: Element) => boolean | null; wanted: boolean }[];
   level?: number;
   includeHidden: boolean;
 }
 
+const STATE_READERS: Record<string, (element: Element) => boolean | null> = {
+  checked: checkedState,
+  pressed: pressedState,
+  expanded: expandedState,
+  selected: selectedState,
+  disabled: disabledState,
+};
+
 function parseRole(body: string): RoleQuery {
-  const match = /^([a-z-]+)\s*([\s\S]*)$/i.exec(body.trim());
-  if (!match) throw new LocatorError(`Invalid role locator: role=${body}`);
-  const query: RoleQuery = { role: (match[1] as string).toLowerCase(), includeHidden: false };
+  const selector = syntax(() => parseRoleSelector(body));
+  const query: RoleQuery = { role: selector.role, states: [], includeHidden: false };
   let exact = false;
   let nameBody: string | undefined;
-  const attributes = /\[\s*([a-z-]+)\s*(?:=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/(?:[^/\\]|\\.)+\/[dgimsuyv]*|[^\]]*?))?\s*\]/gi;
-  let rest = match[2] as string;
-  for (const attr of rest.matchAll(attributes)) {
-    const key = (attr[1] as string).toLowerCase();
-    const value = attr[2];
-    rest = rest.replace(attr[0], '');
-    if (key === 'name') nameBody = value ?? '';
-    else if (key === 'exact') exact = true;
-    else if (key === 'checked') query.checked = value === undefined || unquote(value).value !== 'false';
-    else if (key === 'level') query.level = Number(unquote(value ?? '').value);
-    else if (key === 'include-hidden') query.includeHidden = true;
-    else throw new LocatorError(`Unknown role option [${key}]. Use name, exact, checked, level, include-hidden.`);
+  for (const option of selector.options) {
+    if (option.key === 'name') nameBody = option.value ?? '';
+    else if (option.key === 'exact') exact = true;
+    else if (option.key === 'level') query.level = Number(unquoteValue(option.value ?? ''));
+    else if (option.key === 'include-hidden') query.includeHidden = true;
+    else query.states.push({ read: STATE_READERS[option.key] as (element: Element) => boolean | null, wanted: syntax(() => roleState(option)) });
   }
-  if (rest.trim()) throw new LocatorError(`Invalid role locator: role=${body}`);
   if (nameBody !== undefined) {
     // Unlike text=, a quoted role name is still a case-insensitive substring unless [exact] is set.
     const { value } = unquote(nameBody);
@@ -177,7 +189,8 @@ function queryRole(body: string, scope: ParentNode): Element[] {
   return allElements(scope).filter((element) => {
     if (getRole(element) !== query.role) return false;
     if (query.name && !query.name(accessibleName(element))) return false;
-    if (query.checked !== undefined && checkedState(element) !== query.checked) return false;
+    // An element without the state (no aria-pressed...) matches neither [pressed] nor [pressed=false].
+    if (query.states.some(({ read, wanted }) => read(element) !== wanted)) return false;
     if (query.level !== undefined) {
       const level = Number(element.getAttribute('aria-level') ?? /^h([1-6])$/.exec(element.localName)?.[1]);
       if (level !== query.level) return false;
@@ -277,19 +290,100 @@ function inDocumentOrder(elements: Element[]): Element[] {
 }
 
 /**
+ * Visible the way actions mean it (the agent's own check is the same): connected, no `[hidden]` or
+ * `display:none` on it or an ancestor, no `visibility:hidden|collapse` on itself, and, when the page has
+ * layout (not jsdom or a parsed document), a non-empty box.
+ */
+export function isVisibleElement(element: Element): boolean {
+  if (!element.isConnected || element.closest('[hidden]')) return false;
+  const view = element.ownerDocument.defaultView;
+  if (view) {
+    for (let current: Element | null = element; current; current = current.parentElement) {
+      const style = view.getComputedStyle(current);
+      if (style.display === 'none') return false;
+      if (current === element && (style.visibility === 'hidden' || style.visibility === 'collapse')) return false;
+    }
+  }
+  if (!(element.ownerDocument.documentElement.getBoundingClientRect().width > 0)) return true;
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+/** Whether `inner` (a whole locator) finds something strictly inside `element`. Other-origin frames count as no. */
+function contains(element: Element, inner: string): boolean {
+  try {
+    return resolveLocator(inner, element).some((found) => found !== element);
+  } catch (error) {
+    if (error instanceof FrameBoundaryError) return false;
+    throw error;
+  }
+}
+
+/** A filter step (FILTERS) applied to the matches so far, like Playwright's `locator.filter()`. */
+function applyFilter(step: Step, current: Element[]): Element[] {
+  switch (step.engine) {
+    case 'has-text':
+    case 'has-not-text': {
+      if (!step.body) throw new LocatorError(`${step.engine}= needs the text to look for`);
+      const matches = textMatcher(step.body);
+      const wanted = step.engine === 'has-text';
+      return current.filter((element) => matches(ownText(element)) === wanted);
+    }
+    case 'has':
+    case 'has-not': {
+      const inner = syntax(() => nestedLocator(step.body));
+      // Fail on a bad inner locator even when there is nothing to filter yet.
+      syntax(() => parseLocatorAlternatives(inner));
+      const wanted = step.engine === 'has';
+      return current.filter((element) => contains(element, inner) === wanted);
+    }
+    case 'visible': {
+      const wanted = syntax(() => visibleFilter(step.body));
+      return current.filter((element) => isVisibleElement(element) === wanted);
+    }
+    default:
+      throw new LocatorError(`Unknown filter "${step.engine}"`);
+  }
+}
+
+/**
  * Every element the locator matches, in document order. Throws LocatorError for invalid locators.
+ * `A || B` resolves each alternative and merges the matches.
  *
  * `frame=<css>` searches inside every matching same-origin frame. Matching frames from another origin
  * are skipped; only when the whole locator finds nothing does it throw {@link FrameBoundaryError} for
  * the first skipped frame, so the extension can continue inside that frame.
  */
 export function resolveLocator(source: string, root: ParentNode = document): Element[] {
-  const steps = parseLocator(source);
+  const alternatives = syntax(() => parseLocatorAlternatives(source));
+  if (alternatives.length === 1) return resolveSteps(alternatives[0] as Step[], root);
+  const found: Element[] = [];
+  let skipped: FrameBoundaryError | null = null;
+  for (const steps of alternatives) {
+    try {
+      found.push(...resolveSteps(steps, root));
+    } catch (error) {
+      if (!(error instanceof FrameBoundaryError)) throw error;
+      skipped ??= error;
+    }
+  }
+  if (found.length === 0 && skipped) throw skipped;
+  return inDocumentOrder(found);
+}
+
+/** One alternative: steps searched one inside the other, filters narrowing the matches so far. */
+function resolveSteps(steps: Step[], root: ParentNode): Element[] {
   let current: Element[] | null = null;
   let scopes: ParentNode[] = [root];
   /** The first cross-origin frame skipped, with the steps that would have searched it. */
   let skipped: FrameBoundaryError | null = null;
   for (const [index, step] of steps.entries()) {
+    if (FILTERS.has(step.engine)) {
+      if (current === null) throw new LocatorError(`${step.engine}= filters the matches of the step before it; start with a locator (e.g. role=listitem >> ${step.engine}=…)`);
+      current = applyFilter(step, current);
+      scopes = current;
+      continue;
+    }
     if (step.engine === 'nth') {
       const position = Number(step.body);
       if (!Number.isInteger(position)) throw new LocatorError(`nth needs a whole number: nth=${step.body}`);

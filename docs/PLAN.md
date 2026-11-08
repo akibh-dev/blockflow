@@ -1,6 +1,6 @@
 # BlockFlow product plan: Playwright-compatible automation in your browser
 
-> **Status:** agreed, 2026-11-05 (decisions in §8). M0 done (v0.2.0), M1 done (v0.3.0, 2026-11-06). Task-level steps: [IMPLEMENTATION.md](IMPLEMENTATION.md). This plan replaces the
+> **Status:** agreed, 2026-11-05 (decisions in §8). M0 done (v0.2.0), M1 done (v0.3.0, 2026-11-06), M2 done (v0.4.0, 2026-11-06). Task-level steps: [IMPLEMENTATION.md](IMPLEMENTATION.md). This plan replaces the
 > phase list in [PLAN-automation.md](PLAN-automation.md) (phases A–F, all built) as the guide for what comes next.
 
 ## 1. Goal
@@ -74,27 +74,27 @@ Nothing is proposed for removal at the feature level.
 | --- | --- | --- | --- |
 | Navigate, back/forward/reload, wait for URL/load/networkidle | `goto`, `waitForURL`… | ✅ Open Tab, Navigate, Wait For | — |
 | Locators by role/text/label/testid, chaining, nth, frames | `getBy*`, `locator()` | ✅ | — |
-| Locator filters: `has`, `hasText`, `hasNot`, `visible`, `or`/`and` | ✅ | ❌ | **M2**: `>> has=…`, `>> has-text=…`, `>> visible`, `\|\|` (or) in the locator syntax |
-| Role options `pressed`, `expanded`, `selected`, `disabled` | ✅ | 🟡 `name`, `exact`, `checked`, `level`, `include-hidden` | **M2** |
-| Click options: modifiers (Ctrl/Shift), position, middle button, click count | ✅ | 🟡 click/double/right/hover, force | **M2** |
-| `focus`, `blur`, `clear`, `dispatchEvent`, `scrollIntoView` | ✅ | ❌ (scroll to element exists) | **M2**: one "Element action" block or op per action |
-| Drag and drop | `dragTo` | ❌ | **M2**: synthetic HTML5 DnD in the agent, plus CDP mouse path with `realInput` |
-| Keyboard shortcuts / chords, `insertText` | ✅ | 🟡 Press Key with `Control+A` | Check chords work in both modes (**M0** test) |
-| File upload | `setInputFiles` | ✅ text or URL | Add a "from dataset/previous download" source (M2) |
-| File chooser via drop zone | 🟡 | ❌ | **M2**: synthetic `drop` with a `DataTransfer` |
-| Downloads: wait for, save, read name | `waitForEvent('download')` | ❌ (only our own Download block) | **M2**: Wait for Download (`downloads` API) giving `filename`, `url`, `size` |
+| Locator filters: `has`, `hasText`, `hasNot`, `visible`, `or`/`and` | ✅ | ✅ `>> has-text=`, `has-not-text=`, `has=`, `has-not=`, `visible`, `\|\|` (no `and`) | **M2** ✅ |
+| Role options `pressed`, `expanded`, `selected`, `disabled` | ✅ | ✅ also `pressed`, `expanded`, `selected`, `disabled` | **M2** ✅ |
+| Click options: modifiers (Ctrl/Shift), position, middle button, click count | ✅ | ✅ Click `button`, `modifiers`, `position`, `clickCount` | **M2** ✅ |
+| `focus`, `blur`, `clear`, `dispatchEvent`, `scrollIntoView` | ✅ | ✅ Element Action block | **M2** ✅ |
+| Drag and drop | `dragTo` | ✅ Drag block (synthetic HTML5 + pointer, CDP with `realInput`) | **M2** ✅ |
+| Keyboard shortcuts / chords, `insertText` | ✅ | ✅ chords in both input modes, `ControlOrMeta`, Press Key `mode: "text"` | **M2** ✅ |
+| File upload | `setInputFiles` | ✅ text, URL or base64 data | **M2** ✅ (`source: data`) |
+| File chooser via drop zone | 🟡 | ✅ Upload File `target: dropzone` | **M2** ✅ |
+| Downloads: wait for, save, read name | `waitForEvent('download')` | ✅ Wait for Download (`downloads` API): `filename`, `url`, `size`, `mime`; `read` CSV/JSON/text by fetching the address again | **M2** ✅ |
 | Dialogs | ✅ | ✅ | — |
 | Popups / new pages | ✅ | ✅ | — |
 | `expect`: text, value, visible/hidden, enabled, checked, count, attribute, URL, title | ✅ | ✅ | — |
-| `expect`: `toHaveClass`, `toHaveCSS`, `toBeFocused`, `toBeEditable`, `toBeInViewport`, `toHaveAccessibleName` | ✅ | ❌ | **M2**: add Assert subjects |
+| `expect`: `toHaveClass`, `toHaveCSS`, `toBeFocused`, `toBeEditable`, `toBeInViewport`, `toHaveAccessibleName` | ✅ | ✅ Assert `class`, `css`, `focused`, `editable`, `in-viewport`, `accessible-name`, `accessible-description` | **M2** ✅ |
 | Visual comparison | `toHaveScreenshot` | ❌ | **M5**: baseline per step, pixel diff in the offscreen document |
 | ARIA snapshot | `toMatchAriaSnapshot` | ❌ | **M1** as an authoring tool for LLMs (§5), **M5** as an assertion |
-| Screenshots: page, full page, element, on demand | ✅ | 🟡 visible tab only, as a step setting | **M2**: Screenshot block (visible area; full page and element via CDP) |
-| Network: wait for response | `waitForResponse` | ✅ Wait For `response` | Add `request` mode (M2) |
+| Screenshots: page, full page, element, on demand | ✅ | ✅ Screenshot block (Chromium: full page / background tabs via CDP; Firefox: `captureTab`) | **M2** ✅ |
+| Network: wait for response / request | `waitForResponse`, `waitForRequest` | ✅ Wait For `response` (method, body via CDP on Chromium) and `request` | **M2** ✅ |
 | Network: mock, block, modify (`route`) | ✅ | ❌ | **M3**: Route block via CDP `Fetch` (Chromium); simple block/redirect rules via `declarativeNetRequest` on every browser |
 | HAR record/replay | ✅ | ❌ | **M3** record (CDP), replay later |
 | Emulation: viewport, device, geolocation, locale, timezone, offline, color scheme | ✅ | ❌ | **M3**: Emulate block via CDP `Emulation` |
-| Cookies and storage: read / set / clear | `context.cookies()`, `storageState` | 🟡 read only (Page Info) | **M2**: Cookies & Storage block (set, delete, clear) via `cookies` API and the page |
+| Cookies and storage: read / set / clear | `context.cookies()`, `storageState` | ✅ Cookies & Storage (cookies API, HttpOnly too; page storage) | `storageState` save/load later |
 | Isolation between tests | new context per test | ❌ shared profile | **M3**: optional "clean site data before run" (`browsingData`); incognito runs only if needed (§8) |
 | API testing | `request` fixture | ✅ HTTP Request | Make `failOnError` actually fail (§6) |
 | `evaluate` | ✅ | ✅ Run Script | — |
@@ -103,7 +103,7 @@ Nothing is proposed for removal at the feature level.
 | Debugging: pause, step through, inspector | `page.pause()`, `--debug` | ❌ | **M5**: breakpoints (step setting `pause`), step-over in the editor |
 | Codegen | ✅ | ✅ recorder | Fix the recorder gaps (§6) |
 | Headless / CI | ✅ | 🟡 Playwright export | **M4**: CLI runner (§5) |
-| Branching beyond true/false; loop until | (code) | 🟡 If, For Each, Repeat | **M2**: Switch (n outputs), Repeat `until` condition |
+| Branching beyond true/false; loop until | (code) | ✅ If, Switch (one output per case + default), For Each, Repeat (`times`, `until`, `while`) | **M2** ✅ |
 
 **Won't do:** running WebKit or Firefox engines from Chrome, headless inside the extension, parallel
 browsers inside one profile, and bypassing CAPTCHAs.

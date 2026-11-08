@@ -1,9 +1,9 @@
-import { accessibleName, checkedState, getRole } from './aria';
+import { accessibleDescription, accessibleName, checkedState, getRole } from './aria';
 import { FrameBoundaryError, LocatorError, describeElement, resolveLocator, textMatcher } from './locator';
 import { bestLocator } from './bestLocator';
 import { takeSnapshot } from './snapshot';
 import { SNAPSHOT_MAX_LINES } from '../core/page';
-import type { AgentCall, AgentRequest, AgentResponse, FormFieldRow } from '../core/page';
+import type { AgentCall, AgentRequest, AgentResponse, FormFieldRow, Modifier, Point, UploadFile } from '../core/page';
 import type { ErrorCode } from '../core/errors';
 
 /**
@@ -46,6 +46,9 @@ class Fatal extends Error {
     super(message);
   }
 }
+
+/** What a click request says about the mouse. */
+type ClickOptions = Pick<Extract<AgentRequest, { op: 'click' }>, 'action' | 'button' | 'modifiers' | 'position' | 'clickCount'>;
 
 /** The `result` of a `done` answer. Must stay structured-cloneable: it goes back through `executeScript`. */
 type Done = Record<string, unknown>;
@@ -242,11 +245,22 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     metaKey: boolean;
   }
 
+  /** Modifier keys held during a mouse action, as event init flags. */
+  type ModifierFlags = Pick<MouseEventInit, 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'>;
+
+  function modifierFlags(modifiers: readonly Modifier[] = []): ModifierFlags {
+    return { altKey: modifiers.includes('Alt'), ctrlKey: modifiers.includes('Control'), metaKey: modifiers.includes('Meta'), shiftKey: modifiers.includes('Shift') };
+  }
+
+  /** `MouseEvent.buttons` bit of a `MouseEvent.button` (0 left -> 1, 2 right -> 2, 1 middle -> 4). */
+  const buttonBit = (button: number) => 1 << (button === 2 ? 1 : button === 1 ? 2 : 0);
+
   /**
    * Dispatches one synthetic pointer/mouse event (composed, so it crosses shadow boundaries).
    * Pointer events are skipped where `PointerEvent` does not exist. Returns false if it was cancelled.
+   * `buttons` defaults to the pressed button on *down events and none otherwise.
    */
-  function mouse(target: Element, type: string, x: number, y: number, button: number, detail: number): boolean {
+  function mouse(target: Element, type: string, x: number, y: number, button: number, detail: number, flags: ModifierFlags = {}, buttons?: number): boolean {
     const init: MouseEventInit = {
       bubbles: type !== 'mouseenter' && type !== 'mouseleave',
       cancelable: true,
@@ -254,8 +268,9 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       clientX: x,
       clientY: y,
       button,
-      buttons: type.endsWith('down') ? 1 << (button === 2 ? 1 : button === 1 ? 2 : 0) : 0,
+      buttons: buttons ?? (type.endsWith('down') ? buttonBit(button) : 0),
       detail,
+      ...flags,
     };
     const PointerCtor = (win as unknown as { PointerEvent?: typeof PointerEvent }).PointerEvent;
     if (type.startsWith('pointer') && PointerCtor) {
@@ -269,31 +284,72 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   function focus(element: Element): void {
     const focusable = (element.closest('a[href], button, input, select, textarea, [tabindex], [contenteditable=""], [contenteditable="true"]') ??
       element) as HTMLElement;
-    if (typeof focusable.focus === 'function') focusable.focus();
+    if (typeof focusable.focus !== 'function') return;
+    // A tab that is not showing has no focused window, and then Firefox moves focus without firing the
+    // focus events. Fire them ourselves in that case (Chrome fires them; then nothing is added).
+    let fired = false;
+    const seen = () => {
+      fired = true;
+    };
+    focusable.addEventListener('focus', seen, { once: true });
+    focusable.focus();
+    focusable.removeEventListener('focus', seen);
+    if (!fired && focusable.ownerDocument.activeElement === focusable) {
+      focusable.dispatchEvent(new win.FocusEvent('focus', { bubbles: false, composed: true }));
+      focusable.dispatchEvent(new win.FocusEvent('focusin', { bubbles: true, composed: true }));
+    }
+  }
+
+  /** Takes focus away from `element`, firing blur / focusout when the browser does not (see `focus`). */
+  function blur(element: HTMLElement): void {
+    let fired = false;
+    const seen = () => {
+      fired = true;
+    };
+    element.addEventListener('blur', seen, { once: true });
+    element.blur?.();
+    element.removeEventListener('blur', seen);
+    if (!fired && element.ownerDocument.activeElement !== element) {
+      element.dispatchEvent(new win.FocusEvent('blur', { bubbles: false, composed: true }));
+      element.dispatchEvent(new win.FocusEvent('focusout', { bubbles: true, composed: true }));
+    }
+  }
+
+  /** A point of the element in its document's viewport: `position` from its top-left corner, or its center. */
+  function pointIn(element: Element, position?: Point): { x: number; y: number } {
+    if (!position) return center(element);
+    // From the padding box's corner (inside the border), as Playwright's `position`.
+    const rect = element.getBoundingClientRect();
+    return { x: rect.left + element.clientLeft + position.x, y: rect.top + element.clientTop + position.y };
   }
 
   /**
    * The full synthetic sequence: hover events, then per press pointerdown, mousedown (+ focus unless
-   * cancelled), pointerup, mouseup, click (or contextmenu); `dblclick` after two presses.
+   * cancelled), pointerup, mouseup, click (left), auxclick (middle) or contextmenu (right); `dblclick`
+   * after the second left press. `action: 'double'` is two presses, `'right'` the right button.
    */
-  function click(element: Element, action: 'click' | 'double' | 'right' | 'hover'): void {
-    const { x, y } = hasLayout() ? center(element) : { x: 0, y: 0 };
-    const button = action === 'right' ? 2 : 0;
+  function click(element: Element, request: ClickOptions): void {
+    const { action } = request;
+    const { x, y } = hasLayout() || request.position ? pointIn(element, request.position) : { x: 0, y: 0 };
+    const flags = modifierFlags(request.modifiers);
+    const which = action === 'right' ? 'right' : (request.button ?? 'left');
+    const button = which === 'right' ? 2 : which === 'middle' ? 1 : 0;
     for (const type of ['pointerover', 'pointerenter', 'mouseover', 'mouseenter', 'pointermove', 'mousemove']) {
-      mouse(element, type, x, y, 0, 0);
+      mouse(element, type, x, y, 0, 0, flags);
     }
     if (action === 'hover') return;
-    const presses = action === 'double' ? 2 : 1;
+    const presses = Math.max(action === 'double' ? 2 : 1, Math.floor(request.clickCount ?? 1));
     for (let press = 1; press <= presses; press += 1) {
-      mouse(element, 'pointerdown', x, y, button, press);
-      if (mouse(element, 'mousedown', x, y, button, press)) focus(element);
-      mouse(element, 'pointerup', x, y, button, press);
-      mouse(element, 'mouseup', x, y, button, press);
-      if (action === 'right') mouse(element, 'contextmenu', x, y, button, press);
+      mouse(element, 'pointerdown', x, y, button, press, flags);
+      if (mouse(element, 'mousedown', x, y, button, press, flags)) focus(element);
+      mouse(element, 'pointerup', x, y, button, press, flags);
+      mouse(element, 'mouseup', x, y, button, press, flags);
+      if (button === 2) mouse(element, 'contextmenu', x, y, button, press, flags);
+      else if (button === 1) mouse(element, 'auxclick', x, y, button, press, flags);
       // A dispatched click still runs the element's default action: follow a link, toggle a checkbox, submit a form.
-      else mouse(element, 'click', x, y, button, press);
+      else mouse(element, 'click', x, y, button, press, flags);
+      if (press === 2 && button === 0) mouse(element, 'dblclick', x, y, button, 2, flags);
     }
-    if (action === 'double') mouse(element, 'dblclick', x, y, button, 2);
   }
 
   function inputEvent(element: Element, data: string | null, inputType = 'insertText'): void {
@@ -416,7 +472,7 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     if (before === null) throw new Fatal(`${describeElement(element)} is not a checkbox, radio or switch`, 'element.wrong-type');
     if (before === checked) return { changed: false, checked };
     if (!checked && (element as HTMLInputElement).type === 'radio') throw new Fatal('A radio button cannot be unchecked; check another one instead', 'element.wrong-type');
-    click(element, 'click');
+    click(element, { action: 'click' });
     if (checkedState(element) !== checked) throw new Fatal(`Clicking ${describeElement(element)} did not ${checked ? 'check' : 'uncheck'} it`);
     return { changed: true, checked };
   }
@@ -440,23 +496,37 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   // --- keyboard -------------------------------------------------------------
 
-  /** "Control+Shift+a" → key "a" plus modifier flags (ctrl/control, shift, alt, meta/cmd/command). */
+  /** Mac keyboards use Meta (⌘) where others use Control: the target of `ControlOrMeta`. */
+  const isMac = /Mac|iPhone|iPad/.test(win.navigator?.platform ?? '');
+
+  /**
+   * "Control+Shift+a" → key "A" plus modifier flags (ctrl/control, shift, alt, meta/cmd/command, and
+   * ControlOrMeta: Meta on a Mac, else Control). With Shift a lowercase letter becomes uppercase, as typed.
+   */
   function parseKey(combo: string): KeyInfo {
     const parts = combo.split('+').map((part) => part.trim());
     const keyName = parts.pop() || combo;
     const has = (name: string) => parts.some((part) => part.toLowerCase() === name);
+    const either = has('controlormeta');
+    const shiftKey = has('shift');
     return {
-      key: keyName,
-      ctrlKey: has('control') || has('ctrl'),
-      shiftKey: has('shift'),
+      key: shiftKey && /^[a-z]$/.test(keyName) ? keyName.toUpperCase() : keyName,
+      ctrlKey: has('control') || has('ctrl') || (either && !isMac),
+      shiftKey,
       altKey: has('alt'),
-      metaKey: has('meta') || has('cmd') || has('command'),
+      metaKey: has('meta') || has('cmd') || has('command') || (either && isMac),
     };
+  }
+
+  /** The modifier keys held for `info`, in the order they go down. */
+  function modifierKeys(info: KeyInfo): string[] {
+    return [info.ctrlKey && 'Control', info.altKey && 'Alt', info.metaKey && 'Meta', info.shiftKey && 'Shift'].filter((name): name is string => Boolean(name));
   }
 
   /** Dispatches one synthetic KeyboardEvent; returns false when the page cancelled it. */
   function key(target: Element, type: 'keydown' | 'keypress' | 'keyup', info: KeyInfo): boolean {
-    const code = info.key.length === 1 ? (/[a-z]/i.test(info.key) ? `Key${info.key.toUpperCase()}` : /\d/.test(info.key) ? `Digit${info.key}` : '') : info.key;
+    const modifier = ['Control', 'Alt', 'Meta', 'Shift'].includes(info.key);
+    const code = info.key.length === 1 ? (/[a-z]/i.test(info.key) ? `Key${info.key.toUpperCase()}` : /\d/.test(info.key) ? `Digit${info.key}` : '') : modifier ? `${info.key}Left` : info.key;
     return target.dispatchEvent(new win.KeyboardEvent(type, { ...info, code, bubbles: true, cancelable: true, composed: true }));
   }
 
@@ -473,6 +543,14 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
    */
   function press(target: Element, combo: string): Done {
     const info = parseKey(combo);
+    // Modifiers go down first and come up last, each event carrying the modifiers held so far (as Playwright does).
+    const modifiers = modifierKeys(info);
+    const held: KeyInfo = { key: '', ctrlKey: false, shiftKey: false, altKey: false, metaKey: false };
+    const flag = { Control: 'ctrlKey', Alt: 'altKey', Meta: 'metaKey', Shift: 'shiftKey' } as const;
+    for (const name of modifiers) {
+      held[flag[name as keyof typeof flag]] = true;
+      key(target, 'keydown', { ...held, key: name });
+    }
     const allowed = key(target, 'keydown', info);
     const printable = info.key.length === 1 && !info.ctrlKey && !info.metaKey && !info.altKey;
     if (allowed && (printable || info.key === 'Enter') && key(target, 'keypress', info)) {
@@ -505,21 +583,115 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
         const index = list.indexOf(target as HTMLElement);
         const next = list[(index + (info.shiftKey ? -1 : 1) + list.length) % list.length];
         next?.focus();
-      } else if (info.ctrlKey && info.key.toLowerCase() === 'a' && (target as HTMLInputElement).select) {
-        (target as HTMLInputElement).select();
+      } else if ((isMac ? info.metaKey : info.ctrlKey) && info.key.toLowerCase() === 'a') {
+        // Select all: Control+A, or Meta+A on a Mac (like the browser on that system).
+        if (typeof (target as HTMLInputElement).select === 'function') (target as HTMLInputElement).select();
+        else if (textKind(target) === 'editable') win.getSelection()?.selectAllChildren(target);
       }
     }
     key(target, 'keyup', info);
+    for (const name of [...modifiers].reverse()) {
+      held[flag[name as keyof typeof flag]] = false;
+      key(target, 'keyup', { ...held, key: name });
+    }
     return { key: combo };
   }
 
+  /**
+   * Text at the caret (replacing the selection) with one `input` event and no key events. Uses the
+   * browser's own `insertText` command when it works (undo, beforeinput), else edits the value.
+   */
+  function insertText(target: Element, text: string): Done {
+    const kind = textKind(target);
+    if (!kind) throw new Fatal(`${describeElement(target)} cannot take text. Point at a text field, or focus one first.`, 'element.wrong-type');
+    const owner = target.ownerDocument;
+    if (owner.activeElement === target || kind === 'editable') {
+      if (typeof owner.execCommand === 'function' && owner.execCommand('insertText', false, text)) return { text };
+    }
+    if (kind === 'editable') {
+      target.append(owner.createTextNode(text));
+      inputEvent(target, text);
+      return { text };
+    }
+    const field = target as HTMLInputElement | HTMLTextAreaElement;
+    let start: number | null = null;
+    let end: number | null = null;
+    try {
+      start = field.selectionStart;
+      end = field.selectionEnd;
+    } catch {
+      // email / number inputs have no selection API: append.
+    }
+    const value = field.value;
+    const from = start ?? value.length;
+    const to = end ?? from;
+    setNativeValue(field, value.slice(0, from) + text + value.slice(to));
+    try {
+      field.setSelectionRange(from + text.length, from + text.length);
+    } catch {
+      // see above
+    }
+    inputEvent(field, text);
+    return { text };
+  }
+
   // --- reading ------------------------------------------------------------
+
+  /** The element has focus in its document (through open shadow roots: the innermost focused element). */
+  function isFocused(element: Element): boolean {
+    let active = element.ownerDocument.activeElement;
+    while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+    return active === element;
+  }
+
+  const EDITABLE_ROLES = new Set(['textbox', 'searchbox', 'combobox', 'spinbutton', 'slider', 'checkbox', 'radio', 'switch', 'listbox']);
+
+  /** Editable like Playwright's toBeEditable: a form field (or contenteditable / such a role), enabled and not read-only. */
+  function canEdit(element: Element): boolean {
+    const field = textKind(element) !== null || ['input', 'select', 'textarea'].includes(element.localName) || EDITABLE_ROLES.has(getRole(element) ?? '');
+    if (!field || (element as HTMLInputElement).type === 'hidden') return false;
+    return isEnabled(element) && isEditable(element);
+  }
+
+  /** Some of the element's box is inside the viewport, from its box alone (no layout: false). */
+  function inViewportByRect(element: Element): boolean {
+    if (!hasLayout()) return false;
+    const rect = element.getBoundingClientRect();
+    const origin = documentOrigin(element.ownerDocument);
+    const left = Math.max(rect.left + origin.x, 0);
+    const top = Math.max(rect.top + origin.y, 0);
+    const right = Math.min(rect.right + origin.x, win.innerWidth);
+    const bottom = Math.min(rect.bottom + origin.y, win.innerHeight);
+    return right > left && bottom > top;
+  }
+
+  /**
+   * Like Playwright's toBeInViewport: an IntersectionObserver's first answer has a ratio above 0 (it also
+   * sees clipping by scrolled containers). A tab in the background may never answer, so after 500 ms the
+   * element's box decides.
+   */
+  function inViewport(element: Element): Promise<boolean> {
+    const view = (element.ownerDocument.defaultView ?? win) as PageWindow;
+    if (typeof view.IntersectionObserver !== 'function') return Promise.resolve(inViewportByRect(element));
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (inside: boolean) => {
+        if (settled) return;
+        settled = true;
+        observer.disconnect();
+        resolve(inside);
+      };
+      const observer = new view.IntersectionObserver((entries) => finish((entries[0]?.intersectionRatio ?? 0) > 0));
+      observer.observe(element);
+      win.setTimeout(() => finish(inViewportByRect(element)), 500);
+    });
+  }
 
   /**
    * Not strict: uses the first match. count/exists/visible/checked/enabled answer even with no match;
    * text/value/attribute/has-class wait (Pending) for one.
    */
-  function read(request: Extract<AgentRequest, { op: 'read' }>): Done {
+  function read(request: Extract<AgentRequest, { op: 'read' }>): Done | Promise<Done> {
     const found = all(request.locator);
     const count = found.length;
     if (request.kind === 'count') return { found: true, text: String(count), count };
@@ -529,11 +701,23 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     if (request.kind === 'visible') return { found: true, text: String(found.some(isVisible)), count };
     if (request.kind === 'checked') return { found: true, text: String(element ? checkedState(element) === true : false), count };
     if (request.kind === 'enabled') return { found: true, text: String(element ? isEnabled(element) && isVisible(element) : false), count };
+    if (request.kind === 'focused') return { found: true, text: String(element ? isFocused(element) : false), count };
+    if (request.kind === 'editable') return { found: true, text: String(element ? canEdit(element) : false), count };
+    if (request.kind === 'in-viewport') {
+      if (!element) return { found: true, text: 'false', count };
+      return inViewport(element).then((inside) => ({ found: true, text: String(inside), count }));
+    }
     if (!element) throw new Pending(`waiting for ${request.locator}: no element matches`, 'locator.not-found');
     const name = request.name ?? '';
     let text: string;
     if (request.kind === 'attribute') text = element.getAttribute(name) ?? '';
     else if (request.kind === 'has-class') text = String(element.classList.contains(name));
+    else if (request.kind === 'class') text = (element.getAttribute('class') ?? '').replace(/\s+/g, ' ').trim();
+    else if (request.kind === 'css') {
+      if (!name.trim()) throw new Fatal('Reading a CSS value needs the property name (e.g. color)', 'config.invalid');
+      text = (element.ownerDocument.defaultView ?? win).getComputedStyle(element).getPropertyValue(name.trim()).trim();
+    } else if (request.kind === 'accessible-name') text = accessibleName(element);
+    else if (request.kind === 'accessible-description') text = accessibleDescription(element);
     else if (request.kind === 'value') text = 'value' in element ? String((element as HTMLInputElement).value) : '';
     // textContent, as Watch Element always used, so existing watchers keep comparing like with like.
     else text = element.textContent ?? '';
@@ -659,6 +843,24 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
 
   /** localStorage / sessionStorage / `document.cookie` (HttpOnly cookies are invisible here). */
   function storage(request: Extract<AgentRequest, { op: 'storage' }>): Done {
+    const action = request.action ?? 'get';
+    if (action !== 'get') {
+      if (request.area === 'cookies') throw new Fatal('Cookies are changed through the browser (Cookies & Storage block), not the page', 'config.invalid');
+      const store = request.area === 'local' ? win.localStorage : win.sessionStorage;
+      if (action === 'clear') {
+        const cleared = store.length;
+        store.clear();
+        return { cleared };
+      }
+      if (!request.key) throw new Fatal(`A key is needed to ${action} an entry`, 'config.invalid');
+      if (action === 'set') {
+        store.setItem(request.key, request.value ?? '');
+        return { value: request.value ?? '' };
+      }
+      const existed = store.getItem(request.key) !== null;
+      store.removeItem(request.key);
+      return { deleted: existed ? 1 : 0 };
+    }
     if (request.area === 'cookies') {
       // Cookies the page can see (not HttpOnly ones).
       const cookies = Object.fromEntries(
@@ -695,30 +897,261 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return { height: scroller.scrollHeight, y: win.scrollY };
   }
 
+  /** The files of an upload request as `File`s of this window. */
+  function toFiles(files: UploadFile[]): File[] {
+    return files.map((file) => {
+      const binary = win.atob(file.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      return new win.File([bytes], file.name, { type: file.type });
+    });
+  }
+
   /**
    * Puts files on an `<input type=file>` through a DataTransfer. The locator may point at the input,
    * a label for it, or an element containing it. No visibility check: the input is often hidden.
    */
-  function upload(locator: string, files: { name: string; type: string; base64: string }[]): Done {
+  function upload(locator: string, files: UploadFile[]): Done {
     const found = one(locator);
     const input = (found.localName === 'input' ? found : (found as HTMLLabelElement).control ?? found.querySelector('input[type="file"]')) as HTMLInputElement | null;
     if (!input || input.localName !== 'input' || input.type !== 'file') {
-      throw new Fatal(`${describeElement(found)} is not a file input. Point at the <input type="file"> (it may be hidden).`, 'element.wrong-type');
+      throw new Fatal(`${describeElement(found)} is not a file input. Point at the <input type="file"> (it may be hidden), or set target to "dropzone" for a drop area.`, 'element.wrong-type');
     }
     if (!isEnabled(input)) throw new Pending(`waiting for ${describeElement(input)} to be enabled`, 'element.disabled');
     if (files.length > 1 && !input.multiple) throw new Fatal(`${describeElement(input)} takes one file, got ${files.length}`, 'element.wrong-type');
     if (typeof win.DataTransfer !== 'function') throw new Fatal('This page cannot receive files (no DataTransfer)');
     const transfer = new win.DataTransfer();
-    for (const file of files) {
-      const binary = win.atob(file.base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-      transfer.items.add(new win.File([bytes], file.name, { type: file.type }));
-    }
+    for (const file of toFiles(files)) transfer.items.add(file);
     input.files = transfer.files;
     inputEvent(input, null, 'insertReplacementText');
     changeEvent(input);
     return { files: files.map((file) => file.name) };
+  }
+
+  // --- drag and drop --------------------------------------------------------
+
+  /**
+   * A DataTransfer for synthetic drag events: the page's own class where it can be constructed (Chrome,
+   * Firefox), else a small stand-in with the same methods (jsdom, old engines). `files` are on it from the start.
+   */
+  function dataTransfer(files: File[] = []): DataTransfer {
+    if (typeof win.DataTransfer === 'function') {
+      try {
+        const transfer = new win.DataTransfer();
+        for (const file of files) transfer.items.add(file);
+        return transfer;
+      } catch {
+        // Fall through to the stand-in.
+      }
+    }
+    const data = new Map<string, string>();
+    const items = files.map((file) => ({ kind: 'file', type: file.type, getAsFile: () => file, getAsString: () => {} }));
+    const stand = {
+      dropEffect: 'none',
+      effectAllowed: 'all',
+      files: Object.assign([...files], { item: (index: number) => files[index] ?? null }),
+      items: Object.assign(items, { add: () => null, remove: () => {}, clear: () => {} }),
+      get types() {
+        return [...data.keys(), ...(files.length > 0 ? ['Files'] : [])];
+      },
+      setData: (format: string, value: string) => void data.set(format.toLowerCase(), String(value)),
+      getData: (format: string) => data.get(format.toLowerCase()) ?? '',
+      clearData: (format?: string) => (format ? void data.delete(format.toLowerCase()) : data.clear()),
+      setDragImage: () => {},
+    };
+    return stand as unknown as DataTransfer;
+  }
+
+  /**
+   * Firefox: a DataTransfer made by a content script shows its files in `items` but an empty `files` to the
+   * page during an untrusted drop, and pages read `files`. Give the page's view of the transfer its own
+   * `files`: the FileList of a second DataTransfer that is not part of a drag. Elsewhere `wrappedJSObject`
+   * does not exist and nothing changes.
+   */
+  function exposeFiles(transfer: DataTransfer, files: File[]): void {
+    const page = (transfer as unknown as { wrappedJSObject?: object }).wrappedJSObject;
+    if (!page || files.length === 0 || typeof win.DataTransfer !== 'function') return;
+    try {
+      const holder = new win.DataTransfer();
+      for (const file of files) holder.items.add(file);
+      Reflect.defineProperty(page, 'files', { value: holder.files, configurable: true });
+    } catch {
+      // Leave the transfer as it is.
+    }
+  }
+
+  /** Dispatches one drag event carrying `transfer`; returns false when the page cancelled it. */
+  function dragEvent(target: Element, type: string, point: { x: number; y: number }, transfer: DataTransfer, flags: ModifierFlags = {}): boolean {
+    const init: DragEventInit = {
+      bubbles: true,
+      cancelable: type !== 'dragleave' && type !== 'dragend',
+      composed: true,
+      clientX: point.x,
+      clientY: point.y,
+      buttons: type === 'drop' || type === 'dragend' ? 0 : 1,
+      ...flags,
+      dataTransfer: transfer,
+    };
+    const DragCtor = (win as unknown as { DragEvent?: typeof DragEvent }).DragEvent;
+    let event: Event | undefined;
+    if (DragCtor) {
+      try {
+        event = new DragCtor(type, init);
+      } catch {
+        event = undefined;
+      }
+    }
+    if (!event || (event as DragEvent).dataTransfer !== transfer) {
+      event = new win.MouseEvent(type, init);
+      Object.defineProperty(event, 'dataTransfer', { value: transfer });
+    }
+    return target.dispatchEvent(event);
+  }
+
+  /** What a pointer at (x, y) would hit (deep, through open shadow roots), or `fallback` without layout. */
+  function hitAt(owner: Document, point: { x: number; y: number }, fallback: Element): Element {
+    if (!hasLayout() || typeof owner.elementFromPoint !== 'function') return fallback;
+    let hit = owner.elementFromPoint(point.x, point.y);
+    while (hit?.shadowRoot) {
+      const inner = hit.shadowRoot.elementFromPoint(point.x, point.y);
+      if (!inner || inner === hit) break;
+      hit = inner;
+    }
+    return hit ?? fallback;
+  }
+
+  /** The element an HTML5 drag starts from: a `draggable="true"` ancestor, or a link/image (draggable by default). */
+  function draggableOf(element: Element): Element | null {
+    const marked = element.closest('[draggable]');
+    if (marked && marked.getAttribute('draggable') !== 'false') return marked;
+    if (marked) return null;
+    return element.closest('a[href], img');
+  }
+
+  /** How many pointer moves a synthetic drag makes between source and target. */
+  const DRAG_STEPS = 5;
+
+  /**
+   * Drags `source` onto `target` with synthetic events (see the `drag` op in page.ts). In the pointer
+   * path, pointer events go to the source, as they would to an element that captured the pointer (what
+   * pointer-based drag code does; synthetic events cannot capture for real), and mouse events go to the
+   * element under the point, as a real mouse's do. Code listening on the document gets both either way.
+   */
+  function drag(source: Element, target: Element, request: Extract<AgentRequest, { op: 'drag' }>): Done {
+    const flags = modifierFlags(request.modifiers);
+    const from = pointIn(source, request.fromPosition);
+    const to = pointIn(target, request.toPosition);
+    const owner = source.ownerDocument;
+    for (const type of ['pointerover', 'pointerenter', 'mouseover', 'mouseenter', 'pointermove', 'mousemove']) mouse(source, type, from.x, from.y, 0, 0, flags);
+    mouse(source, 'pointerdown', from.x, from.y, 0, 1, flags);
+    mouse(source, 'mousedown', from.x, from.y, 0, 1, flags);
+    const draggable = draggableOf(source);
+    if (draggable) {
+      const transfer = dataTransfer();
+      if (dragEvent(draggable, 'dragstart', from, transfer, flags)) {
+        // From here the browser runs the drag: the pointer is cancelled and no mouse up follows.
+        mouse(source, 'pointercancel', from.x, from.y, 0, 0, flags, 0);
+        dragEvent(draggable, 'drag', from, transfer, flags);
+        const over = hitAt(target.ownerDocument, to, target);
+        dragEvent(over, 'dragenter', to, transfer, flags);
+        dragEvent(draggable, 'drag', to, transfer, flags);
+        // Cancelling dragover is how a page says "you may drop here".
+        const accepted = !dragEvent(over, 'dragover', to, transfer, flags);
+        if (accepted) {
+          if (transfer.dropEffect === 'none') {
+            const allowed = transfer.effectAllowed;
+            try {
+              transfer.dropEffect = /copy/i.test(allowed) && !/move|all/i.test(allowed) ? 'copy' : allowed === 'link' ? 'link' : 'move';
+            } catch {
+              // Read-only in some engines.
+            }
+          }
+          dragEvent(over, 'drop', to, transfer, flags);
+        } else dragEvent(over, 'dragleave', to, transfer, flags);
+        dragEvent(draggable, 'dragend', to, transfer, flags);
+        return { dragged: describeElement(source), to: describeElement(target), mode: 'html5', dropped: accepted };
+      }
+    }
+    // Pointer-based drag (sliders, sortables, canvases): moves with the button held, then release over the target.
+    for (let step = 1; step <= DRAG_STEPS; step += 1) {
+      const point = { x: from.x + ((to.x - from.x) * step) / DRAG_STEPS, y: from.y + ((to.y - from.y) * step) / DRAG_STEPS };
+      mouse(source, 'pointermove', point.x, point.y, 0, 0, flags, 1);
+      mouse(hitAt(owner, point, step === DRAG_STEPS ? target : source), 'mousemove', point.x, point.y, 0, 0, flags, 1);
+    }
+    mouse(source, 'pointerup', to.x, to.y, 0, 1, flags, 0);
+    mouse(hitAt(owner, to, target), 'mouseup', to.x, to.y, 0, 1, flags, 0);
+    return { dragged: describeElement(source), to: describeElement(target), mode: 'pointer', dropped: true };
+  }
+
+  /**
+   * Drops files on a drop zone: dragenter, dragover and (when the page accepts it by cancelling
+   * dragover) drop, all with one DataTransfer carrying the files.
+   */
+  function dropFiles(locator: string, files: UploadFile[]): Done {
+    const zone = one(locator);
+    ready(zone, {});
+    const fileList = toFiles(files);
+    const transfer = dataTransfer(fileList);
+    exposeFiles(transfer, fileList);
+    const point = pointIn(zone);
+    dragEvent(zone, 'dragenter', point, transfer);
+    if (dragEvent(zone, 'dragover', point, transfer)) {
+      dragEvent(zone, 'dragleave', point, transfer);
+      throw new Pending(`waiting for ${describeElement(zone)} to accept dropped files (nothing cancels its dragover event)`, 'element.wrong-type');
+    }
+    dragEvent(zone, 'drop', point, transfer);
+    return { files: files.map((file) => file.name), dropped: true };
+  }
+
+  // --- element actions ------------------------------------------------------
+
+  /** Event classes `dispatch` uses per type, like Playwright's `dispatchEvent`. Any other type is a CustomEvent. */
+  const EVENT_CLASSES: [RegExp, string][] = [
+    [/^(click|dblclick|auxclick|contextmenu|mouse(down|up|move|over|out|enter|leave))$/, 'MouseEvent'],
+    [/^pointer/, 'PointerEvent'],
+    [/^(keydown|keyup|keypress)$/, 'KeyboardEvent'],
+    [/^(focus|blur|focusin|focusout)$/, 'FocusEvent'],
+    [/^(drag|dragstart|dragend|dragenter|dragleave|dragover|drop)$/, 'DragEvent'],
+    [/^wheel$/, 'WheelEvent'],
+    [/^(input|beforeinput)$/, 'InputEvent'],
+    [/^touch/, 'TouchEvent'],
+  ];
+
+  function dispatch(element: Element, eventType: string, detail: unknown): Done {
+    const type = eventType.trim();
+    if (!type) throw new Fatal('Dispatch event needs an event type', 'config.invalid');
+    const base = { bubbles: true, cancelable: true, composed: true };
+    const className = EVENT_CLASSES.find(([pattern]) => pattern.test(type))?.[1];
+    const Ctor = className ? (win as unknown as Record<string, (new (type: string, init: object) => Event) | undefined>)[className] : undefined;
+    let event: Event;
+    if (className && Ctor) {
+      const init = detail && typeof detail === 'object' && !Array.isArray(detail) ? (detail as Record<string, unknown>) : {};
+      const transfer = className === 'DragEvent' ? dataTransfer() : undefined;
+      try {
+        event = new Ctor(type, { ...base, ...(transfer ? { dataTransfer: transfer } : {}), ...init });
+      } catch {
+        event = new win.Event(type, { ...base, ...init });
+      }
+    } else if (className) {
+      // The page's window lacks the class (jsdom has no DragEvent, PointerEvent...): a plain Event of that type.
+      event = new win.Event(type, base);
+    } else {
+      // Firefox content scripts must clone objects into the page, or the page cannot read them.
+      const cloneInto = (globalThis as { cloneInto?: (value: unknown, scope: object) => unknown }).cloneInto;
+      const shared = detail && typeof detail === 'object' && typeof cloneInto === 'function' ? cloneInto(detail, win) : detail;
+      event = new win.CustomEvent(type, { ...base, detail: shared ?? null });
+    }
+    const allowed = element.dispatchEvent(event);
+    return { dispatched: type, defaultPrevented: !allowed };
+  }
+
+  /** Empties a text field or contenteditable, like `fill('')`. */
+  function clear(element: Element): Done {
+    if (!textKind(element)) {
+      throw new Fatal(`${describeElement(element)} is not a text field or editable element, so it cannot be cleared`, 'element.wrong-type');
+    }
+    fill(element, '', 'fill');
+    return { value: '' };
   }
 
   /**
@@ -729,7 +1162,8 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   function locate(request: Extract<AgentRequest, { op: 'locate' }>): Done {
     const element = one(request.locator);
     const kind = element.localName === 'select' ? 'select' : checkedState(element) !== null ? 'check' : textKind(element) ? 'text' : 'other';
-    ready(element, { enabled: true, editable: request.purpose === 'fill' || (request.purpose === 'set-field' && kind === 'text'), hit: true });
+    if (request.purpose === 'drop') ready(element, {});
+    else ready(element, { enabled: true, editable: request.purpose === 'fill' || (request.purpose === 'set-field' && kind === 'text'), hit: true });
     // Same-origin frames around it must be on screen too.
     for (let owner = element.ownerDocument; owner !== doc; ) {
       const frame = owner.defaultView?.frameElement;
@@ -737,9 +1171,36 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       frameOffset(frame);
       owner = frame.ownerDocument;
     }
-    const { x, y } = center(element);
+    const { x, y } = pointIn(element, request.position);
     const origin = documentOrigin(element.ownerDocument);
     return { x: x + origin.x, y: y + origin.y, kind };
+  }
+
+  /** Element box in the tab's viewport (after scrolling it into view), or the page's size and scroll. */
+  function measure(request: Extract<AgentRequest, { op: 'measure' }>): Done {
+    if (!request.locator) {
+      const scroller = doc.scrollingElement ?? doc.documentElement;
+      return {
+        scrollX: win.scrollX,
+        scrollY: win.scrollY,
+        viewportWidth: win.innerWidth,
+        viewportHeight: win.innerHeight,
+        pageWidth: Math.max(scroller.scrollWidth, win.innerWidth),
+        pageHeight: Math.max(scroller.scrollHeight, win.innerHeight),
+        devicePixelRatio: win.devicePixelRatio || 1,
+      };
+    }
+    const element = one(request.locator);
+    ready(element, {});
+    for (let owner = element.ownerDocument; owner !== doc; ) {
+      const frame = owner.defaultView?.frameElement;
+      if (!frame) break;
+      frameOffset(frame);
+      owner = frame.ownerDocument;
+    }
+    const rect = element.getBoundingClientRect();
+    const origin = documentOrigin(element.ownerDocument);
+    return { x: rect.left + origin.x, y: rect.top + origin.y, width: rect.width, height: rect.height };
   }
 
   /** The page (or the part under `locator`) as an outline, see src/dom/snapshot.ts. */
@@ -783,12 +1244,12 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
   // --- dispatch -------------------------------------------------------------
 
   /** One try at the request. Throws Pending (retry), Fatal (give up) or FrameBoundaryError (hand over). */
-  function attempt(request: AgentRequest): Done {
+  function attempt(request: AgentRequest): Done | Promise<Done> {
     switch (request.op) {
       case 'click': {
         const element = one(request.locator);
         if (!request.force) ready(element, { enabled: request.action !== 'hover', hit: true });
-        click(element, request.action);
+        click(element, request);
         return { clicked: describeElement(element), url: win.location.href };
       }
       case 'fill': {
@@ -821,6 +1282,15 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
         }
         return press(target, request.key);
       }
+      case 'insert-text': {
+        let target: Element = doc.activeElement && doc.activeElement !== doc.body ? doc.activeElement : doc.body;
+        if (request.locator) {
+          target = one(request.locator);
+          ready(target, { enabled: true, editable: true });
+          if (target.ownerDocument.activeElement !== target) focus(target);
+        }
+        return insertText(target, request.text);
+      }
       case 'read':
         return read(request);
       case 'wait':
@@ -840,11 +1310,39 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       case 'scroll':
         return scroll(request);
       case 'upload':
-        return upload(request.locator, request.files);
+        return request.dropzone ? dropFiles(request.locator, request.files) : upload(request.locator, request.files);
+      case 'focus': {
+        const element = one(request.locator);
+        ready(element, {});
+        focus(element);
+        return { focused: describeElement(element) };
+      }
+      case 'blur': {
+        const element = one(request.locator);
+        const active = element.ownerDocument.activeElement;
+        if (active && (active === element || element.contains(active))) blur(active as HTMLElement);
+        return { blurred: describeElement(element) };
+      }
+      case 'clear': {
+        const element = one(request.locator);
+        ready(element, { enabled: true, editable: true });
+        return clear(element);
+      }
+      case 'dispatch':
+        return dispatch(one(request.locator), request.eventType, request.detail);
+      case 'drag': {
+        const source = one(request.locator);
+        const target = one(request.to);
+        ready(source, { hit: true });
+        ready(target, {});
+        return drag(source, target, request);
+      }
       case 'locate':
         return locate(request);
       case 'snapshot':
         return snapshot(request);
+      case 'measure':
+        return measure(request);
     }
   }
 
@@ -853,10 +1351,10 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
       const deadline = Date.now() + Math.max(0, budgetMs);
       for (;;) {
         try {
-          return { status: 'done', result: attempt(request) };
+          return { status: 'done', result: await attempt(request) };
         } catch (error) {
           if (error instanceof FrameBoundaryError) {
-            const offset = request.op === 'locate' && error.frame ? frameOffset(error.frame) : undefined;
+            const offset = (request.op === 'locate' || request.op === 'measure') && error.frame ? frameOffset(error.frame) : undefined;
             return { status: 'frame', src: error.src, rest: error.rest, ...(offset ? { offset } : {}) };
           }
           const url = doc.URL;

@@ -325,8 +325,36 @@ Fill a file input without the file dialog, submit, and wait for the API call to 
 
 - Blocks: `upload-file` (`source: "text"` with `content`, or `source: "url"` with `url` to fetch a file),
   `click`, `wait-for` (`mode: "response"`; a response that finished during the click still counts), `assert`.
-- Hidden file inputs work; so does pointing at the input's label. Drag-and-drop zones without an
-  `<input type="file">` do not.
+- Hidden file inputs work; so does pointing at the input's label. A drop zone without an
+  `<input type="file">`: `"target": "dropzone"` with the zone as `locator` (it receives dragenter, dragover
+  and drop with the file).
+- A binary file from an API (a PDF, an image): HTTP Request with `"responseType": "base64"`, then Upload File
+  with `"source": "data", "data": "{{body64}}", "mime": "{{mime}}", "filename": "invoice.pdf"`. A `data:` URL works
+  as `data` too.
+
+## Drag and drop: sort a list, move a slider
+
+```json
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Reorder and set volume",
+  "steps": [
+    { "open": "https://app.example.com/board" },
+    { "drag": { "from": "#todo >> text=Write docs", "to": "#done" } },
+    { "id": "moved", "assert": { "locator": "#done", "operator": "contains", "expected": "Write docs" } },
+    { "drag": { "from": "role=slider[name=\"Volume\"]", "to": "#volume-track", "toPosition": "150,10" } },
+    { "click": { "locator": "#list >> text=Item 3", "modifiers": "Shift" } },
+    { "element-action": { "locator": "#search", "action": "dispatch-event", "eventType": "input" } }
+  ]
+}
+```
+
+- Blocks: `drag` (HTML5 `draggable` lists and kanban boards, and pointer-event sliders and sortables;
+  `toPosition` is x,y from the target's top-left corner), `click` with `modifiers` (Shift+click selects a
+  range), `element-action` (focus, blur, clear, scroll into view, dispatch an event).
+- Sites that only react to trusted events: set `"step": { "realInput": true }` on the drag (Chromium); it
+  then uses the browser's own mouse, native drags included.
 
 ## See also
 

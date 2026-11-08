@@ -84,8 +84,11 @@ A workflow as a list of steps. Import compiles it into blocks and connections an
   lists.
 - **Order and branches**: a step connects to the next one from `out` (loops: from `done`). Lists under
   `each` (For Each, Repeat, Paginate: the loop body) and `onError` (any block: runs when it fails, and sets
-  `step.onError: "port"`) end where they end. **If rejoins**: the step after an If runs after the last
-  step of `true` or of `false`; a missing branch goes straight to it.
+  `step.onError: "port"`) end where they end. **If and Switch rejoin**: the step after an If runs after the
+  last step of `true` or of `false`; a missing branch goes straight to it. A Switch's branch keys are its
+  case names (`"port"` of each row in `cases`) plus `default`, and rejoin the same way:
+  `{ "switch": { "value": "{{status}}", "cases": [ { "port": "ok", "operator": "equals", "value": "200" } ] },
+  "ok": [ … ], "default": [ … ] }`.
 - **Aliases**: `open` = `open-url`, `goto` = `navigate`, `press` = `press-key`, `select` = `select-option`.
 - **A bare value** instead of settings: `open-url`/`navigate` → `url`; `click`/`check`/`wait-for` →
   `locator`; `press-key` → `key`; `log`/`notify` → `message`; `run-script` → `code`; `run-workflow` →
@@ -226,6 +229,7 @@ Every "Element"/"Field" setting is a locator, Playwright style:
 | `role=button[name="Save"]` | ARIA role + accessible name (name: contains, any case) |
 | `role=button[name="Save"][exact]` | exact name |
 | `role=checkbox[checked]`, `role=heading[level=2]` | state / heading level |
+| `role=button[pressed]`, `role=button[expanded=false]`, `role=tab[selected]`, `role=button[disabled]` | ARIA states (`aria-pressed`, `aria-expanded`, `aria-selected` or a selected `<option>`, disabled natively or by `aria-disabled`); `=false` for the opposite. An element without `aria-pressed`/`aria-expanded` matches neither. `[include-hidden]` also finds hidden elements |
 | `label=Email`, `label="Email"` | form control by its `<label>`, `aria-label` or `aria-labelledby` |
 | `placeholder=you@example.com` | input by placeholder |
 | `testid=submit` | `data-testid`, `data-test-id`, `data-test`, `data-cy` or `data-qa` |
@@ -234,6 +238,17 @@ Every "Element"/"Field" setting is a locator, Playwright style:
 | `#cart >> text=Remove` | the second inside the first |
 | `li >> nth=0`, `li >> nth=-1` | first / last match |
 | `frame=#pay >> label=Card number` | inside an iframe (same site or another site) |
+| `role=listitem >> has-text=Apple` | **filter**: keep the matches so far whose text contains "Apple" (same text rules as `text=`: any case, `"exact"`, `/regex/`) |
+| `li >> has-not-text=Sold out` | filter: keep those whose text does not |
+| `role=row >> has=role=button[name="Edit"]` | filter: keep those with such an element inside; quote an inner locator that has steps: `has="td >> text=Paid"` |
+| `li >> has-not=button` | filter: keep those without |
+| `button >> visible`, `>> visible=false` | filter: keep only visible (or only hidden) matches |
+| `#accept \|\| role=button[name="OK"]` | either one (all matches of both, in page order). `\|\|` binds loosest: `A >> B \|\| C` is `(A >> B) \|\| C` |
+
+Filters narrow what the step before found, like Playwright's `locator.filter()`, so they never come first.
+They combine with everything else: `role=listitem >> has-text=Banana >> role=button[name="Delete"]` is
+"the Delete button in the Banana row". The picker and recorder write such a locator themselves when the
+same button repeats in every row.
 
 Common roles: `button`, `link`, `textbox`, `checkbox`, `radio`, `combobox` (a `<select>`), `heading`,
 `listitem`, `row`, `cell`, `dialog`, `switch`, `tab`, `img`.
@@ -286,7 +301,9 @@ be read. Long pages are cut at 1,500 lines with a note: snapshot one part with t
 - **Assert** on the page retries until it passes or the timeout ends, like Playwright's `expect`.
 - **Wait For** modes: `visible`, `hidden`, `attached`, `detached`, `enabled` (need `locator`);
   `text`, `no-text` (need `text`; `locator` optional to look only inside it); `url` (needs `url`
-  pattern); `load`; `networkidle`.
+  pattern); `load`; `networkidle`; `response` (a request finishes: `url` pattern, optional `status`,
+  `method`; `captureBody: true` also returns `response.body`, Chromium only); `request` (the page
+  sends a request: `url` pattern, optional `method`; returns `request.postData`).
 - URL patterns: plain text = "URL contains"; `*` = any characters except `/`, `**` = anything;
   `/regex/flags`.
 
@@ -299,7 +316,30 @@ be read. Long pages are cut at 1,500 lines with a note: snapshot one part with t
 ]
 ```
 
-If operators (also used by Assert): `equals`, `not-equals`, `contains`, `not-contains`,
+**Switch** goes one of several ways. `value` (templated) is compared with each row of `cases` in
+order, `{ "port": "<output name>", "operator": "…", "value": "…" }`; the first that holds sends the data
+out of the output named by its `port`, none sends it out of `default`. Each case is an output: connect
+with `"sourcePort": "<case name>"` (or `"default"`). Case names start with a letter or `_`, then letters,
+digits, `_`, `-`; unique; not `default`, `error`, `out`, `done`, `id`, `step`, `onError`, `switch`. An
+edge from a name the cases do not have is `edge.port.unknown`. In the editor, renaming a case keeps
+its connections, removing it removes them.
+
+```json
+{ "id": "route", "type": "switch", "config": { "value": "{{status}}", "cases": [
+    { "port": "ok", "operator": "equals", "value": "200" },
+    { "port": "server", "operator": "matches", "value": "/^5\\d\\d$/" } ] } }
+```
+
+**Repeat until / while** (loops, not branches, but the same conditions): Repeat's `mode` is `times`
+(default: `times` rounds), `until` (run a round, then stop once `left` `operator` `right` holds; at
+least one round) or `while` (check first, run while it holds; maybe none). The condition is rendered
+at each check against the data the last round **ended with** (so a block on `each` can produce what
+it tests, e.g. HTTP Request's `status`), with `{{iteration}}` = rounds run so far. `max` (default 100)
+caps the rounds; reaching it fails the step unless `failAtMax` is `false`. For until / while, `done`
+carries the data the last check saw plus `iterations`; for times, the input plus `iterations`.
+Example: [`api-status-router`](examples/api-status-router.blockflow.json).
+
+If, Switch and Repeat operators (also used by Assert): `equals`, `not-equals`, `contains`, `not-contains`,
 `starts-with`, `ends-with`, `matches` (regex, write `/…/flags`), `greater`, `greater-equal`, `less`,
 `less-equal` (numbers), `empty`, `not-empty`, `true`, `false` (`true`/`yes`/`on`/`1`).
 
@@ -379,6 +419,7 @@ Every failed step has a `code`. Fix by the code, then the message:
 | `page.restricted` | The browser does not let extensions script this page. | Use a normal web page. |
 | `permission.missing` | An optional permission is not granted. | Grant it on the block or in the extension settings. |
 | `script.error` | Run Script code threw. | Fix the script. |
+| `download.failed` | A download was interrupted, or its content cannot be read (Wait for Download). | Check the link works in a normal tab; to read the file its address must still be reachable. |
 | `config.invalid` | A setting is missing or invalid. | Fix the setting the message names. |
 | `workflow.failed` | A workflow called by Run Workflow failed. | Fix the failing step of the called run (`childRunId`). |
 | `step.failed` | Any other failure. | Read the message. |
@@ -435,15 +476,23 @@ profile's extension storage.
 
 | Situation | Use |
 | --- | --- |
-| A site ignores synthetic clicks/typing (checks `event.isTrusted`) | step setting `"realInput": true` on Click / Fill / Fill Form / Check / Press Key. Uses the browser's debugger (Chrome, Edge, Brave; optional permission, asked when ticked; a "debugging" bar shows while it acts). Works inside iframes too, same-site and cross-site. Also lets failed steps in background tabs get screenshots |
+| A site ignores synthetic clicks/typing (checks `event.isTrusted`) | step setting `"realInput": true` on Click / Fill / Fill Form / Check / Press Key / Drag. Uses the browser's debugger (Chrome, Edge, Brave; optional permission, asked when ticked; a "debugging" bar shows while it acts). Works inside iframes too, same-site and cross-site. Also lets failed steps in background tabs get screenshots |
 | Payment / login widget in an iframe | `frame=<iframe css> >> <locator>` in any locator; cross-origin frames work too. When `frame=` matches several iframes, every same-site one is searched; a cross-site one is used when they find nothing. Pick on page and Record write these locators for you |
 | Web components (open shadow roots) | `text=`, `role=`, `label=`… look inside them; CSS needs `host >>> inner`. Pick on page and Record see inside them |
 | "Sign in with…" popup, `target=_blank` link | Click, then **Wait for Popup** (`name: "popup"`), then blocks with `"tab": "popup"` |
 | `alert` / `confirm` / `prompt` | **Dialogs** (`accept` + prompt `text`, or `dismiss`) **before** the click that opens them; `read` returns `{{dialogs}}` / `{{lastDialog}}` |
-| File chooser | **Upload File** on the `<input type="file">` (hidden ones too, or its label): text you write, or a file from a URL |
-| Wait for an API call instead of the UI | **Wait For** `mode: "response"`, `url` pattern, optional `status` (`201`, `2xx`). A response that finished during the previous block counts |
+| File chooser | **Upload File** on the `<input type="file">` (hidden ones too, or its label): text you write (`source: "text"`), a file from a URL (`"url"`), or base64 data (`"data"`, e.g. `"{{body64}}"` after HTTP Request with `"responseType": "base64"`, or a `data:` URL) |
+| Drop zone ("drag files here", no file input) | **Upload File** with `"target": "dropzone"` and the zone as `locator`: it gets dragenter, dragover and drop with the file in a DataTransfer. Waits (then fails with `element.wrong-type`) while nothing cancels the zone's `dragover` |
+| Drag and drop: sortable lists, kanban cards, sliders | **Drag** `from` → `to` (optional `fromPosition` / `toPosition` as `"x,y"` from each element's top-left corner, `modifiers`). HTML5 drags (`draggable="true"`) get the drag events with one shared DataTransfer; anything else gets pointer/mouse moves with the button held (sliders, pointer-event sortables). `dragMode` in the output says which. With `realInput` the browser's own mouse drags (native drags too) |
+| Shift+click, Ctrl+click, middle click, triple click, click at a spot | **Click** `modifiers` (`"Shift"`, `"Control+Shift"`; Alt, Control, Meta, Shift), `button` (`left`, `middle`, `right`), `clickCount`, `position` (`"x,y"` from the element's top-left corner inside its border, like Playwright). `action` stays the quick choice: `right` = right button, `double` = 2 clicks, `hover` only moves (with the modifiers held) |
+| Focus or blur a field, clear it, scroll an element into view, fire an event | **Element Action** `action`: `focus`, `blur`, `clear`, `scroll-into-view`, `dispatch-event` (`eventType`; `detail` JSON: for built-in types like `click`, `keydown`, `input` the event's properties, e.g. `{"key": "Enter"}`; for any other type a CustomEvent whose `event.detail` it is). Output `defaultPrevented` |
+| Wait for an API call instead of the UI | **Wait For** `mode: "response"`, `url` pattern, optional `status` (`201`, `2xx`) and `method`. A response that finished during the previous block counts. `mode: "request"` waits for the request itself (`{{request.postData}}` is what the page sent) |
+| Read an API response's body | **Wait For** `mode: "response"` with `captureBody: true` → `{{response.body}}` (Chrome, Edge, Brave; debugger permission, Grant button). Only responses that **start after** the Wait For starts can be read, so it suits slow or later requests (polling, a request a timer sends); for a response that comes right after a Click, call the API with HTTP Request instead |
+| "Export" button or link that downloads a file | Click, then **Wait for Download** (`url`: part of the address or file name). `{{download.filename}}`, `.size`, `.mime`, `.url`. `read: "csv"` / `"json"` / `"text"` fetches the file again from its address (extensions cannot open files on disk) → `{{rows}}` / `{{data}}` / `{{content}}`, optionally into a `dataset`. Files the page builds itself (blob: links) are read in the page, while it still has them |
+| A picture of the page or one element | **Screenshot** (`area`: `visible`, `full`, `element` + `locator`; `png` or `jpeg`). Shown on the step and in the report; `{{screenshotId}}`. Chromium: full page, elements of a tab that is not showing, and any tab that is not showing need the debugger permission (Grant button); without it, an element of the showing tab is cut from the visible area. Firefox: all three work without extra permissions |
+| Log in by cookie, reset state between tests | **Cookies & Storage**: `action` `get` / `set` / `delete` / `clear` on `area` `cookies` (the browser's cookie jar, HttpOnly ones too; optional "cookies" permission, Grant button; `url` = whose cookies, default the tab's page; set: `domain`, `path`, `maxAgeSeconds`, `httpOnly`, `secure`, `sameSite`) or `local` / `session` (the page's storage, by `name` = key) |
 | Anything no block does | **Run Script**: async JS body, sees `data`, `return` a JSON value. Needs Chrome 135+, the userScripts permission (Grant button) and "Allow User Scripts" / developer mode for BlockFlow |
-| Run the same test in CI | 🎭 **Playwright** export (sidebar row or All workflows): a `.spec.ts` for `npx playwright test`. Templates, expressions and the data blocks (Data Table, Transform, Filter, Set Variable, For Each, Repeat, If) behave as in BlockFlow, because the spec carries BlockFlow's own template/expression/CSV code. Asserts retry (`toHaveText`, `toHaveURL`, `expect.poll` for the other operators; soft → `expect.soft`); Wait For response, Dialogs, Upload File, Wait for Popup, Run Script and Timer delays map to Playwright; step timeouts, retries and error handling (`continue`, error output) are kept. Secrets become environment variables (`{{secret.loginPassword}}` → `LOGINPASSWORD`); Run Workflow calls become functions; what has no equivalent (Notify, Save to Dataset, Download) becomes a `// BlockFlow-only:` comment. Details: [wiki](../wiki/Workflows-as-Scripts.md#export-to-playwright) |
+| Run the same test in CI | 🎭 **Playwright** export (sidebar row or All workflows): a `.spec.ts` for `npx playwright test`. Templates, expressions and the data blocks (Data Table, Transform, Filter, Set Variable, For Each, Repeat, If) behave as in BlockFlow, because the spec carries BlockFlow's own template/expression/CSV code. Asserts retry (`toHaveText`, `toHaveURL`, `expect.poll` for the other operators; soft → `expect.soft`); Wait For response, Dialogs, Upload File (drop zones and base64 data too), Wait for Popup, Run Script, Timer delays, Click options, Element Action and Drag (`dragTo`) map to Playwright; step timeouts, retries and error handling (`continue`, error output) are kept. Secrets become environment variables (`{{secret.loginPassword}}` → `LOGINPASSWORD`); Run Workflow calls become functions; what has no equivalent (Notify, Save to Dataset, Download) becomes a `// BlockFlow-only:` comment. Details: [wiki](../wiki/Workflows-as-Scripts.md#export-to-playwright) |
 
 ## 13. Testing patterns
 
@@ -452,6 +501,20 @@ profile's extension storage.
 - **Reuse** a login (or any setup) with **Run Workflow**: the called workflow receives the caller's
   data (including the tab), and its last block's data comes back. Its run appears separately, linked.
 - **Soft assert** (`"soft": true`): record a failure, keep checking the rest.
+- **What Assert can check** (`subject`): `text`, `input` (field value), `attribute` (`name` = the
+  attribute), `count`, `class` (`contains` = has the class(es), not a substring: `active` does not match
+  `inactive`), `css` (`name` = the property, computed value: `rgb(0, 128, 0)`, `block`),
+  `accessible-name`, `accessible-description` (what a screen reader announces), `url`, `title`, `value`
+  (a value from the data) with an `operator`; and the yes/no ones (no operator): `visible`, `hidden`,
+  `checked`, `unchecked`, `enabled`, `disabled`, `focused`, `editable` (enabled, not read-only, a field),
+  `in-viewport` (some of it is on screen; scroll first if needed). Playwright export maps them to
+  `toHaveClass`/`toContainClass`, `toHaveCSS`, `toHaveAccessibleName`, `toHaveAccessibleDescription`,
+  `toBeFocused`, `toBeEditable`, `toBeInViewport`.
+- **Keys**: Press Key takes chords (`Control+Shift+K`, `Shift+Tab`, `Meta+B`; `ControlOrMeta+A` is ⌘A on
+  a Mac, Ctrl+A elsewhere). The modifier keys go down first, as on a keyboard, in both input modes. With
+  `"mode": "text"` it types `text` at the caret in one go, replacing the selection, with no key events
+  (like pasting; Playwright's `keyboard.insertText`). With real input and an element, it clicks the
+  element first, so the caret lands where the click did.
 - **Expected failure path**: `step.onError: "port"` on the block that may fail, then handle the
   `error` output (Notify, Stop, Log).
 - **Stop** block: end a path as passed or failed with a message.
@@ -476,7 +539,9 @@ profile's extension storage.
 - **Keeping data**: `Save to Dataset` (append/replace, kept in the browser; see the **Data** page,
   which downloads CSV/JSON) and `Download` (CSV, JSON or text file into Downloads).
 - **The page itself**: `Page Info` (title, meta, canonical, JSON-LD) or its localStorage /
-  sessionStorage / cookies.
+  sessionStorage / cookies. To change them (or read HttpOnly cookies): `Cookies & Storage`.
+- **Files the site exports**: Click the export button → `Wait for Download` with `read: "csv"` and a
+  `dataset` → the rows are in the dataset (and `{{rows}}`).
 
 ## 15. Monitoring patterns
 
@@ -497,6 +562,7 @@ Each example is in both formats: `<name>.script.json` (the script, start here) a
 | [`reusable-login`](examples/reusable-login.blockflow.json) | two workflows: a reusable login and a test that calls it |
 | [`price-watch`](examples/price-watch.blockflow.json) | monitoring with `{{previous}}` |
 | [`api-uptime`](examples/api-uptime.blockflow.json) | HTTP Request + Assert + error output |
+| [`api-status-router`](examples/api-status-router.blockflow.json) | Repeat until (retry while 5xx) + Switch on the status, branches rejoining |
 | [`dark-mode-watch`](examples/dark-mode-watch.blockflow.json) | reading a class on `<html>`, `{{changed}}` |
 | [`scrape-to-csv`](examples/scrape-to-csv.blockflow.json) | Paginate + Extract List + dataset + CSV download |
 | [`data-driven-login`](examples/data-driven-login.blockflow.json) | Data Table + For Each + soft Assert, a secret chosen by an expression |
@@ -511,8 +577,14 @@ Each example is in both formats: `<name>.script.json` (the script, start here) a
   attributed to the newer. Iframes added after the page finished loading are not recorded (reload
   or record again); a frame whose parent page does not answer BlockFlow's question about which
   iframe it is (a page that swallows `message` events) records nothing.
-- Closed shadow roots, drag and drop, and file *drop zones* (not inputs) are not supported.
+- Closed shadow roots are not supported. Synthetic drags (without `realInput`) send pointer events to the
+  dragged element (as if it captured the pointer) and run synchronously, so drag code that waits for
+  animation frames or timers between moves may need `realInput`. Drag needs both elements in the same frame.
 - Run Script needs Chrome 135+ with user scripts allowed; Firefox and older Chrome explain that.
+- Response bodies (Wait For `captureBody`) need Chromium's debugger and only work for responses that
+  start after the Wait For starts. Wait for Download cannot open the saved file: `read` fetches its
+  address again (a link that makes a new file every time gives that new file; a POST form download
+  cannot be read). Chromium full-page and background-tab screenshots need the debugger permission.
 - Pages browsers protect: `chrome://`, the extension stores, other extensions, PDF viewer. `file://`
   only after the user enables "Allow access to file URLs".
 - CAPTCHAs and 2FA are not bypassed: use Manual Step.
@@ -553,7 +625,7 @@ Click), `/steps/1/true/0` the first step of the second step's `true` list, `/ste
 | `step.key.unknown` | error | A `step` key that does not exist. | `timeoutSeconds`, `retries`, `onError`, `disabled`, `note`, `screenshot`, `realInput` (section 7). |
 | `step.value` | error | A bad `step` value (`retries` above 5, `onError: "ignore"`…). | See section 7. |
 | `edge.endpoint.missing` | error | A connection's `source` or `target` is not a node id in that workflow. | Use the hinted id. |
-| `edge.port.unknown` | error | `sourcePort` names an output the block does not have, or `"error"` on a block without `step.onError: "port"`. | Use the hinted output (`true`/`false` on If, `each`/`done` on loops), or add `"step": {"onError": "port"}`. |
+| `edge.port.unknown` | error | `sourcePort` names an output the block does not have, or `"error"` on a block without `step.onError: "port"`. | Use the hinted output (`true`/`false` on If, `each`/`done` on loops, the case names and `default` on Switch), or add `"step": {"onError": "port"}`. |
 | `edge.target.no-input` | error | A connection into a block that only starts workflows (Schedule). | Remove the connection. |
 | `edge.duplicate` | warning | The same connection twice. | Remove one. |
 | `graph.no-start` | error | Every block has an incoming connection, so nothing starts the workflow (a warning for a workflow with no blocks). | Remove the connection into the first block. |

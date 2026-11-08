@@ -43,6 +43,7 @@ access level). Keys are local constants, not in `STORAGE_KEYS`.
 | `bf:own-tabs` | `number[]` tab ids, last 200 | `addOwnTab` (Open Tab, watch tabs, recording tab) | `isOwnTab` (Page Visited ignores these) | Tab ids mean nothing after a restart. |
 | `bf:watch-tabs` | `Record<url, tabId>` | Background `pageReader.ensureWatchTab` | same | Session only, so a restart can't leave it pointing at a reused tab id (older versions kept it in `local`; `forgetLegacyWatchTabs` removes that at worker start). Closed tabs are replaced when used. |
 | `bf:picker-tabs` | `Record<editorTabId, tabId>` | `picking.ts` when it opens a picker tab | `picking.ts` `findTargetTab` (reused while the tab exists) | Session: one picker tab per editor tab. |
+| `bf:downloads-claimed` | `number[]`: download ids, last 200 | `waitForDownload` (`downloads.ts`) when it hands a download to a block | `waitForDownload` (skips them) | So each download is returned once; the downloads themselves come from `downloads.search`. |
 | `bf:popups` | `{tabId, openerTabId, at}[]`, last 50, younger than 2 min | `recordPopup` (from `webNavigation.onCreatedNavigationTarget`) | `waitForPopup` (claims and removes) | Must survive the worker sleeping between the popup opening and the block waiting. |
 
 ## IndexedDB `blockflow` (version 2)

@@ -91,15 +91,18 @@ block calls whatever URL *you* give it.)
 
 ### Optional permissions (asked only when you need them)
 
-Two permissions come with a strong install warning, so BlockFlow asks for them only when you use the
-feature. Browsers only show the prompt after a click, so you grant them from the editor:
+Some permissions come with a strong install warning or reach beyond pages, so BlockFlow asks for them
+only when you use the feature. Browsers only show the prompt after a click, so you grant them from the editor:
 
 | Permission | Feature | How to grant |
 | --- | --- | --- |
 | `debugger` | **Use real mouse and keyboard** for sites that ignore synthetic clicks and typing; also screenshots of background tabs | Select the block, open **Step settings**, tick **Use real mouse and keyboard (debugger)**. The browser asks; accept. While it acts, Chrome shows a "BlockFlow started debugging this browser" bar. |
+| `cookies` | The **Cookies & Storage** block on cookies (read HttpOnly cookies, set, delete, clear) | Add a Cookies & Storage block with "In: cookies". The settings panel shows "Needs the **cookies** permission…" with a **Grant** button. Chrome and Firefox. localStorage / sessionStorage need nothing. |
+| `debugger` (again) | **Screenshot** of the full page or an element, **Wait For** with "Capture the response body" | The Grant button on those blocks (Chromium only; Firefox takes these screenshots without it). |
 | `userScripts` | The **Run Script** block | Add a Run Script block. The settings panel shows "Needs the **userScripts** permission…" with a **Grant** button. Then, in `chrome://extensions` → BlockFlow → Details, switch on **Allow User Scripts** (on some Chrome versions this is the Developer mode switch instead). Needs Chrome 135 or newer. |
 
-Both are Chromium only. In Firefox the Grant button explains that the browser does not offer them.
+`debugger` and `userScripts` are Chromium only: in Firefox the Grant button explains that the browser does
+not offer them (the Screenshot block does not show it there). `cookies` works in both.
 
 To take a permission back: `chrome://extensions` → BlockFlow → Details → Permissions / Site access.
 

@@ -82,7 +82,7 @@ Called by: `template.ts`, `blocks/dataCommon.ts` (Transform, Filter).
 
 ## condition
 
-Comparisons for If, Assert and Filter. Operands are strings already rendered from templates.
+Comparisons for If, Switch (each case), Repeat until/while, Assert and Filter. Operands are strings already rendered from templates.
 
 | Export | Notes |
 | --- | --- |
@@ -229,13 +229,16 @@ for block types, ports and default configs.
 | `decompile(workflow, registry?): Script \| null` | The graph as a script when it is a tree in the format's sense (one start, no fan-out, joins only after an If, no cycles); verified by compiling back and comparing with `sameScriptGraph`. Uses aliases and shorthands, drops config values equal to the default, keeps `origin` ids (drops uuids and ids a compile would generate). |
 | `sameScriptGraph(a, b, registry, idOf?)` | Same blocks, configs (with defaults), step settings and wiring by port, nodes matched by id (or `idOf`). |
 | `isScriptFile(data)` | `format: "blockflow-script"`, or a `steps` array and no `nodes`. |
-| `continuePort(ports)` | `out`, else `done`, else undefined (If: its branches rejoin). |
+| `continuePort(ports)` | `out`, else `done`, else undefined (If and Switch: their branches rejoin). |
 | `didYouMean(word, candidates)` | Closest candidate within Damerau-Levenshtein distance 2 (its own copy; `suggest.ts` has the shared one). |
 | `SCRIPT_ALIASES`, `SCRIPT_SHORTHAND` | Alias → block type; block type → the config key a bare value fills. |
 
 Wiring: a step connects to the next from its continue port; lists on other ports (`each`, `onError`) end
-where they end; a block without a continue port (If) connects the next step from the end of each branch
-list and from each port that has no list. Issue codes: `script.shape`, `script.version`, `script.empty`,
+where they end; a block without a continue port (If, Switch) connects the next step from the end of each branch
+list and from each port that has no list. Ports come from `nodePorts(def, { config })` with the step's
+settings (defaults filled in), so a Switch's branch keys are its case names plus `default`; an unknown
+key is `edge.port.unknown` with a did-you-mean over them. Switch reserves the names a step uses itself
+(`id`, `step`, `onError`, `switch`) and `out`/`done` (a case named so would turn it into a continue port). Issue codes: `script.shape`, `script.version`, `script.empty`,
 `step.shape`, `node.type.unknown`, `node.id.duplicate`, `edge.port.unknown`, `step.branch.next`,
 `step.onError.conflict` (table in [Workflows as Scripts](Workflows-as-Scripts.md#script-problems)).
 
@@ -251,7 +254,7 @@ Automatic left-to-right layout, pure and deterministic.
 | Export | Notes |
 | --- | --- |
 | `layoutGraph(nodes, edges, portRank?)` | Map node id → `{x, y}`. Longest-path layers (edges closing a cycle ignored), then per column, left to right, nodes sorted by the average index of their parents plus a slot for the port they hang off (`portRank`), then rows: parents' average row (rounded up the page) when free, else the next free row. A chain is one row; branches open downwards; nothing overlaps. |
-| `layoutWorkflow(workflow, registry?)` | Every node placed. Ports ranked as the blocks declare them, or by `out, true, each, false, done, error` without a registry. |
+| `layoutWorkflow(workflow, registry?)` | Every node placed. Ports ranked as the blocks declare them (`nodePorts` with the node's config: a Switch's cases in row order, `default` last), or by `out, true, each, false, done, error` without a registry. |
 | `LAYOUT_X`, `LAYOUT_Y` | 260 and 140 px. |
 
 Called by: `compileScript`, `parseImport` (graph files without positions), the editor's **Tidy up**.
@@ -291,7 +294,7 @@ Exports a workflow as a Playwright test. See
 | Export | Notes |
 | --- | --- |
 | `ExportOptions { registry, lookup?(id) }` | `lookup` resolves Run Workflow targets. |
-| `toPlaywrightLocator(locator, base)` | Per [locator step](#locatorsyntax): `css` → `.locator()` (`>>>` dropped, Playwright CSS pierces shadow roots), `xpath` → `.locator('xpath=…')`, `text/label/placeholder/alt/title` → `getByX` (quoted = `exact: true`, `/re/` = regex), `testid` → `getByTestId`, `frame` → `frameLocator`, `nth` → `first()/last()/nth()`, `role` → `getByRole` with `name`, `exact`, `checked`, `level`. |
+| `toPlaywrightLocator(locator, base)` | Per [locator step](#locatorsyntax): `css` → `.locator()` (`>>>` dropped, Playwright CSS pierces shadow roots), `xpath` → `.locator('xpath=…')`, `text/label/placeholder/alt/title` → `getByX` (quoted = `exact: true`, `/re/` = regex), `testid` → `getByTestId`, `frame` → `frameLocator`, `nth` → `first()/last()/nth()`, `role` → `getByRole` with `name`, `exact`, `checked`, `pressed`, `expanded`, `selected`, `disabled`, `level`, `includeHidden`; filters → `.filter({ hasText | hasNotText | has | hasNot | visible })` (`has` locators built from the page or the current `frameLocator`; quoted `has-text` → `/^…$/`); `A \|\| B` → `A.or(B)`. |
 | `workflowToPlaywright(workflow, options)` | Full `.spec.ts`: one `test()` with the `page`, `context` and `request` fixtures, a `tabs` map and a mutable `data` object; called workflows as functions; helper functions (`render`, `evaluate`, `listAt`, `compare`, `parseRows`, `urlPattern`, `retry`, `waitForResponse`, `waitForPopup`, `answerDialogs`, `fileFromUrl`, `setField`, `selectByText`, `read`, `peek`, `extractList`, `extractTable`…) and the inlined runtime appended. |
 
 How it walks: from every root, depth-first along edges (`Writer.walk`); a node already on the current path
@@ -299,8 +302,11 @@ writes a "loop back … not exported" comment. Each step writes only its own sta
 for the step settings: `retries` → `retry(n, async () => …)`, `onError: 'continue'` → `try/catch` that
 logs, `onError: 'port'` with an error edge → `try/catch` running the error branch and an `if (okN)` around
 the normal continuation; `timeoutSeconds` → `{ timeout }` on the action or matcher; `disabled` → a comment.
-If → `if/else`; For Each, Repeat, Paginate → `for` loops with `each` inside and `done` after (For Each and
-Repeat restore the input afterwards). Triggers (a root Timer, Schedule, Page Visited, Context Menu, Watch
+If → `if/else`; Switch → `const switchValueN = …` and an `if / else if` chain over its cases in order
+(`else` for `default` when connected); For Each, Repeat, Paginate → `for` loops with `each` inside and
+`done` after (For Each and Repeat `times` restore the input, Repeat adds `iterations`). Repeat until/while
+→ `for (;;)` with the condition (`compare` on rendered templates, against `data` as the round left it)
+checked after (until) or before (while) each round, and `max` → `throw` (or `break` with `failAtMax: false`). Triggers (a root Timer, Schedule, Page Visited, Context Menu, Watch
 Element) become comments; a fed Timer is `page.waitForTimeout`; unknown blocks become
 `// BlockFlow-only:` comments. Templates: any `{{…}}` → `render("…", data)` (BlockFlow's own
 `template.ts`, with `{ ...data, secret: SECRETS }` and `SECRETS` read from `process.env`). Assert uses
@@ -369,8 +375,12 @@ Playwright exporter. No DOM.
 | --- | --- |
 | `class LocatorSyntaxError` | Empty or malformed locator. |
 | `LocatorStep { engine, body }` | |
-| `ENGINES` | `css`, `text`, `role`, `label`, `placeholder`, `testid`, `alt`, `title`, `xpath`, `nth`, `frame`. |
-| `parseLocatorSteps(source)` | Splits on `>>` outside quotes and brackets (leaves the shadow-piercing `>>>` alone). `engine=body` for known engines; else `//…` or `(//…` → xpath, a double-quoted string → text, anything else → css. |
+| `ENGINES` | `css`, `text`, `role`, `label`, `placeholder`, `testid`, `alt`, `title`, `xpath`, `nth`, `frame`, plus `FILTERS`. |
+| `FILTERS` | `has-text`, `has-not-text`, `has`, `has-not`, `visible`: steps that narrow the matches so far. |
+| `splitAlternatives(source)` / `parseLocatorAlternatives(source)` | `A \|\| B` split outside quotes and brackets (`\|\|` binds loosest); the second also parses each into steps. |
+| `parseLocatorSteps(source)` | One alternative. Splits on `>>` outside quotes and brackets (leaves the shadow-piercing `>>>` alone). `engine=body` for known engines; a bare `visible` → the visible filter; else `//…` or `(//…` → xpath, a double-quoted string → text, anything else → css. |
+| `nestedLocator(body)`, `visibleFilter(body)` | The inner locator of `has=`/`has-not=` (unquoted when fully quoted); `visible=` as a boolean (throws for anything but true/false). |
+| `ROLE_OPTIONS`, `ROLE_STATES`, `parseRoleSelector(body)`, `roleState(option)`, `unquoteValue(value)` | `role=` options parsed once for the resolver, the checker and the exporter: unknown options, bad state values and non-number levels throw `LocatorSyntaxError`. |
 
 ## See also
 

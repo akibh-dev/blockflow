@@ -26,7 +26,7 @@ import type { AnyBlockDefinition, EdgeDef, NodeDef, StepSettings, Workflow } fro
  * - A step connects to the next step of its list from its *continue port*: `out`, or `done` for loops
  *   (For Each, Repeat, Paginate). Other ports (`each`, `error`…) take a branch list that ends where it
  *   ends: an `each` body runs once per item, an `onError` list handles the failure.
- * - A block with no continue port (If: `true`/`false`) *rejoins*: the next step of the list is connected
+ * - A block with no continue port (If: `true`/`false`; Switch: its cases and `default`) *rejoins*: the next step of the list is connected
  *   from the end of every branch list, and straight from each of its ports that has no list
  *   ("if without else" falls through).
  *
@@ -113,7 +113,7 @@ export function isScriptFile(data: unknown): boolean {
   return Array.isArray(data.steps) && !('nodes' in data);
 }
 
-/** The continue port of a block: `out`, or `done` for loops; undefined for If (it rejoins). */
+/** The continue port of a block: `out`, or `done` for loops; undefined for If and Switch (they rejoin). */
 export function continuePort(ports: string[]): string | undefined {
   if (ports.includes(DEFAULT_PORT)) return DEFAULT_PORT;
   if (ports.includes('done')) return 'done';
@@ -154,11 +154,6 @@ function resolveType(key: string, registry: BlockRegistry): string | undefined {
   if (registry.has(key)) return key;
   const aliased = SCRIPT_ALIASES[key];
   return aliased && registry.has(aliased) ? aliased : undefined;
-}
-
-/** Ports of a block that a step can give branch lists for (declared ports and `error`). */
-function declaredPorts(def: AnyBlockDefinition): string[] {
-  return nodePorts(def, {});
 }
 
 interface Exit {
@@ -308,8 +303,12 @@ export function compileScript(raw: unknown, registry: BlockRegistry = createDefa
       else issue('step.shape', pointer(...path, 'step'), '"step" must be an object of step settings, e.g. { "retries": 2 }.');
     }
 
-    // branches
-    const ports = declaredPorts(def);
+    // Old key names (selector → locator…) are moved before defaults fill in the rest (migrate.ts).
+    const authored = migrateNode({ id, type, position: { x: 0, y: 0 }, config: copy(config) }).config;
+    const nodeConfig = { ...copy(def.defaultConfig as Record<string, unknown>), ...authored };
+
+    // branches: the block's outputs for these settings (Switch: one per case)
+    const ports = nodePorts(def, { config: nodeConfig });
     const next = continuePort(ports);
     const branches: [string, unknown[], (string | number)[]][] = [];
     for (const [branchKey, list] of Object.entries(step)) {
@@ -343,9 +342,7 @@ export function compileScript(raw: unknown, registry: BlockRegistry = createDefa
       branches.push([port, list, branchPath]);
     }
 
-    // Old key names (selector → locator…) are moved before defaults fill in the rest (migrate.ts).
-    const authored = migrateNode({ id, type, position: { x: 0, y: 0 }, config: copy(config) }).config;
-    const node: NodeDef = { id, type, position: { x: 0, y: 0 }, config: { ...copy(def.defaultConfig as Record<string, unknown>), ...authored }, origin: id };
+    const node: NodeDef = { id, type, position: { x: 0, y: 0 }, config: nodeConfig, origin: id };
     if (settings && Object.keys(settings).length > 0) node.step = settings;
     nodes.push(node);
     nodePaths[id] = base + at;

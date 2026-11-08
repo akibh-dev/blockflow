@@ -83,6 +83,6 @@ describe('Wait for Popup, Dialogs, Run Script, Wait For response', () => {
       .filter((def) => def.realInput)
       .map((def) => def.type)
       .sort();
-    expect(offered).toEqual(['check', 'click', 'fill', 'fill-form', 'paginate', 'press-key', 'select-option']);
+    expect(offered).toEqual(['check', 'click', 'drag', 'fill', 'fill-form', 'paginate', 'press-key', 'select-option']);
   });
 });

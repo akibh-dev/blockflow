@@ -4,7 +4,7 @@
 visual editor, or write them as JSON scripts, by hand or with an LLM.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
 
-**Status: v0.3.0.** 43 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
+**Status: v0.4.0.** 49 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
 [What has been verified](#what-has-been-verified) before you rely on it.
 
 **Using BlockFlow, or asking an AI to build workflows for you?** Read the
@@ -188,7 +188,7 @@ src/
     script.ts            the script format (a list of steps): compile to a graph, decompile back
     layout.ts            automatic left-to-right layout (scripts, imports, Tidy up)
     samples.ts           the example workflows seeded on first install
-    ports.ts             block outputs (out / true / false / error) and routeTo()
+    ports.ts             block outputs (out / true / false / error, or from settings) and routeTo()
     runs.ts              run and step records, secret masking
     condition.ts         comparisons shared by If and Assert
     report.ts            JUnit XML and HTML reports from runs
@@ -277,6 +277,7 @@ needed.
 | 2026-11-05, `npm run e2e:firefox` (Firefox 159, headless, temporary add-on over WebDriver BiDi, 14 checks): login with Fill Form + Wait For URL + Assert, HTTP Request + Extract Table from HTML (no offscreen document), Read Element with a URL twice (watch tab in `storage.session`), Upload File, Wait for Popup, Dialogs, Data Table → For Each → Save to Dataset (IndexedDB), in-run Timer delay, a failing step with a screenshot, Notify; Run Script and real input fail with a clear "Chromium only" message | Run, passing. |
 | 2026-11-05, M0 (v0.2.0): `npm run check` (395 unit/DOM tests), `npm run e2e` in Brave Origin (10 specs, 122 checks: every block, frames and shadow DOM for real input, picker and recorder, recording popups and into existing workflows, editor UX, Playwright export run under `npx playwright test`), `npm run e2e:firefox` (14 checks, Firefox 159) | Run, passing. |
 | 2026-11-06, M1 (v0.3.0): `npm run check` (544 unit/DOM tests), `npm run e2e` in Chromium 14 specs / 154 checks (adds import checking, script import + Tidy up + Export as script, page snapshot + error codes, and the ten eval reference solutions imported, run and scored), `npm run e2e:firefox` (14 checks, Firefox 159) | Run, passing. |
+| 2026-11-06, M2 (v0.4.0): `npm run check` (680 unit/DOM tests), `npm run e2e` in Chromium 18 specs / 207 checks (adds locator filters and role states, the new Assert subjects, key chords and insert-text, click options, Element Action, Drag and drop zones in both input modes, Wait for Download, Screenshot, Cookies & Storage, Wait For request and response bodies, Switch and Repeat until; the new blocks exported and run under `npx playwright test`), `npm run e2e:firefox` (30 checks, Firefox 159) | Run, passing. |
 | Firefox host permission grant by a user (non-temporary install), Safari conversion, Chrome Web Store upload | **Not run.** |
 
 ## Known limitations
@@ -295,8 +296,8 @@ needed.
   2026-10-23), run `BF_BROWSER=/path/to/chromium npm run e2e`; Playwright's Chromium in
   `~/.cache/ms-playwright` is used automatically when nothing else is found.
 - Page actions use synthetic events (`isTrusted: false`) unless the step's **Use real mouse and keyboard**
-  is on (Chromium only, not inside cross-origin iframes). Closed shadow roots, drag and drop and file drop
-  zones are not supported. Run Script needs Chrome 135+ with user scripts allowed. Full list: the usage
+  is on (Chromium only, not inside cross-origin iframes). Closed shadow roots are not supported.
+  Run Script needs Chrome 135+ with user scripts allowed. Full list: the usage
   guide's [Limits](docs/guide/README.md#17-limits-what-a-browser-extension-cannot-do-or-blockflow-does-not-do-yet).
 - No "Resume" for an interrupted run yet, and If has one condition (several joined with and/or come later).
 
