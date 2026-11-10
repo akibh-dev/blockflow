@@ -393,6 +393,9 @@ site, the CLI runs the guide examples in CI, and suites produce a combined JUnit
 
 ## M6: Ship (v1.0)
 
+**Step-by-step coding plan:** [M6-PLAN.md](M6-PLAN.md) (written so a smaller model can implement it task by task;
+`[HUMAN]` steps need accounts, a Mac or a person at a browser prompt).
+
 | ID | Task | Design | Size |
 | --- | --- | --- | --- |
 | M6.1 | **Encrypted secrets** | WebCrypto AES-GCM; key from a passphrase (PBKDF2, 600k iterations) unlocked once per browser session and kept in `storage.session`; optional "no passphrase" mode keeps today's behaviour with a warning. Migration encrypts existing secrets | M |
