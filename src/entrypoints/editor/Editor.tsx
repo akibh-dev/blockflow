@@ -41,6 +41,8 @@ import type { RecordingState } from '../../browser/recording';
 import { PromptBanner } from './components/PromptBanner';
 import { ReportsPage } from './components/ReportsPage';
 import { SecretsPage } from './components/SecretsPage';
+import { SettingsPage } from './components/SettingsPage';
+import { SuitesPage } from './components/SuitesPage';
 import { TryItCard } from './components/TryItCard';
 import { DataPage } from './components/DataPage';
 import { registry } from './registry';
@@ -351,7 +353,7 @@ export function Editor() {
 
   // --- workflow list actions (all by id, so the sidebar and the manager page share them) ---
 
-  const [view, setView] = useState<'canvas' | 'manage' | 'reports' | 'data' | 'secrets'>('canvas');
+  const [view, setView] = useState<'canvas' | 'manage' | 'reports' | 'suites' | 'data' | 'secrets' | 'settings'>('canvas');
   /** A message for the user, as a toast (errors stay longer). */
   const notice = useCallback((message: string, kind: 'info' | 'error' = 'info') => toast(message, kind), []);
   /** Secret names, so import can warn about `{{secret.x}}` that does not exist (values are not used). */
@@ -898,11 +900,17 @@ export function Editor() {
             <button type="button" className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>
               Reports
             </button>
+            <button type="button" className={view === 'suites' ? 'active' : ''} onClick={() => setView('suites')}>
+              Suites
+            </button>
             <button type="button" className={view === 'data' ? 'active' : ''} onClick={() => setView('data')}>
               Data
             </button>
             <button type="button" className={view === 'secrets' ? 'active' : ''} onClick={() => setView('secrets')}>
               Secrets
+            </button>
+            <button type="button" className={view === 'settings' ? 'active' : ''} onClick={() => setView('settings')}>
+              Settings
             </button>
           </nav>
         </header>
@@ -921,6 +929,10 @@ export function Editor() {
         )}
 
         {view === 'secrets' && <SecretsPage />}
+
+        {view === 'suites' && <SuitesPage />}
+
+        {view === 'settings' && <SettingsPage />}
 
         {view === 'data' && <DataPage />}
 

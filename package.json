@@ -2,7 +2,7 @@
   "name": "blockflow",
   "description": "Playwright-compatible automation in your browser: build automations from connected blocks, or write them as scripts.",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -28,7 +28,12 @@
     "guide:sync": "vite-node scripts/guide.ts",
     "guide:check": "vite-node scripts/guide.ts -- --check",
     "wiki:check": "node scripts/wiki.mjs --check",
-    "wiki:publish": "node scripts/wiki.mjs --push"
+    "wiki:publish": "node scripts/wiki.mjs --push",
+    "build:automation": "BF_AUTOMATION=1 wxt build",
+    "blockflow": "node packages/cli/cli.mjs",
+    "bridge": "node packages/bridge/cli.mjs",
+    "mcp": "node packages/mcp/server.mjs",
+    "e2e:cli": "BF_AUTOMATION=1 wxt build && node tests/cli/cli.e2e.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.0.0",
@@ -46,5 +51,8 @@
     "typescript": "^5.8.0",
     "vitest": "^3.0.0",
     "wxt": "^0.20.0"
-  }
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }

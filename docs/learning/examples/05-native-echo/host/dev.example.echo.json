@@ -1,0 +1,7 @@
+{
+  "name": "dev.example.echo",
+  "description": "Echo host for lesson 9",
+  "path": "/ABSOLUTE/PATH/TO/05-native-echo/host/echo-host.mjs",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://YOUR_EXTENSION_ID/"]
+}

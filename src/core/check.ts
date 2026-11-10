@@ -33,7 +33,7 @@ export interface CheckOptions {
 export const EXPORT_FORMAT = 'blockflow-workflows';
 
 const EXPORT_KEYS = ['format', 'version', 'workflows'];
-const WORKFLOW_KEYS = ['schemaVersion', 'id', 'name', 'enabled', 'nodes', 'edges'];
+const WORKFLOW_KEYS = ['schemaVersion', 'id', 'name', 'enabled', 'nodes', 'edges', 'importedVia'];
 const NODE_KEYS = ['id', 'type', 'position', 'config', 'step', 'origin'];
 const EDGE_KEYS = ['id', 'source', 'target', 'sourcePort'];
 /** Names other tools use for the same thing (React Flow, n8n, guesses), checked before edit distance. */
@@ -243,6 +243,8 @@ class Checker {
       if (!WORKFLOW_KEYS.includes(key)) this.add('warning', 'file.key.unknown', `${base}${pointer(key)}`, `Unknown key "${key}" in a workflow; it is ignored.`, keyHint(key, WORKFLOW_KEYS));
     }
     if (raw.name !== undefined && typeof raw.name !== 'string') this.add('error', 'file.shape', `${base}${pointer('name')}`, 'The workflow name must be text.');
+    // Written by the bridge (M4) on workflows an outside program imported; kept in exports.
+    if (raw.importedVia !== undefined && raw.importedVia !== 'bridge') this.add('warning', 'file.shape', `${base}${pointer('importedVia')}`, '"importedVia" can only be "bridge"; it is ignored.');
     const version = raw.schemaVersion;
     if (version !== undefined && !(typeof version === 'number' && Number.isInteger(version) && version >= 1)) {
       this.add('error', 'file.shape', `${base}${pointer('schemaVersion')}`, '"schemaVersion" must be a whole number.', `Use ${CURRENT_SCHEMA_VERSION}, or leave it out.`);

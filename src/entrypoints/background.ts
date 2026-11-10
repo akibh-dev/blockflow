@@ -6,7 +6,7 @@ import { createBrowserScheduler } from '../browser/scheduler';
 import { cancelPicking, finishPicking, relayPickerSync, snapshotForEditor, startPicking } from '../browser/picking';
 import { answerPrompt, clearStalePrompts, promptRunId } from '../browser/prompts';
 import { migrateWorkflow, migrateWorkflows } from '../core/migrate';
-import { appendLog, clearWorkflowState, loadWorkflows, migrateStoredWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
+import { appendLog, clearWorkflowState, loadRuns, loadWorkflows, migrateStoredWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
 import { createDefaultRegistry } from '../core/blocks';
 import { menuClickPayload, menuItemFor, parseMenuItemId } from '../core/blocks/contextMenu';
 import { WorkflowRunner } from '../core/engine';
@@ -22,8 +22,25 @@ import { parseTimerKey, workflowTimerPrefix } from '../core/timerKey';
 import { diffWorkflows } from '../core/workflow';
 import { STORAGE_KEYS } from '../shared/keys';
 import { isExtensionMessage } from '../shared/messages';
+import type { SuiteProgressMessage, SuiteResultMessage } from '../shared/messages';
 import type { Workflow } from '../core/types';
 import { forgetLegacyWatchTabs } from '../browser/pageReader';
+import {
+  after,
+  appendBridgeLog,
+  bridgeSnapshot,
+  connectNativeHost,
+  createBridgeConnection,
+  hasNativeMessaging,
+  loadBridgeSettings,
+  nativeDisconnectReason,
+  writeBridgeStatus,
+} from '../browser/bridge';
+import { createBridgeHandlers, withRunOverlay } from '../browser/bridgeHandlers';
+import type { RunWorkflowOptions } from '../browser/bridgeHandlers';
+import { loadScreenshot } from '../browser/blobStore';
+import { loadSuites, runSuite } from '../browser/suites';
+import { BRIDGE_STORAGE_KEYS } from '../core/bridgeProtocol';
 
 /**
  * Background worker: runs enabled workflows.
@@ -76,6 +93,72 @@ export default defineBackground(() => {
       onRun,
       isCancelled: (runId) => cancelRequests.has(runId),
     });
+
+  /**
+   * Runs a workflow once, like the Run button, and resolves with its finished record. `secrets` overlay
+   * the stored ones for this run only (never stored; still masked), `workflows` are unsaved workflows
+   * its Run Workflow blocks may call. Used by the bridge (`run`, `suite.run`) and suites.
+   */
+  function runWorkflow(workflow: Workflow, options: RunWorkflowOptions = {}): Promise<RunRecord> {
+    return new WorkflowRunner({
+      workflow: migrateWorkflow(workflow),
+      registry,
+      host: withRunOverlay(host, options),
+      log: (entry) => void appendLog(entry),
+      onRun: (run) => {
+        onRun(run);
+        options.onRun?.(run);
+      },
+      isCancelled: (runId) => cancelRequests.has(runId),
+    }).runOnce();
+  }
+
+  /** The Stop button's path: also declines a Manual Step the run waits on. */
+  function cancelRun(runId: string): void {
+    cancelRequests.add(runId);
+    answerPrompt(runId, false);
+  }
+
+  // M4 bridge: while "Allow outside control" is on, a native port to the BlockFlow host stays open.
+  let outsideControl = false;
+  const bridgeHandlers = createBridgeHandlers({
+    isEnabled: () => outsideControl,
+    info: () => ({ extensionVersion: browser.runtime.getManifest().version, browser: import.meta.env.BROWSER, extensionId: browser.runtime.id }),
+    loadWorkflows,
+    saveWorkflows,
+    secretNames: async () => Object.keys(await host.secrets.all()),
+    loadRuns,
+    runWorkflow,
+    cancelRun,
+    isRunLive: (runId) => liveRuns.has(runId),
+    snapshot: bridgeSnapshot,
+    loadScreenshot: async (id) => (await loadScreenshot(id))?.dataUrl,
+    loadSuites,
+    runSuite: (input, deps) => runSuite(input, { ...deps, loadScreenshot: async (id) => (await loadScreenshot(id))?.dataUrl, registry }),
+    blockLabel: (type) => registry.get(type)?.label ?? type,
+    appendLog: appendBridgeLog,
+    after,
+  });
+  const bridge = createBridgeConnection({
+    connect: connectNativeHost,
+    disconnectReason: nativeDisconnectReason,
+    respond: bridgeHandlers.respond,
+    setStatus: writeBridgeStatus,
+    after,
+  });
+
+  /** Connects or disconnects the bridge to match `bf:settings` and the nativeMessaging permission. */
+  let bridgeSync: Promise<void> = Promise.resolve();
+  function syncBridge(): void {
+    bridgeSync = bridgeSync
+      .then(async () => {
+        const wanted = (await loadBridgeSettings()).outsideControl && (await hasNativeMessaging());
+        outsideControl = wanted;
+        if (wanted) bridge.enable();
+        else bridge.disable();
+      })
+      .catch(report('bridge'));
+  }
 
   // A run still marked "running" from a previous worker can never finish: say so.
   void updateRuns((runs) => markInterrupted(runs, new Set(liveRuns.keys()), new Date().toISOString()));
@@ -250,6 +333,7 @@ export default defineBackground(() => {
   // The editor saves workflows to storage; reacting to that keeps the editor and the worker decoupled.
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
+    if (changes[BRIDGE_STORAGE_KEYS.settings]) syncBridge();
     const change = changes[STORAGE_KEYS.workflows];
     if (!change) return;
     // Both sides migrated, so the one-time rewrite to a new schema version restarts nothing.
@@ -278,6 +362,12 @@ export default defineBackground(() => {
     const runId = promptRunId(notificationId);
     if (runId) answerPrompt(runId, true);
   });
+
+  // Granting or revoking nativeMessaging (Settings page, browser's extension page) changes what the bridge may do.
+  browser.permissions.onAdded.addListener(() => syncBridge());
+  browser.permissions.onRemoved.addListener(() => syncBridge());
+  // Every worker start: reconnect when outside control is on (the open port keeps the worker alive).
+  syncBridge();
 
   browser.action.onClicked.addListener(() => {
     void openEditor().catch(report('open editor'));
@@ -319,9 +409,30 @@ export default defineBackground(() => {
         void newRunner(migrateWorkflow(message.workflow)).runOnce().catch(report('run'));
         break;
       case 'bf:stop-run':
-        cancelRequests.add(message.runId);
-        answerPrompt(message.runId, false);
+        cancelRun(message.runId);
         break;
+      case 'bf:run-suite': {
+        // Editor Suites page: run a saved suite; progress and the result go back as broadcasts.
+        const { suiteId } = message;
+        const send = (reply: SuiteProgressMessage | SuiteResultMessage) => void browser.runtime.sendMessage(reply).catch(() => {});
+        void (async () => {
+          try {
+            const suite = (await loadSuites()).find((item) => item.id === suiteId);
+            if (!suite) throw new Error('That suite no longer exists.');
+            const { result } = await runSuite({ suite }, {
+              loadWorkflows,
+              runWorkflow: (workflow, options) => runWorkflow(workflow, options),
+              onProgress: (progress) => send({ type: 'bf:suite-progress', suiteId, ...progress }),
+              loadScreenshot: async (id) => (await loadScreenshot(id))?.dataUrl,
+              registry,
+            });
+            send({ type: 'bf:suite-result', suiteId, result });
+          } catch (error) {
+            send({ type: 'bf:suite-result', suiteId, error: error instanceof Error ? error.message : String(error) });
+          }
+        })().catch(report('suite'));
+        break;
+      }
       case 'bf:answer-prompt':
         answerPrompt(message.runId, message.ok);
         break;

@@ -11,6 +11,7 @@ const WHY: Record<Permission, string> = {
   cookies: "reading and changing the browser's cookies (HttpOnly ones too)",
   declarativeNetRequest: 'blocking and redirecting requests in this workflow’s tab',
   browsingData: 'clearing the explicitly listed sites’ browser data (cookies may affect their whole registrable domain)',
+  nativeMessaging: 'letting local programs you install (the BlockFlow bridge: MCP server, CLI) control BlockFlow while “Allow outside control” is on',
 };
 
 /** Asks for an optional permission when a block needs it. Must be a click: browsers only ask then. */
@@ -18,7 +19,7 @@ export async function requestPermission(permission: Permission): Promise<boolean
   try {
     return await browser.permissions.request({ permissions: [permission] });
   } catch {
-    toast(`This browser does not offer the "${permission}" permission.${permission === 'cookies' || permission === 'declarativeNetRequest' ? '' : ' It works in Chrome, Edge and Brave.'}`, 'error');
+    toast(`This browser does not offer the "${permission}" permission.${permission === 'cookies' || permission === 'declarativeNetRequest' || permission === 'nativeMessaging' ? '' : ' It works in Chrome, Edge and Brave.'}`, 'error');
     return false;
   }
 }

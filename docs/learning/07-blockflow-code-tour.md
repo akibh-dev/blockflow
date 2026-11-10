@@ -75,6 +75,7 @@ exercise: read the tests first and try to implement `render` yourself before rea
 | `cdp.ts`, `popups.ts` | real input through the debugger; popups of a run's tab | 12 below |
 | `cdpSessions.ts`, `m3Host.ts` | one debugger session per run; the run's network/environment features and their cleanup | 9 below |
 | `routes.ts`, `environment.ts`, `telemetry.ts` | Route (CDP `Fetch` + browser rules), Emulate and Clear Site Data, HAR and console capture | 9 below |
+| `bridge.ts`, `bridgeHandlers.ts`, `suites.ts` | outside control: the native port and the JSON-RPC methods the MCP server and CLI call; suites | lesson 9 |
 | `host.ts` | assembles the `Host` | 6 |
 
 Read `hybridScheduler.ts` with its test file `tests/browser/hybridScheduler.test.ts` open. The test uses a

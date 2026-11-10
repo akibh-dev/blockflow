@@ -120,6 +120,7 @@ export function WorkflowsPage({ workflows, activeId, runs, errorCounts, onSetAll
                   <button type="button" className="bf-link" onClick={() => actions.onOpen(workflow.id)}>
                     {workflow.name}
                   </button>
+                  {workflow.importedVia === 'bridge' && <span className="bf-muted" title="Imported by a program through the BlockFlow bridge"> · via bridge</span>}
                   {problems > 0 && <span className="bf-error"> · {problems} problem{problems === 1 ? '' : 's'}</span>}
                 </td>
                 <td title={`${workflow.nodes.length} blocks, ${workflow.edges.length} connections`}>{blockSummary(workflow)}</td>

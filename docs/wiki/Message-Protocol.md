@@ -20,7 +20,8 @@ message: run progress, logs, prompts and recordings go through `storage.local` (
 `storage.onChanged`), and starting/stopping workflows is done by saving `bf:workflows`. That keeps the
 editor working even when the worker was asleep or restarted. All messages use `browser.runtime.sendMessage`
 (a broadcast to every extension page and the worker; content scripts send this way too). There are no
-`tabs.sendMessage`, ports or `window.postMessage` channels.
+`tabs.sendMessage`, ports or `window.postMessage` channels between our own contexts; the one port is the native
+messaging port to the BlockFlow bridge ([below](#native-port-the-bridge-m4)).
 
 ## Typed messages (`ExtensionMessage`)
 
@@ -76,6 +77,8 @@ Prompt:  bg ──storage bf:prompts + notification──▶ user/editor ──b
 Record:  editor ──bf:start-recording──▶ bg ──executeScript(recorder.js)──▶ page
          page ──bf:recorded / bf:stop-recording──▶ bg ──storage bf:recording──▶ editor
 Parse:   bg ──bf:parse-html──▶ offscreen ──sendResponse──▶ bg
+Bridge:  program ──socket──▶ native host ──native port──▶ bg ──JSON-RPC response + run.* notifications──▶ host ──▶ program
+         Settings page ──storage bf:settings──▶ bg (connect / bridge.disabled + disconnect)
 ```
 
 ## Non-message channels
@@ -89,8 +92,27 @@ Parse:   bg ──bf:parse-html──▶ offscreen ──sendResponse──▶ b
 | `executeScript({world: 'MAIN'})` on `window.__blockflowDialogs` | worker → page main world | Dialogs block |
 | `userScripts.execute` | worker → page | Run Script |
 | `chrome.debugger.sendCommand` | worker → tab | real input, background screenshots ([Browser Host](Browser-Host.md#cdpts)) |
+| native messaging port (`runtime.connectNative('dev.akibh.blockflow')`) | worker ↔ native host | M4 bridge, JSON-RPC 2.0 ([below](#native-port-the-bridge-m4)) |
+| `storage.session` `bf:bridge-status` | worker → editor | the bridge connection state on the Settings page |
 | notifications (`bf-prompt:<runId>`) | worker ↔ user | Manual Step buttons/clicks |
 | context menu items (`bf-menu::<workflowId>::<nodeId>`) | user → worker | Context Menu trigger |
+
+## Native port (the bridge, M4)
+
+While "Allow outside control" (`bf:settings`) is on, the worker holds one native messaging port to the
+BlockFlow native host ([Bridge](Bridge.md)). Messages are the JSON-RPC 2.0 objects of
+`src/core/bridgeProtocol.ts`, framed by the browser (4-byte length + JSON, at most `MAX_MESSAGE_BYTES`):
+
+| Direction | Message | Notes |
+| --- | --- | --- |
+| host → worker | request `{jsonrpc, id, method, params}` for every method in `BridgeParams` except `auth` | `id` is rewritten by the host, so concurrent clients never collide. Anything without `method` + `id` is ignored. |
+| worker → host | response `{jsonrpc, id, result}` or `{jsonrpc, id, error: {code, message, data?}}` | Codes: `RPC_ERRORS` (`disabled` while outside control is off, `invalidWorkflow` with `data.issues`, `notFound`, `invalidParams`, `version`, `internal` with `data.code`). |
+| worker → host | notifications `run.started`, `run.step`, `suite.progress` `{requestId, …}` | Sent before the response; the host routes them by `requestId` to the client that asked. |
+| worker → host | `bridge.disabled` `{}` | Just before the worker disconnects because the setting was switched off; the host fails pending requests and closes its clients. |
+
+The methods are described in [Browser Host: bridge.ts](Browser-Host.md#bridgets-and-bridgehandlersts-m4-outside-access).
+No editor ↔ worker message was added for the bridge: the Settings page writes `bf:settings` and reads
+`bf:bridge-status` and `bf:bridge-log` from storage.
 
 ## Adding a message
 

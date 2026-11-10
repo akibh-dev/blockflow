@@ -4,7 +4,8 @@
 > phase list in [PLAN-automation.md](PLAN-automation.md) (phases A–F, all built) as the guide for what comes next.
 
 M3 is done on `m3-network` (2026-11-10): Route, HAR Record, Emulate, Clear Site Data and console capture,
-on run-scoped debugger sessions. v0.5.0 ships when M4 also lands; see the M3 checklist in IMPLEMENTATION.md.
+on run-scoped debugger sessions. M4 is done on `m4-outside-access` (2026-11-10): the native bridge, the MCP
+server, the CLI runner and Suites. Together they are v0.5.0; see IMPLEMENTATION.md.
 
 ## 1. Goal
 
@@ -101,11 +102,11 @@ Nothing is proposed for removal at the feature level.
 | Isolation between tests | new context per test | 🟡 shared profile + Clear Site Data block (`browsingData`, Chromium) | **M3** ✅; incognito runs only if needed (§8) |
 | API testing | `request` fixture | ✅ HTTP Request | Make `failOnError` actually fail (§6) |
 | `evaluate` | ✅ | ✅ Run Script | — |
-| Test runner: suites, tags, retries, parallel workers | ✅ | 🟡 per-step retries, Run Workflow | **M4**: a "Suite" view: run several workflows in sequence, one combined report |
+| Test runner: suites, tags, retries, parallel workers | ✅ | 🟡 per-step retries, Run Workflow, Suites (in order, one combined JUnit/HTML/JSON report) | **M4** ✅ suites; tags and parallel workers later |
 | Tracing / trace viewer | ✅ | 🟡 run records with step input/output + screenshots | **M5**: timeline with before/after snapshots per step |
 | Debugging: pause, step through, inspector | `page.pause()`, `--debug` | ❌ | **M5**: breakpoints (step setting `pause`), step-over in the editor |
 | Codegen | ✅ | ✅ recorder | Fix the recorder gaps (§6) |
-| Headless / CI | ✅ | 🟡 Playwright export | **M4**: CLI runner (§5) |
+| Headless / CI | ✅ | ✅ `blockflow run` CLI (headless Chromium, JUnit, exit codes), Playwright export | **M4** ✅ |
 | Branching beyond true/false; loop until | (code) | ✅ If, Switch (one output per case + default), For Each, Repeat (`times`, `until`, `while`) | **M2** ✅ |
 
 **Won't do:** running WebKit or Firefox engines from Chrome, headless inside the extension, parallel

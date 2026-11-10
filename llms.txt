@@ -14,6 +14,7 @@ To generate or explain workflows, read in this order:
 - [Workflow JSON Schema](docs/guide/workflow.schema.json): the graph format the editor exports
 - [Repair table](docs/guide/README.md#repair-what-import-errors-mean): import refuses a broken file and lists each problem as `<level> <code> at <JSON path>: <message> <hint>`; fix every path it names and answer with the whole corrected file
 - [Example workflows](docs/guide/examples/): each as a script (`*.script.json`) and a graph (`*.blockflow.json`), checked by tests
+- To run and repair workflows yourself in the user's browser: the MCP server `blockflow-mcp` (tools `snapshot_page`, `validate_workflow`, `run_workflow`, `get_report`…; needs Settings → Allow outside control and `npx blockflow-bridge install`), see [MCP Server](docs/wiki/MCP-Server.md). In CI: the `blockflow` CLI, see [CLI](docs/wiki/CLI.md)
 - Element locators: prefer `role=button[name="Sign in"]`, `label=Email`, `text=…`, `testid=…` over CSS (guide section 4)
 
 To change BlockFlow's code:

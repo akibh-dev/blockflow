@@ -30,6 +30,11 @@
 - [Message Protocol](Message-Protocol.md)
 - [Storage Keys](Storage-Keys.md)
 
+**Outside access (M4)**
+- [Bridge](Bridge.md)
+- [MCP Server](MCP-Server.md)
+- [CLI](CLI.md)
+
 **Internals: page and editor**
 - [Page Agent](Page-Agent.md)
 - [Locators](Locators.md)

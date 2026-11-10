@@ -34,6 +34,7 @@ new to extensions, and wants to **hand-code their own extension**. Lessons must 
 | Build, WXT config, entrypoints | 06, 07 |
 | Test approach, new test layer | 08, 07 |
 | New block type | 07 exercises (remove an exercise if you built it) |
+| Bridge, native host, MCP server, CLI | 09, 07 table, glossary |
 
 ## Template for a new lesson
 

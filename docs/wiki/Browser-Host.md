@@ -48,6 +48,9 @@ workflow timing goes through the scheduler.
 | `picking.ts` | Background side of the element picker and the editor's 📸 Snapshot page | `startPicking`, `finishPicking`, `cancelPicking`, `relayPickerSync`, `snapshotForEditor` | background |
 | `recording.ts` | Background side of the recorder | `startRecording`, `recordStep`, `onRecordedPopup`, `onRecordedTabUpdated`, `relayRecorderSync`, `stopRecording`, `loadRecording`, `RecordingState` | background, editor (type) |
 | `blobStore.ts` | IndexedDB: screenshots, datasets | `saveScreenshot`, `loadScreenshot`, `readDataset`, `writeDataset`, `listDatasets`, `deleteDataset`, … | host, editor |
+| `bridge.ts` | M4 bridge: the native port's lifecycle and the browser side of its methods | `createBridgeConnection`, `backoffMs`, `MAX_RECONNECTS`, `loadBridgeSettings`, `hasNativeMessaging`, `appendBridgeLog`, `writeBridgeStatus`, `bridgeSnapshot`, `connectNativeHost`, `nativeDisconnectReason`, `after` | background |
+| `bridgeHandlers.ts` | M4 bridge: every JSON-RPC method, on injected deps (no `browser.*`) | `createBridgeHandlers(deps)`, `withRunOverlay`, `BridgeRpcError`, `BlobCache`, `boundedLog`, `RunWorkflowOptions` | background, tests |
+| `bridgeStatus.ts` | The connection state shown on the Settings page | `BRIDGE_STATUS_KEY`, `BridgeStatus` | bridge, editor |
 | `stores.ts` | `storage.local` for workflows, logs, runs | `loadWorkflows`, `saveWorkflows`, `appendLog`, `saveRun`, `updateRuns`, … | background, editor |
 
 ## host.ts: the `Host`
@@ -373,6 +376,42 @@ Helpers: `openDb()` (cached promise, reset on failure), `done(request)`, `store(
 `saveScreenshot`, `loadScreenshot`, `readDataset`, `writeDataset(name, rows,
 'append' | 'replace') → row count`, `listDatasets`, `deleteDataset`.
 
+## bridge.ts and bridgeHandlers.ts (M4 outside access)
+
+The extension end of the protocol in `src/core/bridgeProtocol.ts` (the native host is [Bridge](Bridge.md)).
+While `bf:settings.outsideControl` is on and `nativeMessaging` is granted, the worker keeps one
+`runtime.connectNative('dev.akibh.blockflow')` port open; an open native port also keeps the MV3 worker alive.
+
+`createBridgeConnection(deps)`: `enable()` opens the port (state `connecting`, `connected` after 1 s open or
+the first message); requests (`{id, method, params}`) go to `deps.respond`, whose notifications and answer
+are posted back on the same port. A close while on → `waiting` and a reconnect after 1, 2, 4 … 30 s; after
+`MAX_RECONNECTS` (5) closes in a row (host not installed, or it exits at once with code 3 because another
+browser's host owns the socket) → `failed`, with the browser's reason in `error`; switching off and on retries.
+`disable()` posts `bridge.disabled` (the host closes its clients) and disconnects. Every change is written to
+`bf:bridge-status` (storage.session). Its timers use `after` (`setTimeout`), which is not workflow timing.
+
+`createBridgeHandlers(deps).respond(request, notify)` never throws: it refuses everything with `disabled`
+while outside control is off, maps a `BridgeRpcError` (or `CodedError('config.invalid')` → `invalidWorkflow`,
+any other error → `internal` with `data.code`) to an `RpcFailure`, and logs `{at, method, ok, detail}` via
+`deps.appendLog` (bounded `bf:bridge-log`; no params, payloads or secrets).
+
+| Method | What it does |
+| --- | --- |
+| `hello` | `version` error unless `protocol` is `BRIDGE_PROTOCOL_VERSION`; returns version, `import.meta.env.BROWSER`, `runtime.id`. |
+| `validate` | `parseImport` (script or graph, JSON text or parsed) against the saved workflows and secret names; `{ok, issues, workflows: [{name, nodes}]}`. Saves nothing. |
+| `import` | Same, then saves with `importedVia: 'bridge'` (disabled, fresh ids). `replace: true` replaces a bridge workflow of the same name in place, keeping its id (never a workflow the user made). Invalid → `invalidWorkflow` with `data.issues`. |
+| `list` | `{id, name, enabled, viaBridge?}` per workflow. |
+| `run` | A saved `workflowId` or the first workflow of an inline `source` (its others go along unsaved for Run Workflow). Calls the worker's `runWorkflow(wf, {secrets, workflows, onRun})`; sends `run.started` and a `run.step` per step status change of the top run, with the request's id. `timeoutSeconds` → `cancelRun` (the Stop path); the answer's `error` becomes "Timed out after N s"; a run still busy 15 s later is answered with its latest copy. |
+| `report` | Stored runs by `runIds` / `workflowId` / `limit` (default last 50) → `toJsonReport` / `toJUnitXml` / `toHtmlReport` (screenshots embedded). |
+| `snapshot` | `bridgeSnapshot`: the `snapshot` page op on `tabId`, or on `url` opened in a background tab (own tab, closed after); `outline` is `snapshotDocument(result)`. |
+| `stop` | `cancelRun` for a live run (`stopped: true`); `false` for a finished one; `notFound` otherwise. |
+| `blob.get` | Chunks of `BLOB_CHUNK_BYTES`, base64. Results whose JSON is over `INLINE_RESULT_BYTES` (`run`, `report`, `snapshot`, `suite.run`) come back as `{blobId, size}`; `screenshot:<id>` reads a step screenshot from IndexedDB (`mime` set). |
+| `suite.list` / `suite.run` | `loadSuites` / `runSuite` (`suites.ts`) with `runWorkflow` streaming `run.*` and `onProgress` → `suite.progress`. |
+
+`withRunOverlay(host, {secrets, workflows})` wraps a Host for one run (`Object.create`, so class hosts keep
+their methods): `secrets.all()` returns stored secrets plus the overlay (so the engine uses and masks them),
+`workflows.get` also finds unsaved ones, and `forRun` hosts get the same overlay. Nothing is written.
+
 ## stores.ts (storage.local)
 
 | Function | Key | Notes |
@@ -403,6 +442,7 @@ Shapes and lifecycles: [Storage Keys](Storage-Keys.md).
 | Drag, drop zones (synthetic) | `new DataTransfer()` + `DragEvent` | same; CustomEvent `detail` objects go through `cloneInto` | not verified |
 | Host access | granted at install | must be granted in `about:addons` (README) | not verified |
 | `storage.session`, `webNavigation.onCreatedNavigationTarget` | yes | yes | not verified |
+| Bridge (`nativeMessaging`, M4) | optional permission; host manifest per browser (`blockflow-bridge install`); e2e verified (Chromium) | optional permission, manifest with `allowed_extensions`; not verified | not available |
 
 ## Gotchas
 

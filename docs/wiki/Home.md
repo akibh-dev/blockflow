@@ -5,7 +5,7 @@ connecting **blocks** in a visual editor or by writing the same workflow as a **
 **Playwright-compatible automation in your browser**, usable by people through the editor and by LLMs
 through well-defined scripts.
 
-> **Status:** v0.4.0 + M3 (network and environment). 53 blocks, editor, recorder and reports; verified in Chromium, Brave and Firefox, with e2e tests for every block. See the [Roadmap](Roadmap.md).
+> **Status:** v0.5.0 (M3 network and environment, M4 outside access). 53 blocks, editor, recorder and reports; verified in Chromium, Brave and Firefox, with e2e tests for every block. See the [Roadmap](Roadmap.md).
 
 ## Using BlockFlow
 
@@ -44,6 +44,7 @@ What every module does, how the pieces talk, and how to change them safely. Read
 | Browser side (`src/browser`, `src/shared`) | [Background Worker](Background-Worker.md) · [Browser Host](Browser-Host.md) · [Scheduling and Timers](Scheduling-and-Timers.md) · [Message Protocol](Message-Protocol.md) · [Storage Keys](Storage-Keys.md) |
 | In the page (`src/dom`) | [Page Agent](Page-Agent.md) · [Locators](Locators.md) · [Picker and Recorder](Picker-and-Recorder.md) |
 | Editor (`src/entrypoints/editor`) | [Editor](Editor.md) · [Editor Components](Editor-Components.md) |
+| Outside access (`packages/`) | [Bridge](Bridge.md) · [MCP Server](MCP-Server.md) · [CLI](CLI.md) |
 | Project | [Testing](Testing.md) · [Build and Release](Build-and-Release.md) · [Tooling and Scripts](Tooling-and-Scripts.md) |
 
 Before you touch anything, know these rules from [CLAUDE.md](../../CLAUDE.md):
