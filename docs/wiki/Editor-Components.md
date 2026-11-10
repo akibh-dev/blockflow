@@ -20,6 +20,10 @@ state, and which messages, storage keys or browser APIs it touches. Read [Editor
 [DataPage.tsx](../../src/entrypoints/editor/components/DataPage.tsx),
 [SecretsPage.tsx](../../src/entrypoints/editor/components/SecretsPage.tsx),
 [PromptBanner.tsx](../../src/entrypoints/editor/components/PromptBanner.tsx),
+[DebugBanner.tsx](../../src/entrypoints/editor/components/DebugBanner.tsx),
+[RunControls.tsx](../../src/entrypoints/editor/components/RunControls.tsx),
+[VisualComparePanel.tsx](../../src/entrypoints/editor/components/VisualComparePanel.tsx),
+[runFrom.ts](../../src/entrypoints/editor/runFrom.ts),
 [Dialogs.tsx](../../src/entrypoints/editor/components/Dialogs.tsx),
 [TryItCard.tsx](../../src/entrypoints/editor/components/TryItCard.tsx)
 
@@ -28,7 +32,7 @@ state, and which messages, storage keys or browser APIs it touches. Read [Editor
 | Component | Where it appears | Side effects |
 | --- | --- | --- |
 | [BlockNode](#blocknode) | every block on the canvas | none (reads two contexts) |
-| [ConfigPanel](#configpanel) | right column, canvas view | sends `bf:start-pick`, listens for `bf:pick-result` / `bf:pick-error` |
+| [ConfigPanel](#configpanel) | right column, canvas view | sends `bf:start-pick`, listens for `bf:pick-result` / `bf:pick-error`; Run from here goes through `onRunFrom` |
 | [SnapshotButton](#snapshotbutton) | ConfigPanel, Open Tab only | sends `bf:snapshot-page`, listens for `bf:snapshot-result`, writes the clipboard |
 | [TemplateInput](#templateinput) | templated text settings | none |
 | [PermissionNote](#permissionnote) | ConfigPanel, blocks with `permissions` | `permissions.contains` / `request` |
@@ -39,10 +43,14 @@ state, and which messages, storage keys or browser APIs it touches. Read [Editor
 | [ImportButton](#importbutton) | sidebar, All workflows | file picker |
 | [WorkflowsPage](#workflowspage) | `manage` view | none (callbacks) |
 | [ReportsPage](#reportspage) | `reports` view | IndexedDB read, downloads |
+| [TraceTimeline](#tracetimeline) | ReportsPage (M5.1) | IndexedDB read |
+| [VisualComparePanel](#visualcomparepanel) | ReportsPage step details (M5.3) | IndexedDB read (`blockflow-visual`, screenshots), sends `bf:accept-baseline`, listens for `bf:baseline-accepted` |
 | [SuitesPage](#suitespage) | Suites view (no props) | reads/writes `bf:suites`, reads `bf:workflows`, sends `bf:run-suite`, listens for `bf:suite-progress` / `bf:suite-result`, IndexedDB read, downloads |
 | [DataPage](#datapage) | `data` view | IndexedDB read/delete (polls), downloads |
 | [SecretsPage](#secretspage) | `secrets` view | reads/writes `bf:secrets` |
 | [PromptBanner](#promptbanner) | top of the page, all views | sends `bf:answer-prompt` |
+| [DebugBanner](#debugbanner) | top of the page, all views (no props) | reads storage.session `bf:debug-pause`, sends `bf:debug-answer` |
+| [RunControls](#runcontrols) | header | none (callback); `localStorage` for the "pause on error" box |
 | [Dialogs](#dialogs) (`DialogHost`) | toasts bottom right, modal dialogs; rendered once by `App` | none |
 | [TryItCard](#tryitcard) | top right of the canvas, first run | reads/writes `bf:onboarding`, `fetch` of the playground, `tabs.create` |
 
@@ -99,13 +107,18 @@ The right column on the canvas view: settings of the selected block, generated f
 | `lastStep` | `StepRecord \| undefined` | This node's last step in the inspected run. |
 | `workflows` | `{ id, name }[]` | Other workflows, for `workflow` fields (Run Workflow). |
 | `suggestions` | `string[]` | Names for `{{` completion (see [Editor, suggestions](Editor.md#-suggestions)). |
+| `upstreamUrl?` | `string` | URL of the nearest Open Tab before the block (where to pick). |
+| `workflowId?`, `runs?` | `string`, `RunRecord[]` | M5.5: the active workflow and its runs (newest last), for **Run from here**. |
+| `onRunFrom?(startAt)` | callback | M5.5: `{ nodeId, input }`; the editor sends `bf:run-workflow` with `options.startAt`. Without it the button is not shown. |
+| `running?` | `boolean` | A run of the workflow is going on (Run from here is disabled). |
 
 **State:** `pick` (`idle | waiting | done | error`, message text, the field it belongs to, and alternative
 locator `candidates`); refs `pending` (the current `PickTarget`) and `configRef` (latest merged config, read
 by the message listener). Pick status resets whenever the selected node changes.
 
 **Layout, top to bottom:** title and description; [PermissionNote](#permissionnote) if `def.permissions`;
-problems list; one control per field; [StepResult](#internal-pieces) if the block ran; StepSettingsEditor;
+problems list; one control per field; [StepResult](#internal-pieces) if the block ran; **⤵ Run from here**
+(`RunFromHere`, when `onRunFrom` is given); StepSettingsEditor;
 "Data this block passes on" (`def.outputs`); Delete block. Unknown block types get only an error and a
 Delete button.
 
@@ -154,7 +167,8 @@ Open Tab blocks also get [SnapshotButton](#snapshotbutton) below their settings.
 | --- | --- |
 | `RowsInput` | Table editor for `rows` fields (Fill Form, Extract List, Manual Start, Transform). Cells are TemplateInputs (suggestions only for `column.templated`), or a `<select>` for a column with `options` (Switch's Condition; a new row starts with the first option, an unknown stored value stays shown), 🎯 per `column.locator` cell, `+ Add row`, ✕ remove, and **Detect fields** when `field.detectForm`. A row's `hint` becomes the value placeholder. Rows are keyed by index. |
 | `FieldInput` | The scalar control table above. |
-| `StepSettingsEditor` | "Step settings" `<details>`, open when anything is set. On error (`stop`/`continue`/`port`), Retries (0..`MAX_RETRIES`), Timeout (placeholder = `def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS`), Screenshot (`error`/`always`/`never`), **Use real mouse and keyboard** (only for blocks with `realInput: true` in their definition, or when already set; asks for the `debugger` permission first; stays off if refused), Disabled, Note. Semantics: [ARCHITECTURE.md, Engine model](../ARCHITECTURE.md#engine-model-srccoreenginets). |
+| `StepSettingsEditor` | "Step settings" `<details>`, open when anything is set. On error (`stop`/`continue`/`port`), Retries (0..`MAX_RETRIES`), Timeout (placeholder = `def.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS`), Screenshot (`error`/`always`/`never`), **Use real mouse and keyboard** (only for blocks with `realInput: true` in their definition, or when already set; asks for the `debugger` permission first; stays off if refused), **Pause here (breakpoint)** (`pause`, M5.2), **Trace this step** (`trace`, M5.1), Disabled, Note. Semantics: [ARCHITECTURE.md, Engine model](../ARCHITECTURE.md#engine-model-srccoreenginets). |
+| `RunFromHere` | M5.5 button. `runFromInput(runs, workflowId, nodeId)` (`runFrom.ts`): the node's input in the newest finished run of the workflow that reached it (its last visit). Disabled with a hint when no run reached it, when that input was stored as a `$preview` (too big) or contains masked secrets (`•••`), while a run is going on, or while the block has problems. |
 | `StepResult` | "Last run" `<details>`: status, duration, attempts, chosen port, error, `ErrorDetails`, [Screenshot](#screenshot), input and output as JSON. |
 | `ErrorDetails` (exported) | A failed step's error `code` as a small badge (`.bf-error-code`) and, for `locator.strict`, the `matches` list. Also used by ReportsPage. |
 | `formatMs(ms)` (exported) | `850 ms`, `2.5 s`, `12 s`. Also used by LogPanel and ReportsPage. |
@@ -296,7 +310,8 @@ Test-report view over the stored runs.
 **Props:** `runs` (all of `bf:runs`), `onShowOnCanvas(run)` (opens the workflow and inspects that run),
 `onClear()`.
 
-**State:** `workflow` and `status` filters, `openId` (run shown in the detail pane).
+**State:** `workflow` and `status` filters, `openId` (run shown in the detail pane), `picked` (M5.1: the
+step chosen in the filmstrip, reset when another run opens).
 
 - Filters: workflow (from the runs themselves, so deleted workflows still appear) and result: Passed,
   Failed, Cancelled, Interrupted, Running (each matches that status only).
@@ -306,11 +321,38 @@ Test-report view over the stored runs.
 - Detail: steps with status, block label, duration, attempts, port taken, error, error code
   (`ErrorDetails` from ConfigPanel), [Screenshot](#screenshot), **open called run** for Run Workflow
   steps (`childRunId`), and a collapsed **Console (n)** list (`[level] text (url)`) when the step has
-  `console` entries.
+  `console` entries. M5.1: above the steps a [Filmstrip](#tracetimeline) of the traced steps (a click marks
+  the step `.bf-picked` and scrolls it into view; each step `li` has id `bf-report-step-<index>`), and in a
+  traced step its `StepTraceView`. "Traced run" note when `run.mode.trace`. A comment marks the slot
+  `<VisualComparePanel step={step} />` (M5.3) after the trace view.
 - Exports (of the filtered runs) through `downloadText`: **JSON** (`toJsonReport`: versioned, see
   `docs/guide/report.schema.json`), **JUnit XML** (`toJUnitXml`) and
-  **HTML** (`toHtmlReport`, with screenshots loaded from IndexedDB and inlined as data URLs, so the file
-  stands alone). Report formats are documented in [Core Modules](Core-Modules.md).
+  **HTML** (`toHtmlReport`, with screenshots and trace pictures (`trace.before` / `after`) loaded from
+  IndexedDB and inlined as data URLs, so the file stands alone). Report formats are documented in [Core Modules](Core-Modules.md).
+
+## TraceTimeline
+
+M5.1 trace views ([TraceTimeline.tsx](../../src/entrypoints/editor/components/TraceTimeline.tsx)), for any run
+with `step.trace` (traced runs and steps with the `trace` setting).
+
+| Export | Props | Shows |
+| --- | --- | --- |
+| `Filmstrip` | `steps`, `selected` (index or null), `onSelect(index)`, `label(step)` | Nothing without traced steps. A horizontal strip (`role=list`, `aria-label="Trace filmstrip"`) of `.bf-filmstrip-frame` buttons: the after picture (else before), `index. label`; failed steps get a red border, the selected one `.active`. |
+| `StepTraceView` | `trace` (`StepTrace`) | Before / After pictures side by side (click opens full size); the box (`.bf-trace-box`, `data-testid="trace-box"`) over the after picture, placed by `boxStyle`; the URL; a collapsed **Network: n requests · k failed** with the slowest three. |
+| `boxStyle(trace, natural?)` | | The box as percentages of `trace.viewport` (the picture shows the viewport, whatever the device pixel ratio); falls back to the image's natural size; undefined without a box. |
+
+Pictures load with `loadScreenshot`; a pruned one says "No longer kept."
+
+## VisualComparePanel
+
+`VisualComparePanel({ step })` (M5.3, [VisualComparePanel.tsx](../../src/entrypoints/editor/components/VisualComparePanel.tsx)):
+renders nothing unless the step is a Screenshot step with `output.visual` or code `visual.mismatch`. Finds the
+comparison with `findComparison(step)` (by `output.visual.comparisonId`, else node id + the step's time window),
+then shows the status, the share of differing pixels against the allowed share and the threshold (or both
+sizes), and Baseline (the copy as compared on a mismatch, else the current baseline from `blockflow-visual`) /
+Actual / Diff pictures (`Screenshot`). On a mismatch: **Accept new baseline** sends `bf:accept-baseline`
+and waits for `bf:baseline-accepted` (its `error` is shown), then reloads the comparison ("Accepted as the
+new baseline."). Root `data-testid="visual-compare"`, classes `.bf-visual` (+ status), `.bf-visual-images`.
 
 ## SuitesPage
 
@@ -333,7 +375,9 @@ also in [Reports](#reportspage)), `adding` (the "Add a workflow…" select).
   broadcasts `bf:suite-progress` after each workflow ("Running 2 of 3 · last: Login passed") and one
   `bf:suite-result` (`result`, or `error` when the suite is invalid), shown as a toast.
 - Last result: status per workflow (failing step's code, block label and message), skipped workflows,
-  totals from `suiteSummary`, and **Download HTML / JUnit XML / JSON**, built in the page with
+  totals from `suiteSummary`, **↻ Re-run failed** (M5.5: `failedWorkflowIds(result, suite workflows)` = the
+  workflows that did not pass or were skipped, sent as `bf:run-suite { suiteId, workflowIds }`; shown only
+  when there are any and no run is going on), and **Download HTML / JUnit XML / JSON**, built in the page with
   `suiteReports` (`toSuiteHtml` with screenshots from IndexedDB, `toSuiteJUnit`, `toSuiteJson`).
 - Styles: the Reports layout (`.bf-report`, `.bf-report-list`, `.bf-report-detail`) plus `.bf-suite-head`,
   `.bf-suite-add`, `.bf-suite-downloads`, `.bf-suite-result`.
@@ -372,6 +416,25 @@ Editor for named secrets in `bf:secrets` (`Record<string, string>`), through
 **Fail the run**, each sending `bf:answer-prompt { runId, ok }`. The background also shows a notification
 with the same buttons; whichever is answered first wins, and the prompt disappears from storage. See
 [Background Worker](Background-Worker.md).
+
+## DebugBanner
+
+M5.2. `DebugBanner()` (no props) reads storage.session `bf:debug-pause` (`useDebugPauses`: initial `get`,
+then `storage.onChanged` area `session`) and renders `DebugBannerView({ pauses, answer })`: one row per paused
+debug run with the workflow name, the block label and id, why it paused (breakpoint / after Step / on an
+error), the error, the locator (outlined on the page), the step's input as JSON (collapsed), and
+**▶ Continue**, **⤼ Step**, **■ Stop**, each sending `bf:debug-answer { runId, action }`. Because the list
+is in storage, a pause made while no editor was open shows up when one opens. The header's Stop works on a
+paused run too (`bf:stop-run`). Styles: `.bf-debug-pauses`, `.bf-debug-pause` (`.error` for pause on error).
+Test: `tests/dom/debugBanner.test.ts`.
+
+## RunControls
+
+M5 header buttons, `RunControls({ onRun(options: RunOptions), running, disabled?, disabledReason? })`:
+**▶ Run** (`{}`), **◉ Run with trace** (`{ trace: true }`), **🐞 Debug** (`{ debug: {} }`, or
+`{ debug: { pauseOnError: true } }` with the **pause on error** box ticked; the box is remembered in this
+browser's `localStorage`, `bf-editor:pause-on-error`). All are disabled while `running` or `disabled`.
+The editor's `onRun` sends `bf:run-workflow` with the options; ■ Stop stays the editor's own button.
 
 ## Dialogs
 

@@ -42,6 +42,9 @@ import { PromptBanner } from './components/PromptBanner';
 import { ReportsPage } from './components/ReportsPage';
 import { SecretsPage } from './components/SecretsPage';
 import { SettingsPage } from './components/SettingsPage';
+import { DebugBanner } from './components/DebugBanner';
+import { RunControls } from './components/RunControls';
+import type { RunOptions } from '../../core/runs';
 import { SuitesPage } from './components/SuitesPage';
 import { TryItCard } from './components/TryItCard';
 import { DataPage } from './components/DataPage';
@@ -586,10 +589,11 @@ export function Editor() {
     return map;
   }, [inspectedRun]);
 
-  const runNow = () => {
+  /** Run, Run with trace, Debug (M5) or Run from here (`startAt`). */
+  const runNow = (options: RunOptions = {}) => {
     if (!active) return;
     setInspectedRunId(undefined); // follow the new run
-    void browser.runtime.sendMessage({ type: 'bf:run-workflow', workflow: active }).catch(() => {
+    void browser.runtime.sendMessage({ type: 'bf:run-workflow', workflow: active, ...(Object.keys(options).length > 0 ? { options } : {}) }).catch(() => {
       toast('Could not reach the background worker. Try reloading the extension.', 'error');
     });
   };
@@ -821,6 +825,7 @@ export function Editor() {
     <IssuesContext.Provider value={issuesByNode}>
       <RunStatusContext.Provider value={statusByNode}>
       <PromptBanner prompts={prompts} />
+      <DebugBanner />
       <div className="bf-app">
         <header className="bf-header">
           <strong className="bf-brand">BlockFlow</strong>
@@ -868,21 +873,17 @@ export function Editor() {
           >
             Export as script
           </button>
-          {runningRun ? (
+          {runningRun && (
             <button type="button" className="bf-stop" onClick={stopRun} title="Stop the run that is going on">
               ■ Stop
             </button>
-          ) : (
-            <button
-              type="button"
-              className="bf-run"
-              onClick={runNow}
-              disabled={errors.length > 0 || active.nodes.length === 0}
-              title={errors.length > 0 ? 'Fix the problems first' : 'Run the workflow once, now (it does not need to be On)'}
-            >
-              ▶ Run
-            </button>
           )}
+          <RunControls
+            onRun={runNow}
+            running={Boolean(runningRun)}
+            disabled={errors.length > 0 || active.nodes.length === 0}
+            disabledReason={errors.length > 0 ? 'Fix the problems first' : 'Add a block first'}
+          />
           {inspectedRun && !runningRun && (
             <span className={`bf-run-status ${inspectedRun.status}`} title={inspectedRun.error ?? ''}>
               {inspectedRun.status}
@@ -996,6 +997,10 @@ export function Editor() {
           lastStep={lastStepOfSelected}
           suggestions={suggestions}
           upstreamUrl={upstreamUrl}
+          workflowId={active?.id}
+          runs={activeRuns}
+          running={Boolean(runningRun)}
+          onRunFrom={(startAt) => runNow({ startAt })}
         />
         )}
 

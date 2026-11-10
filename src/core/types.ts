@@ -10,6 +10,7 @@ import type { AgentRequest, ReadKind, WaitUntil } from './page';
 import type { Routed } from './ports';
 import type { ClearSiteDataOptions, ConsoleEntry, EmulateOptions, HarResult, RouteOptions, RouteResult } from './network';
 import type { StepTrace } from './runs';
+import type { VisualHost } from './visual';
 
 export type { ReadKind } from './page';
 
@@ -624,6 +625,8 @@ export interface Host {
     before(info: TraceStepInfo): Promise<{ before?: string } | undefined>;
     after(info: TraceStepInfo & { status: string; before?: string }): Promise<Omit<StepTrace, 'before'> | undefined>;
   };
+  /** M5.3 visual comparison (Screenshot block `compare`): baselines per (workflow, node), see src/core/visual.ts. */
+  visual?: VisualHost;
   network: {
     route(tabId: number, options: RouteOptions): Promise<RouteResult>;
     har(tabId: number, action: 'start' | 'stop'): Promise<HarResult>;

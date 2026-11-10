@@ -14,6 +14,10 @@ const STEP_STATUSES = ['running', 'passed', 'failed', 'handled', 'skipped'] as c
 
 const payload = { type: 'object', description: 'Data as it left or entered the block (secrets masked). Large payloads become {"$preview": "…", "$size": n}.' };
 const isoTime = { type: 'string', format: 'date-time' };
+const rect = (description: string) => ({
+  type: 'object', required: ['x', 'y', 'width', 'height'], description,
+  properties: { x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' } },
+});
 
 function schema() {
   return {
@@ -57,6 +61,10 @@ function schema() {
           error: { type: 'string', description: 'Why the run failed or stopped, in one line.' },
           parentRunId: { type: 'string', description: 'Set when a Run Workflow block started this run.' },
           usedDebugger: { type: 'boolean', description: 'This run acquired a Chromium debugger session (CDP).' },
+          mode: {
+            type: 'object', description: 'M5: how the run was started: traced, debug run, or Run from here (the node it started at).',
+            properties: { trace: { type: 'boolean' }, debug: { type: 'boolean' }, startedAt: { type: 'string' } },
+          },
         },
       },
       step: {
@@ -83,6 +91,30 @@ function schema() {
           console: {
             type: 'array', maxItems: 100, description: 'Bounded page console and exceptions, secret values masked.',
             items: { type: 'object', required: ['level', 'text', 'timestamp'], properties: { level: { type: 'string' }, text: { type: 'string', maxLength: 2000 }, timestamp: { type: 'number' }, url: { type: 'string' } } },
+          },
+          trace: { $ref: '#/$defs/trace' },
+        },
+      },
+      trace: {
+        type: 'object',
+        description: 'M5.1 trace of a step (traced run, or the step setting `trace`). Picture ids are like `screenshot` (not embedded in JSON).',
+        properties: {
+          before: { type: 'string', description: 'Id of the picture taken before the block ran.' },
+          after: { type: 'string', description: 'Id of the picture taken after it finished.' },
+          box: rect('The element the step acted on, in CSS pixels of the viewport (the picture shows the viewport).'),
+          viewport: { type: 'object', required: ['width', 'height'], properties: { width: { type: 'number' }, height: { type: 'number' } }, description: 'Viewport size in CSS pixels when `box` was measured.' },
+          url: { type: 'string', description: 'Page URL after the step.' },
+          network: {
+            type: 'object', required: ['requests', 'failed'],
+            description: 'Requests during the step, when the run already had a debugger session on the tab (metadata only).',
+            properties: {
+              requests: { type: 'integer' },
+              failed: { type: 'integer', description: 'Failed to load, or HTTP status 400 and up.' },
+              slowest: {
+                type: 'array', maxItems: 3,
+                items: { type: 'object', required: ['url', 'method', 'ms'], properties: { url: { type: 'string' }, method: { type: 'string' }, status: { type: 'integer' }, ms: { type: 'number' } } },
+              },
+            },
           },
         },
       },

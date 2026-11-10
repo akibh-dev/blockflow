@@ -48,6 +48,7 @@ access level). Keys are local constants, not in `STORAGE_KEYS`.
 | `bf:picker-tabs` | `Record<editorTabId, tabId>` | `picking.ts` when it opens a picker tab | `picking.ts` `findTargetTab` (reused while the tab exists) | Session: one picker tab per editor tab. |
 | `bf:downloads-claimed` | `number[]`: download ids, last 200 | `waitForDownload` (`downloads.ts`) when it hands a download to a block | `waitForDownload` (skips them) | So each download is returned once; the downloads themselves come from `downloads.search`. |
 | `bf:bridge-status` | `BridgeStatus` `{state: 'off' \| 'connecting' \| 'connected' \| 'waiting' \| 'failed', since, error?, attempts?}` (`src/browser/bridgeStatus.ts`) | Background bridge connection (`writeBridgeStatus`) on every state change | Editor Settings page | It describes the live native port, which ends with the browser. |
+| `bf:debug-pause` | `PausedRun[]` = `DebugPause` + `{workflowName, pausedAt}` (`src/browser/debugChannel.ts`, `DEBUG_PAUSE_KEY`) | `debugChannel.pause` (add when a debug run pauses; remove when answered, stopped or after `MAX_PAUSE_MS`) | Editor `DebugBanner` (`useDebugPauses`) | The pause is a promise in the worker; it cannot outlive it. `clearStaleDebugPauses()` drops orphans at worker start. |
 | `bf:popups` | `{tabId, openerTabId, at}[]`, last 50, younger than 2 min | `recordPopup` (from `webNavigation.onCreatedNavigationTarget`) | `waitForPopup` (claims and removes) | Must survive the worker sleeping between the popup opening and the block waiting. |
 
 ## IndexedDB `blockflow` (version 2)
@@ -58,7 +59,18 @@ Same origin for worker and editor, so both open it directly. Large or numerous d
 | Object store | keyPath | Shape | Writer | Readers | Lifecycle |
 | --- | --- | --- | --- | --- | --- |
 | `screenshots` | `id` | `{id, runId, ts, dataUrl}` (JPEG data URL) | `Host.screenshots.capture` → `saveScreenshot` | Editor `Screenshot`, `ReportsPage` (`loadScreenshot`) | Newest 150 kept. Run records point at them by id; a pruned id shows nothing. |
+| `screenshots` (trace pictures, M5.1) | `id` = `~t\|<ts base36>\|<runId>\|<bytes>\|<random>` | same shape | `Host.trace` → `saveTraceImage` | Reports timeline (`TraceTimeline.tsx`), HTML export | Separate from the 150: at most 200 per run (later pictures are not stored), and beyond 1 000 pictures or 120 MB in total the oldest runs' pictures are deleted, whole runs at a time, never the current run. `step.trace.before` / `after` point at them. |
 | `datasets` | `name` | `{name, rows, updatedAt}` | Save to Dataset (`writeDataset`, append/replace) | Download block with "from dataset" (`Host.datasets.read` → `readDataset`), editor Data page (`listDatasets`, `deleteDataset`) | Permanent until deleted on the Data page. `unlimitedStorage` lifts the quota. |
+
+## IndexedDB `blockflow-visual` (version 1, M5.3)
+
+Visual comparison (Screenshot `compare`, [Browser-Host](Browser-Host.md#visualts-m53)). Its own database so
+its upgrades never race `blockflow`'s.
+
+| Object store | keyPath | Shape | Writer | Readers | Lifecycle |
+| --- | --- | --- | --- | --- | --- |
+| `baselines` | `key` = `"<workflowId>/<nodeId>"` | `{key, workflowId, nodeId, dataUrl (PNG), width, height, updatedAt, runId}` | `Host.visual.compare` (first run, `updateBaseline`), `acceptBaseline` (`bf:accept-baseline`) | `Host.visual.compare`, editor `VisualComparePanel` | Permanent; replaced, never pruned (`deleteBaselines(workflowId)` exists; deleting a workflow does not call it yet). |
+| `comparisons` | `id`, index `nodeId` | `{id, runId, workflowId, nodeId, ts, status, diffPixels, diffRatio, threshold, maxDiffRatio, actualId, baselineId?, diffId?, baselineSize?, acceptedAt?}` | `Host.visual.compare`, `acceptBaseline` | `VisualComparePanel` (`findComparison`) | Newest 300 kept. The picture ids point into `blockflow` `screenshots` (pruned with them). |
 
 ## In memory only (lost when the worker stops)
 
@@ -67,6 +79,7 @@ Same origin for worker and editor, so both open it directly. Large or numerous d
 | `liveRuns`, `cancelRequests` | background.ts | Runs left `running` are marked `interrupted` at the next start. |
 | Armed short timers, keep-alive interval | `HybridScheduler` | Re-armed by `restoreAll` / the heartbeat alarm. |
 | Manual Step `answers` | prompts.ts | Pending prompts are cleared; the run is already gone. |
+| Debug pause `answers` | debugChannel.ts | Listed pauses (`bf:debug-pause`) are cleared at the next start; the run is marked `interrupted`. |
 | Per-tab response logs | navigation.ts `watchNetwork` | Wait For "response" can't look back past the restart. |
 | Bridge port, reconnect backoff, result blobs for `blob.get` (10 min after last read, at most 20) | bridge.ts, bridgeHandlers.ts | The port is reopened by `syncBridge()` at the next start when `bf:settings` is on; blobs are gone (`notFound`). The open port normally keeps the worker alive. |
 | Write queues (`writeQueue`, `runQueue`, recording `queue`, `menuSync`, bridge `logQueue`) | stores.ts, recording.ts, background.ts, bridge.ts | Nothing pending survives; writes in flight may be lost on a hard kill. |

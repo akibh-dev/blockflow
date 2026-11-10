@@ -103,6 +103,8 @@ Every block has the same **Step settings** (collapsed under its settings):
 | Timeout | how long before the step fails (page actions 30 s, Open Tab 45 s, Assert 10 s, most others 60 s) |
 | Screenshot of the tab | when something goes wrong (default), always, or never |
 | Use real mouse and keyboard | trusted input through the browser debugger, for sites that ignore synthetic events (Chromium, optional permission) |
+| Pause here (breakpoint) | a **🐞 Debug** run pauses before this block (Continue / Step / Stop); normal runs ignore it |
+| Trace this step | keep pictures before and after this block (and its element's box) in the run's trace, also in a normal run |
 | Disabled | skip the block, pass the data through |
 | Note | a comment shown on the block |
 

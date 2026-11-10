@@ -121,6 +121,26 @@ describe('trace hooks (M5.1)', () => {
   });
 });
 
+describe('trace info (M5.1)', () => {
+  it('renders a templated locator with the step input, and takes an Open Tab step\'s tab from its output', async () => {
+    const host = new FakeHost();
+    const seen: TraceStepInfo[] = [];
+    host.trace = { before: async () => undefined, after: async (info) => { seen.push(info); return undefined; } };
+    const wf = flow(
+      [
+        { id: 'o', type: 'open-url', config: { url: 'https://shop.example.com/' } },
+        { id: 'v', type: 'set-variable', config: { name: 'which', value: 'buy' } },
+        { id: 'c', type: 'click', config: { locator: '#{{which}}' } },
+      ],
+      [['o', 'v'], ['v', 'c']],
+    );
+    await harness(wf, host).runner.runOnce({ trace: true });
+    expect(seen[0]!.nodeId).toBe('o');
+    expect(typeof seen[0]!.tabId).toBe('number');
+    expect(seen.find((info) => info.nodeId === 'c')?.locator).toBe('#buy');
+  });
+});
+
 describe('Run from here (M5.5)', () => {
   it('starts at the given block with the given input and continues downstream', async () => {
     const h = harness(three());

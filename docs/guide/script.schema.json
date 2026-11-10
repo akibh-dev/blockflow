@@ -2778,6 +2778,40 @@
             "minimum": 1,
             "maximum": 100
           },
+          "compare": {
+            "description": "Visual check: the first run keeps the picture as this block's baseline; later runs fail (visual.mismatch) when it looks different. PNG only.",
+            "type": "boolean"
+          },
+          "threshold": {
+            "description": "How different a pixel's colour must be to count, 0 to 1 (0.2 like Playwright; 0 = any change).",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "maxDiffRatio": {
+            "description": "Share of pixels that may differ, 0 to 1 (0.01 = 1%). 0 = none.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "mask": {
+            "description": "Parts that change on their own (a clock, an ad): an element locator, or \"x, y, width, height\" in CSS pixels from the picture's top-left.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "region": {
+                  "type": "string",
+                  "description": "Element or x, y, width, height"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "updateBaseline": {
+            "description": "Save this run's picture as the new baseline and pass (like Playwright's --update-snapshots). Switch it off again after.",
+            "type": "boolean"
+          },
           "tab": {
             "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
             "type": "string"
@@ -2809,6 +2843,7 @@
               "css",
               "accessible-name",
               "accessible-description",
+              "aria-snapshot",
               "url",
               "title",
               "console-errors",
@@ -2816,7 +2851,7 @@
             ]
           },
           "locator": {
-            "description": "For element checks.",
+            "description": "For element checks. For \"ARIA snapshot\": the part of the page (empty = the whole page).",
             "type": "string"
           },
           "name": {
@@ -2848,7 +2883,7 @@
             ]
           },
           "expected": {
-            "description": "Expected",
+            "description": "For \"ARIA snapshot\": a template, one line per element, nested by indenting: - heading \"Welcome\" [level=1], - button /Sign (in|up)/, - listitem: Apples.",
             "type": "string"
           },
           "message": {

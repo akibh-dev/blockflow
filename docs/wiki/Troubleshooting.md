@@ -41,6 +41,7 @@ The code says what kind of failure it was; the message says the details. Defined
 | `option.not-found` | Use one of the options the message lists | [Element found but not actionable](#element-found-but-not-actionable) |
 | `timeout` | Raise the step timeout or wait for the right thing (text, URL, response, popup) | [Timeouts](#timeouts) |
 | `assert.failed` | The page is not what the test expects: fix the expectation or the steps before it | [Where to see what happened](#where-to-see-what-happened) |
+| `visual.mismatch` | Screenshot `compare`: open the step in Reports (baseline / actual / diff); Accept new baseline if the new look is right, mask parts that change on their own, keep the window size the same | [Where to see what happened](#where-to-see-what-happened) |
 | `http.status`, `http.network` | Check URL, method, headers, body, and the host permission | [Other messages](#other-messages) |
 | `navigation.failed` | Check the URL; raise the timeout for slow pages | [Timeouts](#timeouts) |
 | `tab.missing`, `tab.closed` | Open the tab (Open Tab with that name) before the step; do not close it mid-run | [No tab named "main"](#no-tab-named-main-in-this-run) |

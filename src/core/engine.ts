@@ -18,8 +18,10 @@ import type {
   NodeDef,
   Payload,
   RunOutput,
+  TraceStepInfo,
   Workflow,
 } from './types';
+import { hasTemplate, render } from './template';
 
 /** Most blocks one run may pass through. Stops accidental infinite loops. */
 export const DEFAULT_MAX_STEPS = 1000;
@@ -383,6 +385,12 @@ export class WorkflowRunner {
 
     const outcome = await this.attempt(node, def, input, run, call, step);
     if (traceInfo) {
+      // A block that opened its tab (Open Tab) has it only in its output: trace the after picture there.
+      if (traceInfo.tabId === undefined && outcome.ok && outcome.output) {
+        const produced = outcome.output instanceof Routed ? outcome.output.payload : outcome.output;
+        const tabId = this.stepTab(node, produced);
+        if (tabId !== undefined) traceInfo.tabId = tabId;
+      }
       const after = await this.quietly(node.id, 'Trace', () => run.host.trace!.after({ ...traceInfo, status: outcome.ok ? (outcome.softError ? 'failed' : 'passed') : 'failed', ...(before?.before ? { before: before.before } : {}) }));
       const trace: StepTrace = { ...(before?.before ? { before: before.before } : {}), ...(after ?? {}) };
       if (Object.keys(trace).length > 0) step.trace = trace;
@@ -454,10 +462,19 @@ export class WorkflowRunner {
     return true;
   }
 
-  /** M5.1: what the trace hooks need to know about a step. */
-  private traceInfo(run: ActiveRun, node: NodeDef, input: Payload) {
+  /** M5.1: what the trace hooks need to know about a step. A templated locator is rendered with the step's input. */
+  private traceInfo(run: ActiveRun, node: NodeDef, input: Payload): TraceStepInfo {
     const tabId = this.stepTab(node, input);
-    const locator = typeof node.config.locator === 'string' && node.config.locator.trim() ? node.config.locator : undefined;
+    const raw = typeof node.config.locator === 'string' ? node.config.locator.trim() : '';
+    let locator: string | undefined = raw || undefined;
+    if (raw && hasTemplate(raw)) {
+      try {
+        // Without secrets: the rendered locator leaves the engine (trace hooks).
+        locator = render(raw, input, this.evalEnv).trim() || undefined;
+      } catch {
+        locator = undefined;
+      }
+    }
     return { runId: run.record.id, nodeId: node.id, blockType: node.type, ...(tabId !== undefined ? { tabId } : {}), ...(locator ? { locator } : {}) };
   }
 

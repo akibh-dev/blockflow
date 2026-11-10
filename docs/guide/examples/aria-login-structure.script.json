@@ -1,0 +1,30 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Login page structure",
+  "steps": [
+    {
+      "id": "open",
+      "open": {
+        "url": "https://example.com/login",
+        "where": "window"
+      }
+    },
+    {
+      "id": "layout",
+      "assert": {
+        "subject": "aria-snapshot",
+        "expected": "- heading \"Log in\" [level=1]\n- form \"Login\":\n  - textbox \"Email\"\n  - textbox \"Password\"\n  - button /Sign (in|up)/"
+      }
+    },
+    {
+      "id": "form",
+      "assert": {
+        "subject": "aria-snapshot",
+        "locator": "role=form[name=\"Login\"]",
+        "expected": "- checkbox \"Remember me\" [checked=false]\n- button \"Sign in\"",
+        "message": "The login form changed"
+      }
+    }
+  ]
+}

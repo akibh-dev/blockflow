@@ -121,6 +121,21 @@ export type AgentRequest =
    * Without: `{ scrollX, scrollY, viewportWidth, viewportHeight, pageWidth, pageHeight, devicePixelRatio }`.
    */
   | { op: 'measure'; locator?: string }
+  /**
+   * M5.1 trace: where the first element matching `locator` is, in CSS pixels of the tab's viewport (same-origin
+   * frames added up; the driver adds cross-origin frame offsets), i.e. on a visible-area screenshot. Answers at
+   * once: no waiting, no scrolling, no strict-mode check. Result {@link BoxResult}.
+   */
+  | { op: 'box'; locator: string }
+  /**
+   * M5.1 / M5.2: an outline overlay over the first element matching `locator` (debug pauses, traces). It
+   * replaces any earlier highlight in that document, follows the page when it scrolls, catches no clicks and
+   * is invisible to locators and snapshots (closed shadow root). It stays until `{ op: 'highlight', clear: true }`
+   * or, with `ms`, for that many milliseconds. `label` is shown above the outline. Answers at once (no waiting):
+   * {@link HighlightResult}. A cross-origin frame's highlight is drawn inside that frame; `clear` without a
+   * locator clears the top document only.
+   */
+  | { op: 'highlight'; locator?: string; clear?: boolean; ms?: number; label?: string }
   | { op: 'scroll'; to: 'bottom' | 'top' | 'element'; locator?: string }
   /**
    * Put files on an <input type=file> (also a hidden one, as custom upload buttons use). With `dropzone`,
@@ -145,6 +160,17 @@ export type AgentRequest =
    * `maxLines` caps the outline (default {@link SNAPSHOT_MAX_LINES}).
    */
   | { op: 'snapshot'; locator?: string; maxLines?: number };
+
+/**
+ * The `result` of a `box` request. `count` is how many elements match; the box is the first one's
+ * (`visible` false: hidden or zero-sized, the box may be all zeros). `found: false` when nothing matches.
+ */
+export type BoxResult =
+  | { found: true; x: number; y: number; width: number; height: number; count: number; visible: boolean }
+  | { found: false; count: 0 };
+
+/** The `result` of a `highlight` request: `highlighted` false when nothing matches; `cleared` for `clear: true`. */
+export type HighlightResult = { highlighted: boolean; count: number } | { cleared: true };
 
 /** Default cap of a snapshot outline. */
 export const SNAPSHOT_MAX_LINES = 1_500;

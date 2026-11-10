@@ -30,7 +30,7 @@ export interface JsonReport {
 export interface ReportOptions {
   /** Block type → label, e.g. "assert" → "Assert". */
   blockLabel(type: string): string;
-  /** Screenshot id → data URL, for the HTML report. */
+  /** Screenshot id → data URL, for the HTML report (step screenshots and M5.1 trace pictures). */
   screenshots?: Record<string, string>;
   title?: string;
 }
@@ -112,6 +112,28 @@ function html(text: string): string {
   return text.replace(/[<>&"]/g, (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[char] ?? char);
 }
 
+/** M5.1: a traced step's before/after pictures (box drawn over the after one), URL and network summary. */
+function traceHtml(step: StepRecord, options: ReportOptions): string {
+  const trace = step.trace;
+  if (!trace) return '';
+  const picture = (id: string | undefined, label: string, withBox: boolean) => {
+    const src = id ? options.screenshots?.[id] : undefined;
+    if (!src) return '';
+    const { box, viewport } = trace;
+    const pct = (value: number, of: number) => `${Math.max(0, Math.min(100, (value / of) * 100)).toFixed(2)}%`;
+    const overlay = withBox && box && viewport && viewport.width > 0 && viewport.height > 0
+      ? `<span class="box" style="left:${pct(box.x, viewport.width)};top:${pct(box.y, viewport.height)};width:${pct(box.width, viewport.width)};height:${pct(box.height, viewport.height)}"></span>`
+      : '';
+    return `<figure><figcaption>${label}</figcaption><div class="frame"><img src="${src}" alt="${label}">${overlay}</div></figure>`;
+  };
+  const pictures = picture(trace.before, 'Before', false) + picture(trace.after, 'After', true);
+  const network = trace.network
+    ? `<div class="meta">Network: ${trace.network.requests} requests${trace.network.failed ? `, ${trace.network.failed} failed` : ''}${trace.network.slowest?.length ? ` · slowest: ${trace.network.slowest.map((request) => html(`${request.method} ${request.url} ${request.ms} ms`)).join(', ')}` : ''}</div>`
+    : '';
+  const url = trace.url ? `<div class="meta">${html(trace.url)}</div>` : '';
+  return pictures || network || url ? `<div class="trace">${pictures ? `<div class="pair">${pictures}</div>` : ''}${url}${network}</div>` : '';
+}
+
 /** A single HTML file, no external resources. */
 export function toHtmlReport(runs: RunRecord[], options: ReportOptions): string {
   const sum = summarize(runs);
@@ -120,11 +142,11 @@ export function toHtmlReport(runs: RunRecord[], options: ReportOptions): string 
     const rows = run.steps
       .map((step) => {
         const shot = step.screenshot ? options.screenshots?.[step.screenshot] : undefined;
-        return `<tr class="${step.status}"><td>${html(step.status)}</td><td>${html(options.blockLabel(step.blockType))}</td><td>${step.durationMs ?? ''} ms</td><td>${step.code ? `<code>${html(step.code)}</code> ` : ''}${html(step.error ?? '')}${step.console?.length ? `<details><summary>Console (${step.console.length})</summary><pre>${step.console.map((entry) => html(`[${entry.level}] ${entry.text}${entry.url ? ` (${entry.url})` : ''}`)).join('\n')}</pre></details>` : ''}${shot ? `<br><img src="${shot}" alt="Screenshot">` : ''}</td></tr>`;
+        return `<tr class="${step.status}"><td>${html(step.status)}</td><td>${html(options.blockLabel(step.blockType))}</td><td>${step.durationMs ?? ''} ms</td><td>${step.code ? `<code>${html(step.code)}</code> ` : ''}${html(step.error ?? '')}${step.console?.length ? `<details><summary>Console (${step.console.length})</summary><pre>${step.console.map((entry) => html(`[${entry.level}] ${entry.text}${entry.url ? ` (${entry.url})` : ''}`)).join('\n')}</pre></details>` : ''}${shot ? `<br><img src="${shot}" alt="Screenshot">` : ''}${traceHtml(step, options)}</td></tr>`;
       })
       .join('');
     return `<section class="${run.status}"><h2><span class="badge ${run.status}">${html(run.status)}</span> ${html(run.workflowName)}</h2>
-<p class="meta">${html(new Date(run.startedAt).toLocaleString())} · ${html(run.trigger)} · ${(durationOf(run) / 1000).toFixed(1)} s${run.usedDebugger ? ' · Chromium debugger (CDP)' : ''}${run.error ? ` · <b>${html(run.error)}</b>` : ''}</p>
+<p class="meta">${html(new Date(run.startedAt).toLocaleString())} · ${html(run.trigger)} · ${(durationOf(run) / 1000).toFixed(1)} s${run.mode?.trace ? ' · traced' : ''}${run.usedDebugger ? ' · Chromium debugger (CDP)' : ''}${run.error ? ` · <b>${html(run.error)}</b>` : ''}</p>
 <table><thead><tr><th>Status</th><th>Block</th><th>Time</th><th>Details</th></tr></thead><tbody>${rows}</tbody></table></section>`;
   });
   return `<!doctype html>
@@ -136,7 +158,9 @@ section.failed,section.interrupted{border-left:5px solid #dc2626}section.passed{
 h2{font-size:16px;margin:0}table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:4px 6px;border-top:1px solid #eee;vertical-align:top}
 tr.failed td:first-child{color:#dc2626;font-weight:600}tr.passed td:first-child{color:#16a34a}tr.handled td:first-child{color:#d97706}
 .badge{font-size:12px;padding:1px 8px;border-radius:999px;background:#eee}.badge.passed{background:#dcfce7;color:#166534}.badge.failed,.badge.interrupted{background:#fee2e2;color:#991b1b}
-img{max-width:100%;margin-top:6px;border:1px solid #ddd;border-radius:4px}.totals span{margin-right:14px}
+img{max-width:100%;margin-top:6px;border:1px solid #ddd;border-radius:4px}
+.trace .pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}.trace figure{margin:6px 0 0}.trace figcaption{font-size:11px;color:#6b7280}
+.trace .frame{position:relative;line-height:0}.trace .frame img{width:100%;margin:0}.trace .box{position:absolute;box-sizing:border-box;border:2px solid #f59e0b;background:rgba(245,158,11,.18)}.totals span{margin-right:14px}
 </style></head><body>
 <h1>${html(title)}</h1>
 <p class="meta totals"><span>${sum.total} runs</span><span style="color:#16a34a">${sum.passed} passed</span><span style="color:#dc2626">${sum.failed} failed</span><span>${sum.other} other</span><span>${(sum.durationMs / 1000).toFixed(1)} s</span></p>

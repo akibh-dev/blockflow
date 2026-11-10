@@ -6,6 +6,8 @@ import { runtimeSource } from './playwrightRuntime';
 import { edgePort, nodePorts } from './ports';
 import type { BlockRegistry } from './registry';
 import { casePorts } from './blocks/switchBlock';
+import { parseAriaTemplate, renderAriaTree } from './ariaSnapshot';
+import { parseMaskRows } from './visual';
 import type { NodeDef, Workflow } from './types';
 
 /**
@@ -572,6 +574,26 @@ class Writer {
       }
       case 'screenshot': {
         const target = c.area === 'element' ? firstOf(loc()) : tab(c);
+        if (c.compare === true) {
+          // M5.3: a visual check. Baselines live next to the test (`npx playwright test --update-snapshots`).
+          const { masks } = parseMaskRows(c.mask);
+          const locators = masks.flatMap((mask) => ('locator' in mask ? [toPlaywrightLocator(mask.locator, tab(c))] : []));
+          const rects = masks.flatMap((mask) => ('rect' in mask ? [`${mask.rect.x},${mask.rect.y},${mask.rect.width},${mask.rect.height}`] : []));
+          const threshold = Number(c.threshold ?? 0.2);
+          const ratio = Number(c.maxDiffRatio ?? 0);
+          const options = [
+            c.area === 'full' ? 'fullPage: true' : '',
+            Number.isFinite(threshold) && threshold !== 0.2 ? `threshold: ${threshold}` : '',
+            Number.isFinite(ratio) && ratio > 0 ? `maxDiffPixelRatio: ${ratio}` : '',
+            locators.length > 0 ? `mask: [${locators.join(', ')}]` : '',
+          ].filter(Boolean);
+          if (rects.length > 0) this.line(`// BlockFlow-only: mask rectangles ${commentText(rects.join('; '))} (Playwright masks elements only).`);
+          if (c.updateBaseline === true) this.line('// BlockFlow-only: "Update the baseline" is on: run with --update-snapshots once.');
+          const name = `${String(node.id).replace(/[^\w-]+/g, '-') || 'screenshot'}.png`;
+          this.line(`await expect(${target}).toHaveScreenshot(${js(name)}${this.optArg(options)});`);
+          this.line(`data = { ...data, screenshotId: ${js(node.id)} };`);
+          break;
+        }
         const jpeg = c.format === 'jpeg';
         const options = [c.area === 'full' ? 'fullPage: true' : '', jpeg ? `type: 'jpeg', quality: ${Number(c.quality) || 80}` : ''].filter(Boolean);
         this.line(`{ const shot = await ${target}.screenshot(${this.opt(options)}); await test.info().attach(${js(label)}, { body: shot, contentType: ${js(jpeg ? 'image/jpeg' : 'image/png')} }); data = { ...data, screenshotId: ${js(node.id)} }; }`);
@@ -661,6 +683,29 @@ class Writer {
   }
 
   /**
+   * Assert `aria-snapshot` → `toMatchAriaSnapshot`, the page's `body` or the element. A template without
+   * `{{…}}` is written back in Playwright's form (BlockFlow's `[ref=…]` hints gone, BlockFlow-only
+   * states such as `[required]` left out with a comment); a templated one is rendered at run time.
+   */
+  private ariaSnapshot(c: Record<string, unknown>, loc: (key?: string) => string, expectFn: string, message: string): void {
+    const target = String(c.locator ?? '').trim() ? firstOf(loc()) : `${tab(c)}.locator('body')`;
+    const raw = String(c.expected ?? '');
+    let arg = template(raw);
+    if (!hasToken(raw)) {
+      try {
+        const { text, dropped } = renderAriaTree(parseAriaTemplate(raw), { playwright: true });
+        if (dropped.length > 0) this.line(`// BlockFlow-only: ${commentText(dropped.join(' '))} not checked by Playwright's toMatchAriaSnapshot.`);
+        const inner = '  '.repeat(this.depth + 1);
+        const escaped = text.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+        arg = `\`\n${escaped.split('\n').map((line) => `${inner}${line}`).join('\n')}\n${'  '.repeat(this.depth)}\``;
+      } catch {
+        // Not a valid template (import checking reports it): export it as written.
+      }
+    }
+    this.line(`await ${expectFn}(${target}${message ? `, ${message}` : ''}).toMatchAriaSnapshot(${arg}${this.optArg()});`);
+  }
+
+  /**
    * Assert retries like BlockFlow's: web-first matchers where Playwright has one (toHaveText,
    * toHaveURL, toHaveValue…), `expect.poll` around BlockFlow's own comparison for the rest.
    * Checks on a data value are answered at once (as in the extension).
@@ -672,6 +717,10 @@ class Writer {
     const subject = String(c.subject || 'text');
     if (subject === 'console-errors') {
       this.line('// BlockFlow-only: console-errors assertion needs a Playwright console/pageerror collector; not exported.');
+      return;
+    }
+    if (subject === 'aria-snapshot') {
+      this.ariaSnapshot(c, loc, expectFn, message);
       return;
     }
     const operator = String(c.operator || 'contains');

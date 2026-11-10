@@ -142,6 +142,8 @@ export interface RecordedMessage {
 export interface RunSuiteMessage {
   type: 'bf:run-suite';
   suiteId: string;
+  /** M5.5 "Re-run failed": run only these workflows of the suite (in suite order). */
+  workflowIds?: string[];
 }
 
 /** Background → editor: one workflow of a suite finished (`status` is the run's, or `skipped`). */
@@ -159,6 +161,32 @@ export interface SuiteResultMessage {
   type: 'bf:suite-result';
   suiteId: string;
   result?: SuiteResult;
+  error?: string;
+}
+
+/**
+ * Editor → background (M5.2): answer a paused debug run (`DebugBanner`). `stop` ends the run like Stop
+ * (`bf:stop-run` also answers a pause with `stop`). Pauses are listed in storage.session `bf:debug-pause`.
+ */
+export interface DebugAnswerMessage {
+  type: 'bf:debug-answer';
+  runId: string;
+  action: 'continue' | 'step' | 'stop';
+}
+
+/**
+ * Editor → background (M5.3, Visual compare panel): make the actual screenshot of comparison
+ * `comparisonId` the baseline of its (workflow, block). Answered with a `bf:baseline-accepted` broadcast.
+ */
+export interface AcceptBaselineMessage {
+  type: 'bf:accept-baseline';
+  comparisonId: string;
+}
+
+/** Background → editor: `bf:accept-baseline` done, or `error`. */
+export interface BaselineAcceptedMessage {
+  type: 'bf:baseline-accepted';
+  comparisonId: string;
   error?: string;
 }
 
@@ -181,7 +209,10 @@ export type ExtensionMessage =
   | SnapshotResultMessage
   | RunSuiteMessage
   | SuiteProgressMessage
-  | SuiteResultMessage;
+  | SuiteResultMessage
+  | DebugAnswerMessage
+  | AcceptBaselineMessage
+  | BaselineAcceptedMessage;
 
 /** Runtime list of the `type` values above; keep it in sync with `ExtensionMessage`. */
 const TYPES = new Set<string>([
@@ -203,6 +234,9 @@ const TYPES = new Set<string>([
   'bf:run-suite',
   'bf:suite-progress',
   'bf:suite-result',
+  'bf:debug-answer',
+  'bf:accept-baseline',
+  'bf:baseline-accepted',
 ]);
 
 /**

@@ -9,7 +9,7 @@ import { issueLines, resolveBlob, summaryLines, writeReports } from './reports.m
 import { collectSecrets } from './secrets.mjs';
 
 export const EXIT = Object.freeze({ passed: 0, failed: 1, error: 2 });
-export const VERSION = '0.5.0';
+export const VERSION = '0.6.0';
 
 /**
  * @typedef {import('./browser.mjs').BridgeSession} BridgeSession

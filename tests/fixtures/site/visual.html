@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture: visual comparison</title>
+    <!--
+      M5.3 e2e (tests/e2e/specs/m5-visual.mjs). Plain blocks, no web fonts, no animation, no caret, so two
+      renders are pixel-identical. Query string: ?v=2 moves and recolours #hero; ?clock=… changes the text in
+      #clock (the spec masks it).
+    -->
+    <style>
+      html, body { margin: 0; padding: 0; background: #ffffff; overflow: hidden; }
+      body { font: 16px/1.4 sans-serif; color: #111111; }
+      #clock { position: absolute; left: 20px; top: 20px; width: 220px; height: 40px; background: #eeeeee; padding: 8px; box-sizing: border-box; }
+      #hero { position: absolute; left: 300px; top: 120px; width: 240px; height: 140px; background: #2563eb; }
+      #hero.v2 { left: 340px; top: 150px; background: #dc2626; }
+      #card { position: absolute; left: 20px; top: 320px; width: 300px; height: 120px; background: #f3f4f6; border: 2px solid #111111; }
+      #badge { position: absolute; right: 10px; top: 10px; width: 40px; height: 20px; background: #16a34a; }
+    </style>
+  </head>
+  <body>
+    <div id="clock">Time: <span id="time">10:00</span></div>
+    <div id="hero"></div>
+    <div id="card"><div id="badge"></div></div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      if (params.get('v') === '2') document.getElementById('hero').classList.add('v2');
+      if (params.get('clock')) document.getElementById('time').textContent = params.get('clock');
+      if (params.get('badge')) document.getElementById('badge').style.background = params.get('badge');
+    </script>
+  </body>
+</html>

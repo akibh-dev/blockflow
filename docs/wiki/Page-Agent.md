@@ -68,7 +68,7 @@ async run({ request, budgetMs }) {
 | — (returns) | Success | `{status: 'done', result}` |
 | `Pending(reason, code)` | Not possible yet | Retry every 50 ms; at the deadline `{status: 'pending', reason, code, url}` (the last reason). `code` defaults to `timeout`. |
 | `Fatal(message, code?, matches?)` | Never going to work | `{status: 'error', message, code?, url, matches?}` immediately. |
-| `FrameBoundaryError` | Locator crosses into a cross-origin iframe (and no same-origin frame it matches has the element) | `{status: 'frame', src, rest}` immediately; for `locate` also `offset`. |
+| `FrameBoundaryError` | Locator crosses into a cross-origin iframe (and no same-origin frame it matches has the element) | `{status: 'frame', src, rest}` immediately; for `locate` / `measure` also `offset` (frame scrolled on screen), for `box` `offset` without scrolling. |
 | `LocatorError` | Bad locator syntax/CSS/XPath/regex | Wrapped into `Fatal(…, 'locator.invalid')` by `all()`, so `error`. |
 | anything else | Bug or page oddity | `{status: 'error', message, url}` (no code: the engine records `step.failed`). `run` never rejects. |
 
@@ -113,6 +113,8 @@ agent does with them.
 | `drag` | `one` for source and `to` | source visible, stable, hit; target visible, stable | `{dragged, to, mode, dropped}` |
 | `locate` | `one` | visible, enabled, editable (fill, or set-field on a text field), stable, hit (purpose `drop`: visible, stable) | `{x, y, kind: 'text' \| 'select' \| 'check' \| 'other'}` (`position` instead of the center when given) |
 | `snapshot` | body, or `all(locator)[0]` (Pending while none) | none | `SnapshotResult`: `takeSnapshot()` in [snapshot.ts](../../src/dom/snapshot.ts), plus `url` and `title` |
+| `box` (M5.1) | `all` (first match; no strict mode) | none, answers at once, never scrolls | `{found: true, x, y, width, height, count, visible}` (viewport, same-origin frame origins added) or `{found: false, count: 0}` |
+| `highlight` (M5.1/M5.2) | `all` (first match) | none, answers at once | `{highlighted, count}`; `clear: true` or no locator → `{cleared: true}`. Overlay `div[data-blockflow-highlight]` in the element's document (absolute, document coordinates, `pointer-events: none`, `aria-hidden`, label in a closed shadow root), replaces earlier ones, removed after `ms` |
 
 ### Snapshot (`snapshot.ts`)
 

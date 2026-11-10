@@ -9,8 +9,14 @@ import type { M3Runtime } from './m3Runtime';
 /** Mutable page-wide overrides cannot be safely installed by independent runs on the same tab. */
 const claims = new Map<number, string>();
 
-/** Build one feature set per run; all features use the same CDP session and exit path. */
-export function createRunHost(base: Host, runId: string): Host {
+/** What M5.1 tracing (trace.ts) uses of the run's telemetry; not part of `Host`. */
+export type TraceTelemetry = Pick<ReturnType<typeof createTelemetry>, 'hasSession' | 'beginStepNetwork' | 'finishStepNetwork'>;
+
+/**
+ * Build one feature set per run; all features use the same CDP session and exit path. `traceTelemetry`
+ * is for host.ts to wire `Host.trace`; take it off before handing the Host to the engine.
+ */
+export function createRunHost(base: Host, runId: string): Host & { traceTelemetry: TraceTelemetry } {
   let closing = false;
   let finished: Promise<{ usedDebugger?: boolean }> | undefined;
   const assertOpen = () => { if (closing) throw new CodedError('step.failed', 'The run has ended; its browser resources are closed.'); };
@@ -59,6 +65,11 @@ export function createRunHost(base: Host, runId: string): Host {
     ...base,
     finishRun: finish,
     diagnostics: { beginStep: (nodeId) => telemetry.beginStep(nodeId), finishStep: (nodeId) => telemetry.finishStep(nodeId) },
+    traceTelemetry: {
+      hasSession: (tabId) => telemetry.hasSession(tabId),
+      beginStepNetwork: (tabId, nodeId) => telemetry.beginStepNetwork(tabId, nodeId),
+      finishStepNetwork: (tabId, nodeId) => telemetry.finishStepNetwork(tabId, nodeId),
+    },
     network: {
       route: (tabId, options) => { assertOpen(); return routes.apply(tabId, options); },
       har: (tabId, action) => { assertOpen(); return telemetry.har(tabId, action); },

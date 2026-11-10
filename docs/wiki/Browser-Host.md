@@ -12,7 +12,7 @@ capability, or when you need to know which permission or browser a feature depen
 [cdpSessions.ts](../../src/browser/cdpSessions.ts), [m3Host.ts](../../src/browser/m3Host.ts),
 [m3Runtime.ts](../../src/browser/m3Runtime.ts), [routes.ts](../../src/browser/routes.ts),
 [environment.ts](../../src/browser/environment.ts), [telemetry.ts](../../src/browser/telemetry.ts),
-[popups.ts](../../src/browser/popups.ts), [prompts.ts](../../src/browser/prompts.ts),
+[popups.ts](../../src/browser/popups.ts), [prompts.ts](../../src/browser/prompts.ts), [debugChannel.ts](../../src/browser/debugChannel.ts),
 [picking.ts](../../src/browser/picking.ts), [recording.ts](../../src/browser/recording.ts),
 [blobStore.ts](../../src/browser/blobStore.ts), [stores.ts](../../src/browser/stores.ts)
 (the schedulers, [scheduler.ts](../../src/browser/scheduler.ts) and
@@ -35,19 +35,22 @@ workflow timing goes through the scheduler.
 | `pageReader.ts` | Watch Element / Read Element with a URL | `readElement` | host |
 | `htmlParse.ts` | Agent on an HTML string | `actOnHtml`, `runOnHtml` | host, offscreen document |
 | `cdp.ts` | Real input and background screenshots via `debugger` | `withDebugger`, `mouseClick`, `mouseDrag`, `modifierMask`, `pressKey`, `insertText`, `typeInto`, `captureWithDebugger`, `hasDebugger` | pageDriver, host |
-| `m3Host.ts` | Per-run network, environment and console features; tab claims; run cleanup | `createRunHost(base, runId)` | host |
+| `m3Host.ts` | Per-run network, environment and console features; tab claims; run cleanup | `createRunHost(base, runId)` (also returns `traceTelemetry`), `TraceTelemetry` | host |
+| `trace.ts` | M5.1 `Host.trace`: pictures before/after a traced step, element box, URL, network summary | `createTrace(deps)`, `TraceDeps`, `TRACE_AGENT_MS` | host |
 | `m3Runtime.ts` | The interface features use to reach the run's CDP session | `M3Runtime` (type) | routes, environment, telemetry |
 | `routes.ts` | Route block: CDP `Fetch` interception or `declarativeNetRequest` session rules | `createRoutes(runtime, dnr?)`, `initialiseRoutes(port?)`, `DnrPort` | m3Host, background |
 | `environment.ts` | Emulate (CDP `Emulation.*`) and Clear Site Data (`browsingData`) | `createEnvironment(runtime)`, `DEVICE_PRESETS` | m3Host |
-| `telemetry.ts` | Console / exception capture, HAR recording | `createTelemetry(runtime)`, `MAX_CONSOLE_ENTRIES`, `MAX_STEP_CONSOLE_ENTRIES`, `MAX_HAR_ENTRIES` | m3Host |
+| `telemetry.ts` | Console / exception capture, HAR recording, per-step network summary (M5.1) | `createTelemetry(runtime)`, `MAX_CONSOLE_ENTRIES`, `MAX_STEP_CONSOLE_ENTRIES`, `MAX_HAR_ENTRIES`, `MAX_STEP_REQUESTS`, `STEP_SLOWEST` | m3Host |
 | `popups.ts` | Tabs opened by pages | `recordPopup`, `waitForPopup` | background, host |
-| `screenshots.ts` | Step screenshots and the Screenshot block | `capture`, `take` | host |
+| `screenshots.ts` | Step screenshots, the Screenshot block, trace pictures | `capture`, `take`, `captureForTrace` | host |
+| `visual.ts` | M5.3 visual comparison (`Host.visual`): baselines, comparisons, PNG decode/encode, mask placement | `createVisual(deps?)`, `acceptBaseline`, `findComparison`, `getBaseline`, `deleteBaselines`, `decodeImage`, `encodeImage`, `VISUAL_DB`, `Baseline`, `Comparison`, `VisualDeps` | host, background, editor (`VisualComparePanel`) |
 | `downloads.ts` | Wait for Download | `waitForDownload`, `readDownloadText` | host |
 | `cookies.ts` | Cookies & Storage (cookie jar) | `getCookies`, `setCookie`, `removeCookies` | host |
 | `prompts.ts` | Manual Step | `askUser`, `answerPrompt`, `promptRunId`, `clearStalePrompts`, `PendingPrompt` | host, background, editor |
+| `debugChannel.ts` | M5.2 debug pauses (`Host.debug`) | `createDebugChannel`, `debugChannel`, `pauseForDebug`, `answerDebug`, `clearStaleDebugPauses`, `highlightRequest`, `DEBUG_PAUSE_KEY`, `PausedRun`, `DebugAction` | host, background, editor (`DebugBanner`) |
 | `picking.ts` | Background side of the element picker and the editor's 📸 Snapshot page | `startPicking`, `finishPicking`, `cancelPicking`, `relayPickerSync`, `snapshotForEditor` | background |
 | `recording.ts` | Background side of the recorder | `startRecording`, `recordStep`, `onRecordedPopup`, `onRecordedTabUpdated`, `relayRecorderSync`, `stopRecording`, `loadRecording`, `RecordingState` | background, editor (type) |
-| `blobStore.ts` | IndexedDB: screenshots, datasets | `saveScreenshot`, `loadScreenshot`, `readDataset`, `writeDataset`, `listDatasets`, `deleteDataset`, … | host, editor |
+| `blobStore.ts` | IndexedDB: screenshots, trace pictures, datasets | `saveScreenshot`, `saveTraceImage`, `loadScreenshot`, `traceEvictions`, `readDataset`, `writeDataset`, `listDatasets`, `deleteDataset`, … | host, editor |
 | `bridge.ts` | M4 bridge: the native port's lifecycle and the browser side of its methods | `createBridgeConnection`, `backoffMs`, `MAX_RECONNECTS`, `loadBridgeSettings`, `hasNativeMessaging`, `appendBridgeLog`, `writeBridgeStatus`, `bridgeSnapshot`, `connectNativeHost`, `nativeDisconnectReason`, `after` | background |
 | `bridgeHandlers.ts` | M4 bridge: every JSON-RPC method, on injected deps (no `browser.*`) | `createBridgeHandlers(deps)`, `withRunOverlay`, `BridgeRpcError`, `BlobCache`, `boundedLog`, `RunWorkflowOptions` | background, tests |
 | `bridgeStatus.ts` | The connection state shown on the Settings page | `BRIDGE_STATUS_KEY`, `BridgeStatus` | bridge, editor |
@@ -81,6 +84,8 @@ workflow timing goes through the scheduler.
 | `screenshots.take(tabId, {runId, area, locator, format, quality, timeoutMs})` | `screenshots.ts`, Screenshot block. Firefox: `tabs.captureTab` with `rect` in document CSS pixels (full page = `{0, 0, pageWidth, pageHeight}`, element = its box + scroll, from the agent's `measure` op). Chromium: visible = `captureVisibleTab` (showing tab) or `Page.captureScreenshot`; full = `Page.getLayoutMetrics` + `captureScreenshot` with `captureBeyondViewport` and a `clip`; element = `measure` box + scroll as `clip`, or, without the debugger on a showing tab, cut out of a `captureVisibleTab` with `OffscreenCanvas`. Sides capped at 16 000 px. Saved like step screenshots; returns `{id, width, height}`. Throws `permission.missing` when Chromium needs the debugger. | `<all_urls>`; Chromium `debugger` (optional) for full page and tabs not showing |
 | `cookies.get(url, name?)` / `set(options)` / `remove(url, name?)` | `cookies.ts`: `cookies.getAll({url, name})`, `cookies.set` (`expires` → `expirationDate`, `sameSite` `None` → `no_restriction`), and remove = `getAll` + `cookies.remove({url: scheme://domain+path, name, storeId})` per cookie (clearing a site = without `name`). A refused cookie (Chrome: null, Firefox: throws) → `step.failed`. Without the permission → `permission.missing`. | `cookies` (optional; granted in e2e builds) |
 | `prompt.ask` | `prompts.askUser` | `notifications`, `storage` |
+| `debug.pause(info)` | `debugChannel.pauseForDebug` (M5.2, [below](#debugchannelts-m52)); run-scoped hosts inherit it | `storage` (session), `scripting` (highlight) |
+| `visual.compare(request)` | `visual.ts` `createVisual()` (M5.3, [below](#visualts-m53)); run-scoped hosts inherit it | IndexedDB; `scripting` (mask `box` ops) |
 | `datasets.read/write` | `blobStore` | IndexedDB, `unlimitedStorage` |
 | `downloads.save(filename, content, mime)` | `downloads.download` with a `blob:` URL where `URL.createObjectURL` exists (Firefox), else a `data:` URL (Chrome's worker). `conflictAction: 'uniquify'`; `\ / : * ? " < > |` in names become `-`. | `downloads` |
 | `downloads.waitFor(pattern, lookBackMs, timeoutMs)` | `downloads.ts`: polls `downloads.search({startedAfter: now - lookBackMs})` every 250 ms for an unclaimed download that is not BlockFlow's own (`byExtensionId`, or a `blob:` URL of the extension's origin) whose URL, final URL or file name matches `pattern`; claims it (`storage.session` `bf:downloads-claimed`), then polls until `state: complete` (`interrupted` → `download.failed`). Returns `{downloadId, url, filename, path, size, mime}`. The browser's own download list is the look-back, so nothing is recorded while the worker sleeps and no listener is needed. | `downloads` |
@@ -89,6 +94,7 @@ workflow timing goes through the scheduler.
 | `forRun(runId)` / `finishRun(runId)` | `m3Host.createRunHost` (below), plus the run id injected into `page.act` and response-body waits | see below |
 | `network.route` / `har` / `console`, `environment.emulate` / `clearSiteData` | Outside a run: throw `config.invalid` ("… can only be used inside a run"). Inside one: the run's feature set from `createRunHost` | `debugger`, `declarativeNetRequest`, `browsingData` |
 | `diagnostics.beginStep` / `finishStep` | Only on the run-scoped Host: per-step console frames from `telemetry.ts` | `debugger` (passive) |
+| `trace.before` / `trace.after` | Only on the run-scoped Host: `createTrace` in `trace.ts` (below) | `<all_urls>`; never attaches `debugger` |
 | `now()` | `new Date()` | none |
 
 ## tabs.ts
@@ -242,6 +248,24 @@ and `telemetry.finish()` with `Promise.allSettled`, then `finishDebuggerRun(runI
 the run's claims. The first feature cleanup error is rethrown after the debugger is released, so failed
 and stopped runs are cleaned up too. HAR and console capture are passive and do not claim the tab.
 
+### trace.ts (M5.1)
+
+`createTrace(deps)` → `Host.trace`, wired by `forRun` in `host.ts` with `captureForTrace`, `saveTraceImage`,
+`act` and the run's `traceTelemetry`. The engine awaits it around a traced step (run option `trace` or step
+setting `trace`) with `TraceStepInfo` (`tabId` from the step input's session tab, raw `locator` setting).
+Without `tabId` both hooks answer `undefined`.
+
+- `before`: starts the step's network window (`telemetry.beginStepNetwork`), then a picture of the tab.
+- `after`: `box` (page op, `TRACE_AGENT_MS` = 1.5 s) and, when the box
+  has a size, `measure` for the viewport size; a picture; the tab URL (`tabInfo`); then closes the network window (last, so CDP events that arrive just after the block returned still count). Returns only the parts it
+  got (`after`, `box`, `viewport`, `url`, `network`).
+- Every part is wrapped: a failure leaves that part out; nothing throws into the step.
+- `captureForTrace(tabId, runId, useDebugger)` (screenshots.ts): Firefox `captureTab`; Chromium
+  `captureVisibleTab` when the tab is showing, spaced at least 550 ms apart (Chrome allows two calls a
+  second); a background tab only through `captureWithDebugger` when `useDebugger` (the run already has a
+  session on the tab, `telemetry.hasSession`). Never attaches the debugger for tracing.
+- Pictures go to `saveTraceImage` (blobStore, limits below).
+
 ### routes.ts
 
 `createRoutes(runtime, dnr?)` → `{apply(tabId, options), finish()}`. Calls per tab are serialised. Rules
@@ -298,6 +322,12 @@ runs without their cleanup.
   `MAX_HAR_ENTRIES` (500, `truncated: true` past it). Metadata only: headers, cookies and bodies are empty;
   URL credentials and fragments are removed and query values whose names look secret (`token`, `password`,
   `authorization`, `secret`, `session`, `api_key`, `access_key`) become `[redacted]`. Only http(s) requests.
+- M5.1: `hasSession(tabId)` is true once `attach` finished for the tab (the run already uses CDP there).
+  `beginStepNetwork(tabId, nodeId)` does nothing (false) without a session; with one it sends `Network.enable`
+  on that session and counts the tab's requests for that step (several steps may watch one tab).
+  `finishStepNetwork(tabId, nodeId)` → `{requests, failed, slowest?}`: failed = `loadingFailed` or status
+  ≥ 400; `slowest` the `STEP_SLOWEST` (3) longest finished ones `{url, method, status?, ms}` (sanitised URL);
+  at most `MAX_STEP_REQUESTS` (500) counted.
 - `finish()` unsubscribes and drops all buffers; it never disables shared CDP domains.
 
 ## popups.ts
@@ -320,6 +350,22 @@ Session storage, not memory, because the popup can open while the worker is betw
 | `clearStalePrompts()` | Removes prompts whose run is not waiting in this worker (worker start). |
 
 `import.meta.env.FIREFOX` (WXT build flag) decides whether notification buttons are passed.
+
+## debugChannel.ts (M5.2)
+
+`Host.debug.pause(info: DebugPause)` resolves `'continue' | 'step' | 'stop'`; the engine awaits it in a debug
+run before a step with `pause`, before every step after Step, and before a failure is handled with `pauseOnError`.
+Built by `createDebugChannel(deps)` (deps injected for tests: storage read/write, highlight, keep-alive, sleep, clock).
+
+| Function | Behaviour |
+| --- | --- |
+| `pauseForDebug(info)` | Adds a `PausedRun` (`info` + `workflowName` from `bf:workflows`, `pausedAt`) to storage.session `bf:debug-pause` (serialised read-modify-write), outlines `info.locator` in `info.tabId` with the page op `highlight` (skipped without a tab or with a `{{…}}` locator; failures ignored), then polls the in-memory answer every `POLL_MS` (500 ms), calling `runtime.getPlatformInfo()` each loop so the MV3 worker is not stopped (the background's `scheduler.hold('run:<id>')` for live runs does too). After `MAX_PAUSE_MS` (1 h) it answers `stop` and logs a warning. Always removes the entry and clears the highlight. |
+| `answerDebug(runId, action)` | Sets the answer if that run is paused in *this* worker and not yet answered; returns whether it did. From `bf:debug-answer`, and `stop` from `cancelRun` (Stop). |
+| `clearStaleDebugPauses()` | Removes listed pauses whose run is not waiting in this worker (worker start). |
+| `highlightRequest(locator, clear)` | The `highlight` page request (`{op, locator, label}` / `{op, locator, clear: true}`), in one place. |
+
+Editor reopen: the banner reads `bf:debug-pause` when it mounts and follows `storage.onChanged` (area `session`),
+so a pause made while no editor was open is shown when one opens.
 
 ## picking.ts
 
@@ -369,12 +415,52 @@ Database `blockflow`, version 2, shared by the worker and extension pages (same 
 
 | Store | keyPath | Record | Limits |
 | --- | --- | --- | --- |
-| `screenshots` | `id` | `Screenshot {id, runId, ts, dataUrl}` | newest 150 kept (pruned on save) |
+| `screenshots` | `id` | `Screenshot {id, runId, ts, dataUrl}` | newest 150 kept (pruned on save); trace pictures (`~t|…` ids) separately, see below |
 | `datasets` | `name` | `Dataset {name, rows, updatedAt}` | `unlimitedStorage` |
 
 Helpers: `openDb()` (cached promise, reset on failure), `done(request)`, `store(name, mode)`. Data functions:
 `saveScreenshot`, `loadScreenshot`, `readDataset`, `writeDataset(name, rows,
 'append' | 'replace') → row count`, `listDatasets`, `deleteDataset`.
+
+M5.1 trace pictures share the `screenshots` store under ids `~t|<ts base36>|<runId>|<bytes>|<random>`
+(`traceKey` / `parseTraceKey`). `~` sorts after every UUID, so `saveScreenshot` prunes only regular
+screenshots (`getAll(IDBKeyRange.upperBound('~t|', true))`) and trace pruning reads keys only
+(`getAllKeys`). `saveTraceImage(runId, dataUrl, random)` returns null (stores nothing) once the run has
+`MAX_TRACE_IMAGES_PER_RUN` (200) pictures; after storing, `traceEvictions` removes whole runs' pictures,
+oldest run first and never the current run, until at most `MAX_TRACE_IMAGES` (1 000) and `MAX_TRACE_BYTES`
+(120 MB of data URL) remain. `loadScreenshot` reads both kinds.
+
+## visual.ts (M5.3)
+
+`Host.visual.compare(request)` for the Screenshot block's `compare` (request/result types in
+[src/core/visual.ts](../../src/core/visual.ts)). The block has already taken and stored the screenshot; this:
+
+1. Loads it (`loadScreenshot`) and decodes it: `fetch(dataUrl).blob()` → `createImageBitmap(blob,
+   {colorSpaceConversion: 'none', premultiplyAlpha: 'none'})` → `OffscreenCanvas` `getImageData`. Both exist in
+   Chrome's service worker and Firefox's background page (verified in both).
+2. No baseline for `"<workflowId>/<nodeId>"`, or `updateBaseline`: stores this picture as the baseline →
+   `baseline-saved` / `baseline-updated`.
+3. Otherwise places the masks: one `measure` (scroll, `devicePixelRatio` = scale), then the agent's `box` op
+   (no waiting, no scrolling, so the page is not moved after the capture) per mask locator and each further
+   match (`>> nth=i`, up to 20). Origin of the picture: the viewport (`visible`), the document (`full`: box +
+   scroll), or the screenshot's own element (`element`). Rectangles are CSS pixels × scale. Missing elements
+   are reported as `missingMasks` (the block logs a warning).
+4. Another size → `mismatch` with `baselineSize`, no pixel diff. Else `pixelDiff` (src/core/pixelDiff.ts);
+   ratio ≤ `maxDiffRatio` → `match`; above → `mismatch`, and the baseline as compared and the diff picture
+   (`encodeImage`: `putImageData` → `convertToBlob('image/png')`) are saved as screenshots (`saveScreenshot`).
+5. Every compare writes a `Comparison` record. The block throws `visual.mismatch` for a mismatch.
+
+`acceptBaseline(comparisonId)` (background, `bf:accept-baseline`) makes the comparison's actual picture the
+baseline and sets `acceptedAt`. `findComparison(step)` (editor) finds a step's comparison: by
+`output.visual.comparisonId` when it passed, else by node id and the step's time window (a failed step has no
+output). All storage functions take injectable `VisualDeps` for tests/browser/visual.test.ts.
+
+Database `blockflow-visual` (version 1, separate from `blockflow` so its upgrades never race):
+
+| Store | keyPath | Record | Limits |
+| --- | --- | --- | --- |
+| `baselines` | `key` = `"<workflowId>/<nodeId>"` | `Baseline {key, workflowId, nodeId, dataUrl, width, height, updatedAt, runId}` | not pruned; `deleteBaselines(workflowId)` |
+| `comparisons` | `id`, index `nodeId` | `Comparison {id, runId, workflowId, nodeId, ts, status, width, height, diffPixels, diffRatio, threshold, maxDiffRatio, actualId, baselineId?, diffId?, baselineSize?, acceptedAt?}` | newest 300 kept |
 
 ## bridge.ts and bridgeHandlers.ts (M4 outside access)
 

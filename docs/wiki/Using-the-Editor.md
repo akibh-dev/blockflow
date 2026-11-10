@@ -15,7 +15,7 @@ Everything saves automatically, a moment after each change. There is no Save but
 
 | Area | What is there |
 | --- | --- |
-| **Header** | The open workflow's name (click to rename), its **On/Off** switch, **● Record**, **↶ ↷** (undo, redo), **Tidy up**, **Export as script**, **▶ Run** / **■ Stop**, the last run's result, a red **N problems** count, and the page tabs: **Canvas**, **All workflows (N)**, **Reports**, **Data**, **Secrets** |
+| **Header** | The open workflow's name (click to rename), its **On/Off** switch, **● Record**, **↶ ↷** (undo, redo), **Tidy up**, **Export as script**, **▶ Run**, **◉ Run with trace**, **🐞 Debug** with **pause on error**, **■ Stop** while a run is going on, the last run's result, a red **N problems** count, and the page tabs: **Canvas**, **All workflows (N)**, **Reports**, **Data**, **Secrets** |
 | **Sidebar** (left) | The workflow list and the block palette. Stays visible on every page |
 | **Canvas** (middle) | The blocks of the open workflow |
 | **Settings panel** (right) | The settings of the selected block. Canvas page only |
@@ -93,9 +93,12 @@ Select one block to see, from top to bottom:
    (`locator.strict`, `assert.failed`…, listed in the [usage guide](../guide/README.md#error-codes)) and,
    when a locator matched several elements, which ones, a screenshot if one was taken,
    and the full **Input** and **Output** data. Shows the run you picked in the Runs tab, or the latest.
+   **⤵ Run from here** runs this block and what follows it with its input from the workflow's latest run that
+   reached it (disabled, with the reason, when none did, or when that input was too big to keep in full or
+   holds hidden secrets).
 6. **Step settings**: On error, Retries, Timeout, Screenshot of the tab, Use real mouse and keyboard
    (debugger; only on blocks that act on the page: Click, Fill, Fill Form, Select Option, Check, Press Key,
-   Paginate), Disabled, Note. Opens by itself and says "(changed)" when any is set. Meaning:
+   Paginate), **Pause here (breakpoint)**, **Trace this step**, Disabled, Note. Opens by itself and says "(changed)" when any is set. Meaning:
    [Concepts](Concepts.md#step-settings).
 7. **Data this block passes on**: the keys it adds, as `{{key}}`.
 8. **Delete block**.
@@ -195,10 +198,19 @@ reloaded or closed).
 - **▶ Run** runs the open workflow once, now, whether it is On or Off. A Timer or Schedule at the start fires
   immediately; Watch Element reads once; Page Visited and Context Menu use the tab you are on. Disabled while
   the workflow has problems or no blocks.
-- **■ Stop** replaces Run while a run is going on, and stops it before the next block.
+- **◉ Run with trace** runs once and keeps pictures before and after every page step (see Reports).
+- **🐞 Debug** runs once and pauses before every block with **Pause here (breakpoint)** ticked, and, with
+  **pause on error** ticked, when a block fails. A banner shows the block, why it paused, the error and its
+  input, and the element is outlined on the page: **▶ Continue** (to the next breakpoint), **⤼ Step** (this
+  block, then pause again), **■ Stop**. You can close the editor while paused; the banner is back when you
+  open it. A pause nobody answers ends the run after an hour.
+- **■ Stop** shows while a run is going on (also a paused one), and stops it before the next block.
 - Next to it, the result of the run being shown (`passed`, `failed`, …; hover for the error).
 - **On/Off** runs the workflow in the background on its triggers, also with the editor closed. Editing a
   workflow while it is On restarts it.
+
+On the **Suites** page, **↻ Re-run failed** on the last result runs only the workflows that failed or were
+skipped.
 
 When a **Manual Step** is waiting, a banner across the top says "*Workflow* is waiting for you: …" with
 **Continue** and **Fail the run** (the desktop notification has the same buttons).

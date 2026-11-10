@@ -1,9 +1,11 @@
 import { CodedError } from '../errors';
+import { AriaTemplateError, matchAriaSnapshot, parseAriaOutline, parseAriaTemplate } from '../ariaSnapshot';
 import { OPERATOR_OPTIONS, operatorLabel, testClause } from '../condition';
 import { requireSessionTab } from '../session';
 import { truncate } from '../text';
 import { locatorField, pageWaitMs, tabField } from './pageCommon';
-import type { ReadKind } from '../page';
+import { SNAPSHOT_MAX_LINES } from '../page';
+import type { ReadKind, SnapshotElement } from '../page';
 import type { BlockContext, BlockDefinition, Payload } from '../types';
 
 /** What Assert checks: a data value, a page property, or an element state (the yes/no subjects in STATES). */
@@ -28,6 +30,7 @@ export type AssertSubject =
   | 'in-viewport'
   | 'accessible-name'
   | 'accessible-description'
+  | 'aria-snapshot'
   | 'console-errors';
 
 /** Assert settings. `operator` / `expected` are ignored by the yes/no subjects. */
@@ -71,6 +74,10 @@ const READS: Partial<Record<AssertSubject, ReadKind>> = {
 const NEEDS_NAME: Partial<Record<AssertSubject, string>> = { attribute: 'Attribute name', css: 'CSS property' };
 /** Subjects that do not look at an element (everything else needs `locator`). */
 const NO_ELEMENT: AssertSubject[] = ['value', 'url', 'title', 'console-errors'];
+/** Subjects where the element is optional (empty = the whole page). */
+const ELEMENT_OPTIONAL: AssertSubject[] = ['aria-snapshot'];
+/** A `{{…}}` token (as template.ts): such templates are only known at run time. */
+const HAS_TOKEN = /\{\{\s*[^{}]+?\s*\}\}/;
 const RETRY_EVERY_MS = 250;
 /** One look at the page; the retries do the waiting. */
 const READ_MS = 300;
@@ -111,8 +118,38 @@ function passes(config: AssertConfig, value: string | null): boolean {
   return testClause({ left: value, operator: config.operator, right: config.expected });
 }
 
+/**
+ * One look for `aria-snapshot`: the page (or the `locator` part) as an outline, matched against the
+ * template (src/core/ariaSnapshot.ts). `pass: null` when the element is not there (yet).
+ */
+async function ariaLook(ctx: BlockContext<AssertConfig>, input: Payload, template: ReturnType<typeof parseAriaTemplate>): Promise<{ pass: boolean; message: string; actual: string | null }> {
+  const tabId = requireSessionTab(input, ctx.config.tab);
+  const locator = ctx.config.locator.trim();
+  let result: Record<string, unknown>;
+  try {
+    result = await ctx.host.page.act(tabId, { op: 'snapshot', ...(locator ? { locator } : {}), maxLines: SNAPSHOT_MAX_LINES }, READ_MS);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Timed out')) return { pass: false, message: `no element matches ${locator}`, actual: null };
+    throw error;
+  }
+  const outline = parseAriaOutline(String(result.snapshot ?? ''), (result.elements as SnapshotElement[] | undefined) ?? []);
+  const matched = matchAriaSnapshot(outline, template);
+  return { pass: matched.pass, message: matched.message, actual: matched.actual };
+}
+
+/** The template of an `aria-snapshot` check, or a config error naming the line and column. */
+function ariaTemplate(expected: string): ReturnType<typeof parseAriaTemplate> {
+  try {
+    return parseAriaTemplate(expected);
+  } catch (error) {
+    if (error instanceof AriaTemplateError) throw new CodedError('config.invalid', `Expected ARIA snapshot, ${error.message}`);
+    throw error;
+  }
+}
+
 /** Human-readable statement of the check, for logs, the summary and the default failure message. */
 function describe(config: AssertConfig): string {
+  if (config.subject === 'aria-snapshot') return `ARIA snapshot of ${config.locator.trim() || 'the page'} matches`;
   const what = config.subject === 'value' ? 'value' : config.subject === 'console-errors' ? 'console errors' : `${config.subject}${config.locator ? ` of ${config.locator}` : ''}`;
   if (STATES[config.subject]) return `${config.locator} is ${config.subject}`;
   return `${what} ${operatorLabel(config.operator)} "${config.expected}"`;
@@ -157,34 +194,45 @@ export const assertBlock: BlockDefinition<AssertConfig> = {
         { value: 'css', label: 'CSS value of an element (computed)' },
         { value: 'accessible-name', label: 'accessible name of an element' },
         { value: 'accessible-description', label: 'accessible description of an element' },
+        { value: 'aria-snapshot', label: 'ARIA snapshot matches a template (page or element)' },
         { value: 'url', label: 'page URL' },
         { value: 'title', label: 'page title' },
         { value: 'console-errors', label: 'console errors and uncaught exceptions (Chromium)' },
         { value: 'value', label: 'a value from the data ({{…}})' },
       ],
     },
-    { ...locatorField('locator', 'Element', false), help: 'For element checks.' },
+    { ...locatorField('locator', 'Element', false), help: 'For element checks. For "ARIA snapshot": the part of the page (empty = the whole page).' },
     { key: 'name', label: 'Attribute or CSS property', kind: 'text', placeholder: 'aria-pressed', help: 'The attribute name for "attribute of an element", the CSS property (color, display…) for "CSS value".' },
     { key: 'value', label: 'Value', kind: 'text', templated: true, placeholder: '{{status}}', help: 'Only for "a value from the data".' },
     { key: 'operator', label: 'Must', kind: 'select', options: OPERATOR_OPTIONS, help: 'Not used by the yes/no checks (visible, checked…).' },
-    { key: 'expected', label: 'Expected', kind: 'text', templated: true, placeholder: 'Welcome' },
+    {
+      key: 'expected',
+      label: 'Expected',
+      kind: 'text',
+      templated: true,
+      multiline: true,
+      placeholder: 'Welcome',
+      help: 'For "ARIA snapshot": a template, one line per element, nested by indenting: - heading "Welcome" [level=1], - button /Sign (in|up)/, - listitem: Apples.',
+    },
     { key: 'message', label: 'Message when it fails', kind: 'text', templated: true, placeholder: 'Login did not show the greeting' },
     { key: 'soft', label: 'Soft: record the failure but keep going', kind: 'boolean' },
     tabField,
   ],
   summary: (config) => truncate(describe(config), 40),
   validate: (config) => [
-    ...(!NO_ELEMENT.includes(config.subject) && !String(config.locator ?? '').trim()
+    ...(!NO_ELEMENT.includes(config.subject) && !ELEMENT_OPTIONAL.includes(config.subject) && !String(config.locator ?? '').trim()
       ? [{ key: 'locator', code: 'config.required', message: `Element is required to check "${config.subject}"` }]
       : []),
     ...(NEEDS_NAME[config.subject] && !String(config.name ?? '').trim()
       ? [{ key: 'name', code: 'config.required', message: `${NEEDS_NAME[config.subject]} is required (in "name") to check "${config.subject}"` }]
       : []),
+    ...ariaProblems(config),
   ],
   outputs: [{ key: 'actual', description: 'What was found.' }],
 
   async run(ctx, input) {
     const { subject, locator } = ctx.config;
+    if (subject === 'aria-snapshot') return runAria(ctx, input);
     if (!NO_ELEMENT.includes(subject) && !locator.trim()) {
       throw new Error('Element is required for this check');
     }
@@ -214,3 +262,43 @@ export const assertBlock: BlockDefinition<AssertConfig> = {
     throw failure;
   },
 };
+
+/** Import-time check of an `aria-snapshot` template (skipped when it has `{{…}}`, rendered at run time). */
+function ariaProblems(config: AssertConfig): { key: string; code: string; message: string }[] {
+  if (config.subject !== 'aria-snapshot') return [];
+  const expected = String(config.expected ?? '');
+  if (!expected.trim()) return [{ key: 'expected', code: 'config.required', message: 'Expected is required for "aria-snapshot": a template like - heading "Welcome" [level=1]' }];
+  if (HAS_TOKEN.test(expected)) return [];
+  try {
+    parseAriaTemplate(expected);
+    return [];
+  } catch (error) {
+    if (error instanceof AriaTemplateError) return [{ key: 'expected', code: 'config.value', message: `Expected ARIA snapshot, ${error.message}` }];
+    throw error;
+  }
+}
+
+/** Assert `aria-snapshot`: retried like the other page checks until the step's time is nearly up. */
+async function runAria(ctx: BlockContext<AssertConfig>, input: Payload): Promise<Payload> {
+  const template = ariaTemplate(ctx.config.expected);
+  const locator = ctx.config.locator.trim();
+  let retriesLeft = Math.floor((pageWaitMs(ctx as BlockContext<object>) - 1_000) / (RETRY_EVERY_MS + READ_MS));
+  let look = await ariaLook(ctx, input, template);
+  while (!look.pass && retriesLeft > 0) {
+    retriesLeft -= 1;
+    await ctx.host.sleep(RETRY_EVERY_MS);
+    look = await ariaLook(ctx, input, template);
+  }
+  if (look.pass) {
+    ctx.log('info', `✓ ${describe(ctx.config)}`);
+    return { ...input, actual: look.actual };
+  }
+  const detail = look.actual === null ? `Expected ${describe(ctx.config)}, but ${look.message}` : look.message;
+  const message = ctx.config.message.trim() ? `${ctx.config.message.trim()}\n${detail}` : detail;
+  const failure = new CodedError('assert.failed', message, locator ? { locator } : {});
+  if (ctx.config.soft) {
+    ctx.softFail(failure);
+    return { ...input, actual: look.actual };
+  }
+  throw failure;
+}

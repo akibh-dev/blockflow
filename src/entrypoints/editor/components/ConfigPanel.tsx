@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { hasTemplate } from '../../../core/template';
 import { DEFAULT_TIMEOUT_SECONDS, MAX_RETRIES } from '../../../core/engine';
-import type { StepRecord } from '../../../core/runs';
+import type { RunOptions, RunRecord, StepRecord } from '../../../core/runs';
 import type { FieldSpec, Row, RowsField, StepSettings, TextField, WorkflowField } from '../../../core/types';
 import { Screenshot } from './Screenshot';
 import { SnapshotButton } from './SnapshotButton';
@@ -11,6 +11,7 @@ import { PermissionNote, requestPermission } from './PermissionNote';
 import { isExtensionMessage } from '../../../shared/messages';
 import type { StartPickMessage } from '../../../shared/messages';
 import { registry } from '../registry';
+import { runFromInput } from '../runFrom';
 import type { BlockFlowNode } from './BlockNode';
 
 interface ConfigPanelProps {
@@ -27,6 +28,15 @@ interface ConfigPanelProps {
   suggestions: string[];
   /** URL of the nearest Open Tab before this block: where to pick when the block has no URL of its own. */
   upstreamUrl?: string;
+  /**
+   * M5.5 "Run from here": the active workflow's id and its runs (`bf:runs`, newest last), and what to do
+   * with the chosen start (send `bf:run-workflow` with `options.startAt`). The button shows only with `onRunFrom`.
+   */
+  workflowId?: string;
+  runs?: RunRecord[];
+  onRunFrom?(startAt: NonNullable<RunOptions['startAt']>): void;
+  /** A run of this workflow is going on (Run from here waits). */
+  running?: boolean;
 }
 
 interface PickState {
@@ -51,7 +61,7 @@ type PickTarget =
  * back as a `bf:pick-result` / `bf:pick-error` runtime message, which this component listens for.
  * Messages that arrive with no pending target (another editor tab started the pick) are ignored.
  */
-export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, lastStep, workflows, suggestions, upstreamUrl }: ConfigPanelProps) {
+export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, lastStep, workflows, suggestions, upstreamUrl, workflowId, runs, onRunFrom, running }: ConfigPanelProps) {
   const [pick, setPick] = useState<PickState & { fieldKey?: string }>({ status: 'idle' });
   const pending = useRef<PickTarget | null>(null);
   const configRef = useRef<Record<string, unknown>>({});
@@ -248,6 +258,10 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
       {def.type === 'open-url' && <SnapshotButton url={String(config.url ?? '')} />}
 
       {lastStep && <StepResult step={lastStep} />}
+
+      {onRunFrom && workflowId !== undefined && (
+        <RunFromHere nodeId={node.id} workflowId={workflowId} runs={runs ?? []} running={running === true} disabled={problems.length > 0} onRunFrom={onRunFrom} />
+      )}
 
       <StepSettingsEditor
         step={node.data.step ?? {}}
@@ -455,7 +469,9 @@ function StepSettingsEditor({
   /** The block's page actions honour real input (`BlockDefinition.realInput`). */
   realInput: boolean;
 }) {
-  const configured = Boolean(step.timeoutSeconds || step.retries || (step.onError && step.onError !== 'stop') || step.disabled || step.note || step.screenshot || step.realInput);
+  const configured = Boolean(
+    step.timeoutSeconds || step.retries || (step.onError && step.onError !== 'stop') || step.disabled || step.note || step.screenshot || step.realInput || step.pause || step.trace,
+  );
   return (
     <details className="bf-step-settings" open={configured}>
       <summary>Step settings{configured ? ' (changed)' : ''}</summary>
@@ -511,6 +527,14 @@ function StepSettingsEditor({
           <span>Use real mouse and keyboard (debugger)</span>
         </label>
       )}
+      <label className="bf-field bf-inline" title="A Debug run (🐞 Debug) stops before this block and waits for Continue, Step or Stop.">
+        <input type="checkbox" checked={step.pause === true} onChange={(event) => onChange({ pause: event.target.checked })} />
+        <span>Pause here (breakpoint)</span>
+      </label>
+      <label className="bf-field bf-inline" title="Keep screenshots before and after this block, and where its element was, in the run's trace (Reports), even in a normal run.">
+        <input type="checkbox" checked={step.trace === true} onChange={(event) => onChange({ trace: event.target.checked })} />
+        <span>Trace this step</span>
+      </label>
       <label className="bf-field bf-inline">
         <input type="checkbox" checked={step.disabled === true} onChange={(event) => onChange({ disabled: event.target.checked })} />
         <span>Disabled (skip it, pass the data through)</span>
@@ -520,6 +544,39 @@ function StepSettingsEditor({
         <input type="text" value={step.note ?? ''} onChange={(event) => onChange({ note: event.target.value })} />
       </label>
     </details>
+  );
+}
+
+/** M5.5: "Run from here" for the selected block, with its input from the last run that reached it (runFrom.ts). */
+function RunFromHere({
+  nodeId,
+  workflowId,
+  runs,
+  running,
+  disabled,
+  onRunFrom,
+}: {
+  nodeId: string;
+  workflowId: string;
+  runs: RunRecord[];
+  running: boolean;
+  disabled: boolean;
+  onRunFrom(startAt: NonNullable<RunOptions['startAt']>): void;
+}) {
+  const found = runFromInput(runs, workflowId, nodeId);
+  const hint = !found.ok ? found.hint : running ? 'A run is going on. Stop it or wait for it to finish.' : disabled ? 'Fix this block’s problems first.' : undefined;
+  return (
+    <div className="bf-run-from">
+      <button
+        type="button"
+        disabled={hint !== undefined}
+        title={found.ok ? `Run this block and what follows it, with its input from the run of ${new Date(found.startedAt).toLocaleString()}` : found.hint}
+        onClick={() => found.ok && onRunFrom({ nodeId, input: found.input })}
+      >
+        ⤵ Run from here
+      </button>
+      {hint && <small className="bf-muted">{hint}</small>}
+    </div>
   );
 }
 

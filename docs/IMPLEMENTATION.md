@@ -1,7 +1,7 @@
 # Implementation plan
 
 > **Status:** 2026-11-06. **M0 done** (v0.2.0), **M1 done** (v0.3.0), **M2 done** (branch `m2-essentials`,
-> v0.4.0); **M3 and M4 done** (2026-11-10, v0.5.0). This is the
+> v0.4.0); **M3 and M4 done** (2026-11-10, v0.5.0); **M5 done** (2026-11-10, v0.6.0, branch `m5-debugging` on top of M4). This is the
 > task-level plan for [PLAN.md](PLAN.md): *what* to build is decided there (goal, gaps, decisions in §8).
 > This file says *how*, in which order, with which files, tests and docs. Tick tasks off here as they
 > land, and update the matching wiki pages in the same change.
@@ -369,6 +369,26 @@ site, the CLI runs the guide examples in CI, and suites produce a combined JUnit
 | M5.4 | **ARIA snapshot assert** | Assert subject `aria-snapshot` compares the M1.3 outline (without refs/locators) against an expected template with Playwright-like partial matching (`- heading "Welcome"`, regex names) | M |
 | M5.5 | **Run from here / re-run failed** | Run a workflow starting at a selected block with the input of its last run; re-run only failed workflows of a suite | S |
 
+**Status (2026-11-10): done, v0.6.0.** Built in parallel to `docs/M5-WORK.md` on engine hooks committed first
+(`182cecd`: `runOnce(options)`, `Host.debug`, `Host.trace`, `StepSettings.pause/trace`, `RunRecord.mode`).
+
+- [x] **M5.1** `src/browser/trace.ts`, page ops `box` and `highlight`, trace pictures in the screenshot store
+  under `~t|…` keys (200 per run, 1000 / 120 MB in total, oldest runs evicted), filmstrip and per-step trace in
+  Reports and the HTML export. Never attaches the debugger for tracing; network summary only when CDP is on.
+  Open Tab steps get an after picture of the tab they opened; templated locators are rendered for the box.
+- [x] **M5.2** `src/browser/debugChannel.ts` (pause in `storage.session` `bf:debug-pause`, `bf:debug-answer`,
+  element highlighted while paused, keep-alive, 1 h cap), `DebugBanner`, `RunControls` (Run, Run with trace,
+  Debug, pause on error), step toggles in the config panel. Not exposed over the bridge yet.
+- [x] **M5.3** `src/core/pixelDiff.ts` (no dependency), Screenshot `compare` / `threshold` / `maxDiffRatio` /
+  `mask` / `updateBaseline`, `src/browser/visual.ts` (IndexedDB `blockflow-visual`, `createImageBitmap` +
+  `OffscreenCanvas`), error `visual.mismatch`, `VisualComparePanel` with Accept, `toHaveScreenshot` export;
+  baselines deleted with their workflow.
+- [x] **M5.4** `src/core/ariaSnapshot.ts`, Assert `aria-snapshot`, `toMatchAriaSnapshot` export (passes under
+  real `npx playwright test`); differences from Playwright are listed in the wiki (Core Modules).
+- [x] **M5.5** Run from here (the step's input from the last run that reached it; disabled for previews and
+  masked secrets), suites "Re-run failed".
+- e2e: `m5-trace`, `m5-debug`, `m5-visual`, `m5-aria` (Chromium, Brave headed), Firefox scenarios for all four.
+
 ---
 
 ## M6: Ship (v1.0)
@@ -393,5 +413,5 @@ site, the CLI runs the guide examples in CI, and suites produce a combined JUnit
 | M2 | `m2-essentials` | ✅ Done: 680 unit tests, 207 Chromium e2e checks in 18 specs (system Chromium), 30 Firefox e2e checks; 6 new blocks (Switch, Element Action, Drag, Wait for Download, Screenshot, Cookies & Storage) |
 | M3 | `m3-network` | ✅ Done (2026-11-10, version stays 0.4.0 until M4): 771 unit tests, 234 Chromium e2e checks in 22 specs (system Chromium 156), 34 Firefox e2e checks; 4 new blocks (Route, HAR Record, Emulate, Clear Site Data) and Assert `console-errors` |
 | M4 | `m4-outside-access` | ✅ Done (2026-11-10, v0.5.0 with M3): 956 unit tests, 275 Chromium e2e checks in 24 specs (system Chromium 156, headless and headed), M4 specs also in Brave Origin (headed), 44 Firefox e2e checks (bridge, MCP and suites on Firefox 159), CLI e2e (7 checks) on Chromium and Brave; packages `blockflow-bridge`, `blockflow-mcp`, `blockflow-cli` |
-| M5 | `m5-debugging` | Not started |
+| M5 | `m5-debugging` | ✅ Done (2026-11-10, v0.6.0): 1079 unit tests, 343 Chromium e2e checks in 28 specs (system Chromium 156), M5 specs in Brave Origin (headed), 52 Firefox e2e checks (Firefox 159) |
 | M6 | `m6-ship` | Not started |

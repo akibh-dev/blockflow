@@ -64,6 +64,8 @@ export interface StepTrace {
   after?: string;
   /** The element the step acted on, in CSS pixels of the screenshot (page steps with a locator). */
   box?: { x: number; y: number; width: number; height: number };
+  /** The tab's viewport in CSS pixels when `box` was measured (to scale the box onto the image). */
+  viewport?: { width: number; height: number };
   /** Page URL after the step. */
   url?: string;
   /** Requests seen during the step when CDP was on: count, failed count and the slowest few (metadata only). */
