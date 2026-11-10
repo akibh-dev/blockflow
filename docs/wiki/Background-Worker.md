@@ -32,10 +32,12 @@ and every wake-up after Chrome stopped the worker), not just once.
 | 2 | `createExtensionHost(scheduler)` | The real `Host` ([Browser Host](Browser-Host.md)). |
 | 3 | `createDefaultRegistry()` | All built-in blocks. |
 | 4 | `liveRuns`, `cancelRequests` | In-memory: runs going on in *this* worker, and run ids the user asked to stop. |
+| 4b | `runWorkflow`, `cancelRun`, `createBridgeHandlers(…)`, `createBridgeConnection(…)` | The M4 bridge ([below](#the-bridge-outside-control-m4)); nothing connects yet. |
 | 5 | `updateRuns(markInterrupted(…))` | Any run still `running` in `bf:runs` that this worker does not own can never finish: mark it `interrupted`. |
 | 6 | `clearStalePrompts()` | Manual Steps listed in `bf:prompts` by a dead worker can no longer be answered. |
 | 7 | Register all listeners (below), synchronously | MV3 rule: listeners added later miss the event that woke the worker. |
 | 8 | `scheduler.restoreAll()` (between the alarm and onStartup listeners) | Recreate alarms the browser dropped, re-arm short in-memory timers. |
+| 9 | `syncBridge()` (after the permissions listeners) | Reopen the native port when outside control is on. It must come after `const report` is defined: called earlier it throws (TDZ) and the whole worker stops at start. |
 
 > Step 5 runs with `liveRuns` empty. That is safe because `updateRuns` and `saveRun` share one write queue in
 > `stores.ts`: the mark-interrupted write is queued before the event that woke the worker can save its
@@ -88,6 +90,8 @@ All registered synchronously at the top level of `defineBackground`.
 | `webNavigation.onCreatedNavigationTarget` | `recordPopup(tabId, sourceTabId)`, `onRecordedPopup(tabId, sourceTabId, url)` | For Wait for Popup, and so the recorder follows popups. Not `tabs.onCreated`: its `openerTabId` is empty for popup windows and names the active tab for links opened from a background tab. |
 | `tabs.onUpdated` | `onRecordedTabUpdated(tabId, change)` when `change.url` or `status === 'complete'` | Recorder: adds `navigated` steps and re-injects the recorder after a load. |
 | `contextMenus.onClicked` | `onMenuClicked(...)` | Context Menu trigger. |
+| `storage.onChanged` (area `local`, key `bf:settings`) | `syncBridge()` | "Allow outside control" switched on or off. |
+| `permissions.onAdded` / `onRemoved` | `syncBridge()` | `nativeMessaging` granted or revoked. |
 | `storage.onChanged` (area `local`, key `bf:workflows`) | `diffWorkflows(migrated old, migrated new)` (so the one-time schema rewrite restarts nothing) → `stopWorkflow` for `stop`; for `removed` (deleted, on or off) also `scheduler.clearPrefix` of its timers and `clearWorkflowState` (its `bf:state:<id>::*` keys); then `startWorkflow(id, true)` for `start` (plain start blocks run) and `startWorkflow(id, false)` for `restart` (triggers re-armed only); `syncContextMenus()` if any list is non-empty | The editor never messages the worker to start or stop: saving is enough. Position/name edits produce an empty diff. |
 | `notifications.onButtonClicked` | Manual Step: button 0 = Continue (`answerPrompt(runId, true)`), button 1 = Fail | Only for notification ids `bf-prompt:<runId>`. |
 | `notifications.onClicked` | Manual Step: Continue | Firefox has no notification buttons, so a click means Continue. |
@@ -106,7 +110,7 @@ Full payloads in [Message Protocol](Message-Protocol.md).
 | `bf:pick-error` | from a picker in a page: `cancelPicking(sender.tab.id)` (the editor shows the message itself) |
 | `bf:picker-sync` / `bf:recorder-sync` | `relayPickerSync` / `relayRecorderSync`: passed on to every frame of the sender's tab |
 | `bf:run-workflow` | `newRunner(migrateWorkflow(message.workflow)).runOnce()`: runs the workflow **as sent** (the canvas, possibly unsaved), enabled or not. |
-| `bf:stop-run` | `cancelRequests.add(runId)` and `answerPrompt(runId, false)` (a run waiting on a Manual Step stops right away). |
+| `bf:stop-run` | `cancelRun(runId)`: `cancelRequests.add(runId)` and `answerPrompt(runId, false)` (a run waiting on a Manual Step stops right away). The bridge's `stop` and `timeoutSeconds` use the same function. |
 | `bf:answer-prompt` | `answerPrompt(runId, ok)` |
 | `bf:start-recording` / `bf:stop-recording` / `bf:recorded` | `startRecording` / `stopRecording` / `recordStep(step, sender.tab?.id)` |
 | anything else | ignored (`bf:pick-result` is for the editor; `bf:parse-html` fails `isExtensionMessage`). |
@@ -123,6 +127,25 @@ Full payloads in [Message Protocol](Message-Protocol.md).
 | Stop button | `bf:stop-run` → run id in `cancelRequests`; the engine checks `isCancelled` between steps. |
 | Timer due | `onAlarm` → `handleTimer(key)`; disabled/deleted workflow → timer cleared. |
 | Page Visited / Context Menu | `handleEvent(nodeId, payload)` with the tab as `$session.tabs.main`. |
+
+## The bridge (outside control, M4)
+
+```ts
+function runWorkflow(workflow, options: RunWorkflowOptions = {}): Promise<RunRecord>
+// = new WorkflowRunner({ workflow: migrateWorkflow(workflow), registry, host: withRunOverlay(host, options),
+//     log, onRun: run => { onRun(run); options.onRun?.(run) }, isCancelled }).runOnce()
+```
+
+`runWorkflow` is the Run button's path with two extras for outside callers: `secrets` overlay the stored ones
+for that run only (never written; the engine masks them like stored ones) and `workflows` are unsaved
+workflows its Run Workflow blocks may call. The bridge's `run` and `suite.run` use it (and so may the
+`bf:run-suite` case). Runs it starts are ordinary runs: in `liveRuns`, `bf:runs`, stoppable with the Stop button.
+
+`syncBridge()` (serialised on a promise chain) reads `bf:settings` and `permissions.contains({permissions:
+['nativeMessaging']})`, sets the handlers' `isEnabled` flag and calls `bridge.enable()` or `bridge.disable()`.
+While enabled the open native port keeps the worker alive; see
+[Browser Host: bridge.ts](Browser-Host.md#bridgets-and-bridgehandlersts-m4-outside-access) for the port's
+states, reconnects and the methods, and [Bridge](Bridge.md) for the native host.
 
 ## Run lifecycle, from the worker's side
 

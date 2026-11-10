@@ -3,6 +3,7 @@ import type { RecordedStep } from '../core/recording';
 import type { PickerMode, PickerSync } from '../dom/picker';
 import type { RecorderMode } from '../dom/recorder';
 import type { Workflow } from '../core/types';
+import type { SuiteResult } from '../core/bridgeProtocol';
 
 /**
  * Messages between the editor page, the background worker and the element picker.
@@ -130,6 +131,34 @@ export interface RecordedMessage {
   step: RecordedStep;
 }
 
+/**
+ * Editor → background: run the saved suite `suiteId` (Suites page). The background runs it with
+ * `runSuite` (src/browser/suites.ts) and answers with `bf:suite-progress` after each workflow and one
+ * `bf:suite-result` at the end (runtime broadcasts, like `bf:snapshot-result`).
+ */
+export interface RunSuiteMessage {
+  type: 'bf:run-suite';
+  suiteId: string;
+}
+
+/** Background → editor: one workflow of a suite finished (`status` is the run's, or `skipped`). */
+export interface SuiteProgressMessage {
+  type: 'bf:suite-progress';
+  suiteId: string;
+  index: number;
+  total: number;
+  workflowName: string;
+  status: string;
+}
+
+/** Background → editor: the suite finished (`result`) or could not run (`error`, e.g. an unknown workflow). */
+export interface SuiteResultMessage {
+  type: 'bf:suite-result';
+  suiteId: string;
+  result?: SuiteResult;
+  error?: string;
+}
+
 /** Every message in this file. Messages not listed here (`bf:parse-html`) are ignored by `isExtensionMessage`. */
 export type ExtensionMessage =
   | StartPickMessage
@@ -146,7 +175,10 @@ export type ExtensionMessage =
   | PickerSyncMessage
   | RecorderSyncMessage
   | SnapshotPageMessage
-  | SnapshotResultMessage;
+  | SnapshotResultMessage
+  | RunSuiteMessage
+  | SuiteProgressMessage
+  | SuiteResultMessage;
 
 /** Runtime list of the `type` values above; keep it in sync with `ExtensionMessage`. */
 const TYPES = new Set<string>([
@@ -165,6 +197,9 @@ const TYPES = new Set<string>([
   'bf:recorder-sync',
   'bf:snapshot-page',
   'bf:snapshot-result',
+  'bf:run-suite',
+  'bf:suite-progress',
+  'bf:suite-result',
 ]);
 
 /**

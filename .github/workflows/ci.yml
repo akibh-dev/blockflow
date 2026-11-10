@@ -61,3 +61,29 @@ jobs:
       # ubuntu-latest ships Firefox; the runner drives it headless over WebDriver BiDi.
       - run: firefox --version
       - run: npm run e2e:firefox
+
+  # M4: the CLI runner (packages/cli) on the automation build: validate the guide examples (they target
+  # live sites, so they are validated, not run) and run fixture workflows end to end through the bridge.
+  cli:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build:automation
+      - name: blockflow validate + CLI e2e
+        run: |
+          export BLOCKFLOW_BROWSER="$(node -e "console.log(require('playwright-core').chromium.executablePath())")"
+          npm run blockflow -- validate docs/guide/examples
+          node tests/cli/cli.e2e.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cli-report
+          path: blockflow-report/
+          if-no-files-found: ignore

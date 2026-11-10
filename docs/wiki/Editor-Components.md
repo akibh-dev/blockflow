@@ -16,6 +16,7 @@ state, and which messages, storage keys or browser APIs it touches. Read [Editor
 [WorkflowActions.ts](../../src/entrypoints/editor/components/WorkflowActions.ts),
 [WorkflowsPage.tsx](../../src/entrypoints/editor/components/WorkflowsPage.tsx),
 [ReportsPage.tsx](../../src/entrypoints/editor/components/ReportsPage.tsx),
+[SuitesPage.tsx](../../src/entrypoints/editor/components/SuitesPage.tsx),
 [DataPage.tsx](../../src/entrypoints/editor/components/DataPage.tsx),
 [SecretsPage.tsx](../../src/entrypoints/editor/components/SecretsPage.tsx),
 [PromptBanner.tsx](../../src/entrypoints/editor/components/PromptBanner.tsx),
@@ -38,6 +39,7 @@ state, and which messages, storage keys or browser APIs it touches. Read [Editor
 | [ImportButton](#importbutton) | sidebar, All workflows | file picker |
 | [WorkflowsPage](#workflowspage) | `manage` view | none (callbacks) |
 | [ReportsPage](#reportspage) | `reports` view | IndexedDB read, downloads |
+| [SuitesPage](#suitespage) | Suites view (no props) | reads/writes `bf:suites`, reads `bf:workflows`, sends `bf:run-suite`, listens for `bf:suite-progress` / `bf:suite-result`, IndexedDB read, downloads |
 | [DataPage](#datapage) | `data` view | IndexedDB read/delete (polls), downloads |
 | [SecretsPage](#secretspage) | `secrets` view | reads/writes `bf:secrets` |
 | [PromptBanner](#promptbanner) | top of the page, all views | sends `bf:answer-prompt` |
@@ -309,6 +311,32 @@ Test-report view over the stored runs.
   `docs/guide/report.schema.json`), **JUnit XML** (`toJUnitXml`) and
   **HTML** (`toHtmlReport`, with screenshots loaded from IndexedDB and inlined as data URLs, so the file
   stands alone). Report formats are documented in [Core Modules](Core-Modules.md).
+
+## SuitesPage
+
+Suites (M4.4): named, ordered lists of saved workflows run one after the other, with one combined report.
+Unlike the other pages it takes **no props**: it reads `bf:suites` (`loadSuites`, `src/browser/suites.ts`) and
+`bf:workflows` (`loadWorkflows`) itself and follows both through `storage.onChanged`; edits are written at
+once with `saveSuites` (it never writes `bf:workflows`).
+
+**State:** `suites`, `workflows`, `openId` (suite in the detail pane), `running` (suite id → progress
+messages received), `results` (suite id → last `SuiteResult`, kept while the page is open; every run is
+also in [Reports](#reportspage)), `adding` (the "Add a workflow…" select).
+
+- List: each suite with its last status, workflow count and "stops on failure". **New suite** uses
+  `createSuite` (`src/core/suite.ts`: fresh id, "Suite", "Suite 2", …).
+- Detail: name (saved on blur; empty restores the old name), **Stop at the first failure**
+  (`stopOnFailure`), the workflows in order with ↑ / ↓ (`moveItem`) and Remove, an add select of the
+  workflows not in the suite yet, **Delete** (after `confirmDialog`). Workflow ids whose workflow was
+  deleted show as "deleted workflow" and disable Run until removed.
+- **▶ Run suite** sends `{ type: 'bf:run-suite', suiteId }`. The background runs it with `runSuite` and
+  broadcasts `bf:suite-progress` after each workflow ("Running 2 of 3 · last: Login passed") and one
+  `bf:suite-result` (`result`, or `error` when the suite is invalid), shown as a toast.
+- Last result: status per workflow (failing step's code, block label and message), skipped workflows,
+  totals from `suiteSummary`, and **Download HTML / JUnit XML / JSON**, built in the page with
+  `suiteReports` (`toSuiteHtml` with screenshots from IndexedDB, `toSuiteJUnit`, `toSuiteJson`).
+- Styles: the Reports layout (`.bf-report`, `.bf-report-list`, `.bf-report-detail`) plus `.bf-suite-head`,
+  `.bf-suite-add`, `.bf-suite-downloads`, `.bf-suite-result`.
 
 ## DataPage
 

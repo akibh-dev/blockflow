@@ -22,6 +22,12 @@ export const STORAGE_KEYS = {
   timerPrefix: 'bf:timer:',
   /** Prefix of block state (`ctx.state`): `bf:state:<workflowId>::<nodeId>::<key>` (host.ts `StorageState`). */
   statePrefix: 'bf:state:',
+  /** `BridgeSettings` (`src/core/bridgeProtocol.ts`): "Allow outside control". Editor Settings page writes it; the worker reacts. */
+  settings: 'bf:settings',
+  /** `BridgeLogEntry[]`: every outside (bridge) request, newest last, capped at MAX_BRIDGE_LOG. Worker writes. */
+  bridgeLog: 'bf:bridge-log',
+  /** `Suite[]`: named, ordered lists of workflows (M4.4). Editor Suites page writes it. */
+  suites: 'bf:suites',
 } as const;
 
 /** Log lines kept in `bf:logs`; older ones are dropped on append. */

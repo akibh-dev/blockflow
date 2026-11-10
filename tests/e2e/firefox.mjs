@@ -80,8 +80,17 @@ writeFileSync(
     'user_pref("browser.download.useDownloadDir", true);',
   ].join('\n'),
 );
+// M4 bridge: Firefox reads native-messaging host manifests only from ~/.mozilla/native-messaging-hosts, so
+// it runs with a throwaway HOME holding the manifest (never the real one), and a private socket and token.
+const { installHost } = await import('../../packages/bridge/install.mjs');
+const fakeHome = path.join(profile, 'home');
+const bridgePaths = { socket: path.join(profile, 'blockflow.sock'), tokenFile: path.join(profile, 'blockflow-token') };
+installHost({ dirs: [{ dir: path.join(fakeHome, '.mozilla', 'native-messaging-hosts'), kind: 'firefox' }], firefox: true, extensionIds: [] });
 const port = await freePort();
-const child = spawn(firefox, ['--no-remote', '--profile', profile, `--remote-debugging-port=${port}`, ...(process.env.BF_HEADED ? [] : ['--headless'])], { stdio: ['ignore', 'ignore', 'pipe'] });
+const child = spawn(firefox, ['--no-remote', '--profile', profile, `--remote-debugging-port=${port}`, ...(process.env.BF_HEADED ? [] : ['--headless'])], {
+  stdio: ['ignore', 'ignore', 'pipe'],
+  env: { ...process.env, HOME: fakeHome, BLOCKFLOW_SOCKET: bridgePaths.socket, BLOCKFLOW_TOKEN_FILE: bridgePaths.tokenFile },
+});
 let stderr = '';
 child.stderr.on('data', (chunk) => (stderr += chunk));
 const wsUrl = await new Promise((resolve, reject) => {
@@ -434,6 +443,58 @@ try {
       ]));
       const failed = step(record, 'x');
       check(`${label} explains it needs Chromium`, record.status === 'failed' && failed?.code === 'permission.missing' && /Chrom/.test(failed?.error ?? ''), `${failed?.code} ${failed?.error ?? summary(record)}`);
+    }
+  }
+
+  {
+    // M4: outside control over native messaging, then the MCP server on top, against Firefox.
+    const { connectBridge } = await import('../../packages/bridge/client.mjs');
+    await bridge('set', { 'bf:settings': { outsideControl: true } });
+    let client;
+    let lastError = '';
+    for (const deadline = Date.now() + 20_000; Date.now() < deadline && !client; ) {
+      if (existsSync(bridgePaths.socket) && existsSync(bridgePaths.tokenFile)) {
+        client = await connectBridge({ socketPath: bridgePaths.socket, tokenFile: bridgePaths.tokenFile, client: 'ff-e2e', timeoutMs: 60_000 }).catch((error) => { lastError = String(error); return undefined; });
+      }
+      if (!client) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    check('outside control: Firefox starts the native host and the socket opens', Boolean(client), `${lastError} status=${JSON.stringify(await bridge('session', 'bf:bridge-status').catch(() => null))}`);
+    if (client) {
+      const hello = await client.call('hello', { protocol: 1, client: 'ff-e2e' });
+      check('bridge hello from Firefox', /firefox/i.test(hello.browser) && hello.extensionId, JSON.stringify(hello));
+      const script = { format: 'blockflow-script', version: 1, name: 'FF bridge', steps: [
+        { open: { url: `${base}/welcome.html`, active: false } },
+        { id: 'see', assert: { locator: '#greeting', expected: 'Welcome' } },
+        { 'close-tab': {} },
+      ] };
+      const valid = await client.call('validate', { source: script });
+      check('bridge validate', valid.ok === true, JSON.stringify(valid.issues));
+      const notes = [];
+      const ran = await client.call('run', { source: script, secrets: { ffOnly: 'ff-secret-0451' } }, { timeoutMs: 0, onNotification: (note) => notes.push(note.method) });
+      check('bridge run passes and streams steps', ran.run?.status === 'passed' && notes.includes('run.started') && notes.includes('run.step'), `${ran.run?.status} ${notes.join(',')}`);
+      const junit = await client.call('report', { format: 'junit', runIds: [ran.run.id] });
+      check('bridge report junit', /<testsuite/.test(junit.content), String(junit.content).slice(0, 200));
+      const snap = await client.call('snapshot', { url: `${base}/welcome.html` });
+      check('bridge snapshot', /Welcome/.test(snap.outline ?? ''), String(snap.outline).slice(0, 200));
+      const bad = { ...script, name: 'FF bad', steps: [script.steps[0], { id: 'see', assert: { locator: '#greeting', expected: 'Nope' }, step: { timeoutSeconds: 2 } }, script.steps[2]] };
+      const suite = await client.call('suite.run', { suite: { name: 'FF suite', sources: [script, bad] }, formats: ['junit'] }, { timeoutMs: 0 });
+      check('bridge suite.run with combined JUnit', suite.result?.status === 'failed' && (suite.reports?.junit?.match(/<testcase/g) ?? []).length === 2, JSON.stringify(suite.result?.status));
+      await client.close();
+
+      // The MCP server over stdio, through the same host and extension.
+      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+      const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+      const mcp = new Client({ name: 'ff-e2e', version: '1.0.0' });
+      await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [path.resolve(here, '../../packages/mcp/server.mjs')], env: { ...process.env, BLOCKFLOW_SOCKET: bridgePaths.socket, BLOCKFLOW_TOKEN_FILE: bridgePaths.tokenFile }, stderr: 'pipe' }));
+      const text = (result) => (result.content ?? []).filter((part) => part.type === 'text').map((part) => part.text).join('\n');
+      const failed = await mcp.callTool({ name: 'run_workflow', arguments: { source: bad } }, undefined, { timeout: 120_000 });
+      check('MCP run_workflow on Firefox reports the failing step and code', /assert\.failed/.test(text(failed)) && /see/.test(text(failed)), text(failed).slice(0, 300));
+      check('MCP run_workflow on Firefox attaches the screenshot', (failed.content ?? []).some((part) => part.type === 'image'), JSON.stringify((failed.content ?? []).map((part) => part.type)));
+      await mcp.close().catch(() => {});
+
+      await bridge('set', { 'bf:settings': { outsideControl: false } });
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      check('switching outside control off stops the host (socket removed)', !existsSync(bridgePaths.socket));
     }
   }
 

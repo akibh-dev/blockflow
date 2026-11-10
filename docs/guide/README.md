@@ -14,6 +14,7 @@ how to use BlockFlow** without reading the source code. Read it top to bottom on
 | [`script.schema.json`](script.schema.json) | JSON Schema of a script file (the format to write): every block, alias, shorthand and branch key. |
 | [`workflow.schema.json`](workflow.schema.json) | JSON Schema of a graph file (what the editor exports), with every block's config (unknown keys not allowed). |
 | [`report.schema.json`](report.schema.json) | JSON Schema of the JSON report (Reports → Export JSON): runs, steps, [error codes](#error-codes). **Generated.** |
+| [`suite-report.schema.json`](suite-report.schema.json) | JSON Schema of a suite's combined JSON report (Suites page, CLI `--report json`). **Generated.** |
 | [`examples/`](examples) | Importable workflows, each as a script (`*.script.json`) and a graph (`*.blockflow.json`). A test checks both import without errors or warnings, to the same graph. |
 | [Repair](#repair-what-import-errors-mean) | What each import error code means and how to fix it. |
 
@@ -396,6 +397,13 @@ A workflow may have several start blocks; each starts its own runs.
   file you imported, when it had one), `blockType`, `status`, `durationMs`, `attempts`, `input`, `output`
   and, when it failed, `error`, `code`, `locator`, `url` (the page) and `matches` (for `locator.strict`,
   up to 5 descriptions of the elements that matched).
+- **Suites** (Suites page): a named list of saved workflows run one after the other, with one combined
+  report. Order them with ↑ / ↓; **Stop at the first failure** skips the rest after a workflow that did
+  not pass. A suite passes only when every workflow ran and passed. Downloads: **JUnit XML** (one
+  `<testsuite>` named after the suite, one `<testcase>` per workflow, `<failure message="[code] Block: message">`
+  for a failing one, `<skipped/>` for skipped ones), **HTML** (one section per workflow) and **JSON**
+  (`{ "$schema", "schemaVersion": 1, "generatedAt", "suite", "summary", "runs" }`,
+  [schema](suite-report.schema.json)). Outside tools run the same suites (or an inline one) with `suite.run`.
 
 ### Error codes
 
@@ -428,6 +436,29 @@ Every failed step has a `code`. Fix by the code, then the message:
 | `config.invalid` | A setting is missing or invalid. | Fix the setting the message names. |
 | `workflow.failed` | A workflow called by Run Workflow failed. | Fix the failing step of the called run (`childRunId`). |
 | `step.failed` | Any other failure. | Read the message. |
+
+### Outside access: AI agents, the CLI and CI
+
+Programs on the same computer can drive BlockFlow while **Settings → Allow outside control** is on (off by
+default; asks for the `nativeMessaging` permission). They talk to a small companion, the bridge, which the
+browser starts:
+
+1. Install the bridge once, with the extension id shown on the Settings page:
+   `npx blockflow-bridge install --extension-id <id>` (Chrome, Chromium, Brave, Edge and Firefox).
+2. **AI agents (MCP)**: add the server to your MCP client, e.g. Claude Code
+   `claude mcp add blockflow -- npx -y blockflow-mcp`. Tools: `snapshot_page` (outline of a page, for
+   locators), `validate_workflow` (issues with code, path and hint), `run_workflow` (inline script or saved
+   id; failing step, code, locator, URL and a screenshot), `get_report`, `import_workflow`, `list_workflows`,
+   `stop_run`, `list_suites`, `run_suite`. The loop: snapshot → write a script → validate → run → repair.
+3. **CLI and CI**: `npm run build:automation`, then `blockflow run <files or folders> --report junit --out
+   report/` starts its own Chromium with the extension in a throwaway profile (no install needed), runs
+   everything as one suite, writes `junit.xml` / `report.json` / `report.html`, and exits 0 (all passed),
+   1 (a failure) or 2 (setup or usage error). `blockflow validate <files>` checks without running.
+   Secrets: `BLOCKFLOW_SECRET_LOGIN_PASSWORD` → `{{secret.LOGIN_PASSWORD}}` and `{{secret.loginPassword}}`,
+   or `--secret name=value`. Secrets passed this way are used for that run only and never stored.
+
+Imported workflows are tagged "via bridge"; every outside request is listed on the Settings page.
+Details: wiki [Bridge](../wiki/Bridge.md), [MCP Server](../wiki/MCP-Server.md), [CLI](../wiki/CLI.md).
 
 ## 10. Building workflows in the editor
 

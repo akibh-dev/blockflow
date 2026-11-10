@@ -17,7 +17,8 @@ import { PASSWORD, startServer } from './server.mjs';
 export async function launch() {
   const here = path.dirname(fileURLToPath(import.meta.url));
   // Built by `npm run e2e` (BF_E2E=1): optional permissions granted up front, separate folder.
-  const extension = path.resolve(here, '../../.output-e2e/chrome-mv3');
+  // BF_EXTENSION_DIR: another build folder (parallel development builds use BF_OUT_DIR).
+  const extension = path.resolve(process.env.BF_EXTENSION_DIR ?? path.resolve(here, '../../.output-e2e/chrome-mv3'));
   const playwrightChromium = (() => {
     // A Chromium installed by `npx playwright install chromium`, if any.
     const cache = path.join(os.homedir(), '.cache/ms-playwright');
@@ -46,11 +47,21 @@ export async function launch() {
   const server = await startServer();
   const base = `http://127.0.0.1:${server.address().port}`;
   const profile = mkdtempSync(path.join(os.tmpdir(), 'blockflow-e2e-'));
+  // M4 bridge: the browser starts the native host with its own environment. A socket and token inside
+  // the throwaway profile keep tests away from a real browser's bridge. Native host manifests for this
+  // profile go in <profile>/NativeMessagingHosts (Chromium reads them when the extension connects).
+  // Some builds (Brave) read them only from their default folder under $HOME, so on Linux the browser also gets
+  // a throwaway HOME, and specs install into every folder in `hostsDirs` (isolatedHostDirs in packages/bridge).
+  const fakeHome = process.platform === 'linux' ? path.join(profile, 'home') : undefined;
+  const { isolatedHostDirs } = await import('../../packages/bridge/install.mjs');
+  const hostsDir = path.join(profile, 'NativeMessagingHosts');
+  const bridge = { socket: path.join(profile, 'blockflow.sock'), tokenFile: path.join(profile, 'blockflow-token'), hostsDir, hostsDirs: fakeHome ? isolatedHostDirs(profile, fakeHome) : [hostsDir] };
   const context = await chromium.launchPersistentContext(profile, {
     executablePath,
     headless: false,
     timeout: 60_000,
     viewport: { width: 1300, height: 850 },
+    env: { ...process.env, ...(fakeHome ? { HOME: fakeHome } : {}), BLOCKFLOW_SOCKET: bridge.socket, BLOCKFLOW_TOKEN_FILE: bridge.tokenFile },
     args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, '--no-first-run', ...(process.env.BF_HEADLESS ? ['--headless=new'] : [])],
   });
   // (If launching times out, the browser may be mid-update or blocked: try another with BF_BROWSER.)
@@ -163,6 +174,9 @@ export async function launch() {
     worker,
     extensionId,
     executablePath,
+    /** The throwaway profile folder and the bridge paths inside it (M4). */
+    profile,
+    bridge,
     here,
     path,
     PASSWORD,

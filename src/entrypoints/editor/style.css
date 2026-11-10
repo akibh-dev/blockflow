@@ -1175,3 +1175,21 @@ textarea {
   margin: 4px 0 0;
   padding-left: 18px;
 }
+
+/* Suites page (SuitesPage.tsx) */
+.bf-suite-head,
+.bf-suite-add,
+.bf-suite-downloads {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.bf-suite-head input[type='text'] {
+  font-weight: 600;
+  min-width: 220px;
+}
+.bf-suite-result {
+  margin-top: 16px;
+}

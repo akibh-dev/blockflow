@@ -29,6 +29,9 @@ No code uses `storage.sync`, `localStorage` or cookies for extension state (the 
 | `bf:timer:<timerKey>` | `StoredTimer` `{data?, periodic, delayMs, periodMs?, dueAt, short}`; `timerKey` = `bf::<workflowId>::<nodeId>::<name>` | `HybridScheduler.set` | `HybridScheduler` (`take`, `handleAlarm`, `restoreAll`) | Removed by `clear`/`clearPrefix` (workflow start/stop), and by `take` for one-shots. See [Scheduling and Timers](Scheduling-and-Timers.md). |
 | `bf:state:<workflowId>::<nodeId>::<key>` | any JSON (`ctx.state`) | Blocks via `Host.state.set` (`StorageState`) | Blocks via `ctx.state.get` | Removed when the workflow is deleted (background, `diffWorkflows(...).removed` → `clearWorkflowState`); kept when only a block is removed. E.g. Timer `count`, Watch Element's last value. |
 | `bf:onboarding` | `OnboardingState` `{tryItDismissed?: boolean}` | Editor `TryItCard` (when closed) | Editor `TryItCard` (once on load) | Permanent. Absent = show the first-run "Try it" card. |
+| `bf:settings` | `BridgeSettings` `{outsideControl: boolean}` (`src/core/bridgeProtocol.ts`) | Editor Settings page (`SettingsPage`, after asking for `nativeMessaging`); e2e/CLI set it through the worker | Background (`loadBridgeSettings` at every worker start and on `storage.onChanged`) → connects or disconnects the native port | Permanent. Absent = off. Switching it off sends `bridge.disabled` and closes the port. |
+| `bf:bridge-log` | `BridgeLogEntry[]` `{at, method, ok, detail?}`, newest last, max `MAX_BRIDGE_LOG` = 200 | Background (`appendBridgeLog` in `bridge.ts`, serialised queue), one entry per bridge request | Editor Settings page ("Recent requests"; Clear log removes the entries) | Trimmed on append. `detail` is a short summary (workflow name, run id, error message), never params, payloads or secret values. |
+| `bf:suites` | `Suite[]` `{id, name, workflowIds, stopOnFailure?}` (`src/core/bridgeProtocol.ts`) | Editor `SuitesPage` (`saveSuites`, `src/browser/suites.ts`) | `SuitesPage`, background (`loadSuites` for `bf:run-suite` and the bridge's `suite.list` / `suite.run`) | Permanent. Read leniently (`normaliseSuites`); ids of deleted workflows stay until removed on the Suites page (running such a suite fails with `config.invalid`). |
 
 The prefixes `timerPrefix` and `statePrefix` are the only keys built dynamically. `HybridScheduler`'s
 `keys()` scans all of `storage.local` (`get(null)`) to find `bf:timer:*`.
@@ -44,6 +47,7 @@ access level). Keys are local constants, not in `STORAGE_KEYS`.
 | `bf:watch-tabs` | `Record<url, tabId>` | Background `pageReader.ensureWatchTab` | same | Session only, so a restart can't leave it pointing at a reused tab id (older versions kept it in `local`; `forgetLegacyWatchTabs` removes that at worker start). Closed tabs are replaced when used. |
 | `bf:picker-tabs` | `Record<editorTabId, tabId>` | `picking.ts` when it opens a picker tab | `picking.ts` `findTargetTab` (reused while the tab exists) | Session: one picker tab per editor tab. |
 | `bf:downloads-claimed` | `number[]`: download ids, last 200 | `waitForDownload` (`downloads.ts`) when it hands a download to a block | `waitForDownload` (skips them) | So each download is returned once; the downloads themselves come from `downloads.search`. |
+| `bf:bridge-status` | `BridgeStatus` `{state: 'off' \| 'connecting' \| 'connected' \| 'waiting' \| 'failed', since, error?, attempts?}` (`src/browser/bridgeStatus.ts`) | Background bridge connection (`writeBridgeStatus`) on every state change | Editor Settings page | It describes the live native port, which ends with the browser. |
 | `bf:popups` | `{tabId, openerTabId, at}[]`, last 50, younger than 2 min | `recordPopup` (from `webNavigation.onCreatedNavigationTarget`) | `waitForPopup` (claims and removes) | Must survive the worker sleeping between the popup opening and the block waiting. |
 
 ## IndexedDB `blockflow` (version 2)
@@ -64,7 +68,8 @@ Same origin for worker and editor, so both open it directly. Large or numerous d
 | Armed short timers, keep-alive interval | `HybridScheduler` | Re-armed by `restoreAll` / the heartbeat alarm. |
 | Manual Step `answers` | prompts.ts | Pending prompts are cleared; the run is already gone. |
 | Per-tab response logs | navigation.ts `watchNetwork` | Wait For "response" can't look back past the restart. |
-| Write queues (`writeQueue`, `runQueue`, recording `queue`, `menuSync`) | stores.ts, recording.ts, background.ts | Nothing pending survives; writes in flight may be lost on a hard kill. |
+| Bridge port, reconnect backoff, result blobs for `blob.get` (10 min after last read, at most 20) | bridge.ts, bridgeHandlers.ts | The port is reopened by `syncBridge()` at the next start when `bf:settings` is on; blobs are gone (`notFound`). The open port normally keeps the worker alive. |
+| Write queues (`writeQueue`, `runQueue`, recording `queue`, `menuSync`, bridge `logQueue`) | stores.ts, recording.ts, background.ts, bridge.ts | Nothing pending survives; writes in flight may be lost on a hard kill. |
 
 ## Conventions for new state
 

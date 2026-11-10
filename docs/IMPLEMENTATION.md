@@ -1,7 +1,7 @@
 # Implementation plan
 
 > **Status:** 2026-11-06. **M0 done** (v0.2.0), **M1 done** (v0.3.0), **M2 done** (branch `m2-essentials`,
-> v0.4.0); M3 is done on `m3-network` (2026-11-10); M4 remains independent. This is the
+> v0.4.0); **M3 and M4 done** (2026-11-10, v0.5.0). This is the
 > task-level plan for [PLAN.md](PLAN.md): *what* to build is decided there (goal, gaps, decisions in §8).
 > This file says *how*, in which order, with which files, tests and docs. Tick tasks off here as they
 > land, and update the matching wiki pages in the same change.
@@ -331,6 +331,29 @@ profile, imports through the bridge, runs, writes reports, exits non-zero on fai
 Editor "Suites" page: named list of workflows, run in order, one combined report (JUnit with one
 testcase per workflow, HTML with sections). Stored under `bf:suites`. CLI runs a suite by name or file.
 
+**Status (2026-11-10): done, v0.5.0.** Built in parallel to `docs/M4-WORK.md`; protocol in
+`src/core/bridgeProtocol.ts` (JSON-RPC, mirrored in `packages/bridge/protocol.mjs`, a test keeps them in sync).
+
+- [x] **M4.1** `packages/bridge` (host, framing, socket + token, id rewriting, installer for Chrome/Chromium/
+  Brave/Edge/Firefox, client) and `src/browser/bridge.ts` + `bridgeHandlers.ts` (Settings → Allow outside
+  control, `nativeMessaging` optional, capped reconnect, every method, `bf:bridge-log`). Chromium reads host
+  manifests from `<profile>/NativeMessagingHosts`, so the CLI and e2e install per profile. e2e `m4-bridge`.
+- [x] **M4.2** `packages/mcp`: 9 tools (plus `import_workflow`, `list_suites`, `run_suite`), 4 resources, the
+  write-and-repair prompt; failure screenshots as images, progress from `run.step`. e2e `m4-integration` runs
+  the agent loop (snapshot → validate → failing run with screenshot → JUnit report → repaired run) through the
+  real stdio server, host and extension.
+- [x] **M4.3** `packages/cli`: `blockflow run|validate`, `npm run build:automation` (permissions granted, no
+  test hooks), throwaway profile, secrets from `BLOCKFLOW_SECRET_*`/`--secret`, reports, exit codes 0/1/2.
+  CI job `cli`. **Deviation:** the guide examples target live sites and need real secrets, so CI *validates*
+  them and runs fixture workflows (`tests/cli/cli.e2e.mjs`) instead of running them.
+- [x] **M4.4** Suites page, `bf:suites`, `src/core/suite.ts`, combined JUnit/HTML/JSON
+  (`suite-report.schema.json`), `suite.run` over the bridge (used by the CLI). e2e `m4-integration`.
+- Verified on this machine: Chromium 156 (headless + headed, Settings switch clicked), Brave Origin (headed;
+  it reads host manifests only from its default folder under `$HOME`, so throwaway profiles also get a
+  throwaway `HOME`), Firefox 159 (throwaway `HOME` with `~/.mozilla/native-messaging-hosts`).
+- Not run: Google Chrome (not installed), Edge, macOS and Windows for the bridge (Windows registry install and named pipe are
+  unit-tested by argument construction only); a published npm package.
+
 **M4 done when:** an agent can validate → run → read report → repair through MCP against the fixture
 site, the CLI runs the guide examples in CI, and suites produce a combined JUnit report.
 
@@ -369,6 +392,6 @@ site, the CLI runs the guide examples in CI, and suites produce a combined JUnit
 | M1 | `m1-script-first` | ✅ Done: 544 unit tests, 154 Chromium e2e checks in 14 specs (system Chromium), 14 Firefox e2e checks; eval set: 10/10 reference solutions pass |
 | M2 | `m2-essentials` | ✅ Done: 680 unit tests, 207 Chromium e2e checks in 18 specs (system Chromium), 30 Firefox e2e checks; 6 new blocks (Switch, Element Action, Drag, Wait for Download, Screenshot, Cookies & Storage) |
 | M3 | `m3-network` | ✅ Done (2026-11-10, version stays 0.4.0 until M4): 771 unit tests, 234 Chromium e2e checks in 22 specs (system Chromium 156), 34 Firefox e2e checks; 4 new blocks (Route, HAR Record, Emulate, Clear Site Data) and Assert `console-errors` |
-| M4 | `m4-outside-access` | Not started |
+| M4 | `m4-outside-access` | ✅ Done (2026-11-10, v0.5.0 with M3): 956 unit tests, 275 Chromium e2e checks in 24 specs (system Chromium 156, headless and headed), M4 specs also in Brave Origin (headed), 44 Firefox e2e checks (bridge, MCP and suites on Firefox 159), CLI e2e (7 checks) on Chromium and Brave; packages `blockflow-bridge`, `blockflow-mcp`, `blockflow-cli` |
 | M5 | `m5-debugging` | Not started |
 | M6 | `m6-ship` | Not started |

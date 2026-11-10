@@ -84,6 +84,8 @@ export interface Workflow {
   enabled: boolean;
   nodes: NodeDef[];
   edges: EdgeDef[];
+  /** Set when the workflow was imported by an outside program through the bridge (M4); shown as "via bridge". */
+  importedVia?: 'bridge';
 }
 
 /** One line of the run log. */
@@ -257,7 +259,7 @@ export interface BlockContext<C extends object = BlockConfig> {
 }
 
 /** Optional permissions a block can ask for (see `BlockDefinition.permissions`). */
-export type OptionalPermission = 'debugger' | 'userScripts' | 'cookies' | 'declarativeNetRequest' | 'browsingData';
+export type OptionalPermission = 'debugger' | 'userScripts' | 'cookies' | 'declarativeNetRequest' | 'browsingData' | 'nativeMessaging';
 
 /** Palette group of a block. */
 export type BlockCategory = 'start' | 'browser' | 'page' | 'read' | 'test' | 'logic' | 'data' | 'output';

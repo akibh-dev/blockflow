@@ -22,6 +22,11 @@ export default defineContentScript({
             return browser.runtime.sendMessage(data.arg);
           case 'get':
             return browser.storage.local.get(data.arg as string);
+          case 'set':
+            // e.g. `{ 'bf:settings': { outsideControl: true } }` (the M4 bridge scenario).
+            return browser.storage.local.set(data.arg as Record<string, unknown>);
+          case 'session':
+            return browser.storage.session.get(data.arg as string);
           case 'ping':
             return 'pong';
           default:
