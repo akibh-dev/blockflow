@@ -12,6 +12,7 @@ import { waitForPopup } from './popups';
 import { capture, take } from './screenshots';
 import { getCookies, removeCookies, setCookie } from './cookies';
 import { readDownloadText, waitForDownload } from './downloads';
+import { finishDebuggerRun, startDebuggerRun } from './cdp';
 import { readElement } from './pageReader';
 import { requireTabId, sleep } from './tabs';
 import type { Host, HttpRequestOptions, HttpResult, NavigateOptions, NotifyOptions, OpenTabOptions, TabInfo, Scheduler, StateStore } from '../core/types';
@@ -220,7 +221,19 @@ async function runScript(tabId: number, code: string, data: Record<string, unkno
 
 /** The real Host: connects the engine to the browser. */
 export function createExtensionHost(scheduler: Scheduler): Host {
-  return {
+  const host: Host = {
+    forRun: (runId) => {
+      startDebuggerRun(runId);
+      return {
+        ...host,
+        page: { ...host.page, act: (tabId, request, timeoutMs, options) => act(tabId, request, timeoutMs, { ...options, runId }) },
+        tabs: {
+          ...host.tabs,
+          waitForResponse: (tabId, pattern, status, lookBackMs, timeoutMs, options) => waitForResponse(tabId, pattern, status, lookBackMs, timeoutMs, { ...options, runId }),
+        },
+      };
+    },
+    finishRun: finishDebuggerRun,
     sleep,
     http: { fetch: httpFetch, download: downloadFile },
     notify,
@@ -254,4 +267,5 @@ export function createExtensionHost(scheduler: Scheduler): Host {
     html: { act: actOnHtml },
     now: () => new Date(),
   };
+  return host;
 }

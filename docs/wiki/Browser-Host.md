@@ -9,6 +9,7 @@ capability, or when you need to know which permission or browser a feature depen
 [ownTabs.ts](../../src/browser/ownTabs.ts), [navigation.ts](../../src/browser/navigation.ts),
 [pageDriver.ts](../../src/browser/pageDriver.ts), [pageReader.ts](../../src/browser/pageReader.ts),
 [htmlParse.ts](../../src/browser/htmlParse.ts), [cdp.ts](../../src/browser/cdp.ts),
+[cdpSessions.ts](../../src/browser/cdpSessions.ts),
 [popups.ts](../../src/browser/popups.ts), [prompts.ts](../../src/browser/prompts.ts),
 [picking.ts](../../src/browser/picking.ts), [recording.ts](../../src/browser/recording.ts),
 [blobStore.ts](../../src/browser/blobStore.ts), [stores.ts](../../src/browser/stores.ts)
@@ -174,17 +175,38 @@ Firefox's build declares neither `debugger` nor `userScripts`.
 
 | Function | Behaviour |
 | --- | --- |
-| `hasDebugger()` | `permissions.contains({permissions: ['debugger']})`, false on error. |
-| `withDebugger(tabId, fn)` | Attach (protocol `1.3`; "already attached" is tolerated), run `fn(send)`, always detach. Attaching per action keeps Chrome's "started debugging this browser" bar short. |
+| `hasDebugger()` | Checks that the API exists and `permissions.contains({permissions: ['debugger']})`, false on error. |
+| `withDebugger(tabId, fn, runId?)` | Attach with protocol `1.3` and execute `fn(send)`. With a run id, retain one lease per tab until run cleanup. Without one, release the lease in `finally`. Concurrent owners share an attachment; only its last owner detaches it. Refuse attachments already owned by something else. |
 | `mouseClick(send, x, y, {button, clicks, hoverOnly, modifiers})` | `Input.dispatchMouseEvent` move, then press/release per click (`clickCount` counts up, `buttons` set). `button`: left, middle, right; `modifiers` (Playwright names) become the CDP bit mask (`modifierMask`). |
-| `mouseDrag(tabId, from, to, {modifiers})` | A real drag, the way Playwright does it: move to `from`, press, `Input.setInterceptDrags({enabled: true})`, then 5 moves with the left button held. After each early move it waits up to 150 ms for `Input.dragIntercepted` (listened to with `debugger.onEvent` while attached): when the page started a native HTML5 drag, the rest is `Input.dispatchDragEvent` dragEnter/dragOver, then `drop` at `to` (Chrome sends dragend; no mouse release). Without one, it is a plain pointer drag ending in `mouseReleased`. Returns `'html5'` or `'pointer'`. |
+| `mouseDrag(tabId, from, to, {modifiers, runId?})` | A real drag, the way Playwright does it: move to `from`, press, `Input.setInterceptDrags({enabled: true})`, then 5 moves with the left button held. After each early move it waits up to 150 ms for `Input.dragIntercepted` (subscribed through the session manager): when the page started a native HTML5 drag, the rest is `Input.dispatchDragEvent` dragEnter/dragOver, then `drop` at `to` (Chrome sends dragend; no mouse release). Without one, it is a plain pointer drag ending in `mouseReleased`. Returns `'html5'` or `'pointer'`. |
 | `pressKey(send, combo)` | `"Control+a"`, `"Shift+Tab"`, `"Enter"`, `"Control+Shift+K"`, `"ControlOrMeta+A"` (Meta on a Mac), single characters. Modifier bits alt 1, ctrl 2, meta 4, shift 8. The modifier keys get their own `rawKeyDown` first and `keyUp` last (each with the bits held so far). Shift uppercases a letter. Sends `text` only without non-shift modifiers. |
 | `insertText(send, text)` | `Input.insertText` (Press Key `mode: "text"`; with a locator the driver clicks the element first). |
 | `typeInto(send, x, y, text)` | Click, Ctrl+A (`commands: ['selectAll']`), then `Input.insertText` (or Backspace for empty). |
-| `captureWithDebugger(tabId)` | `Page.captureScreenshot` JPEG 60, raced against 4 s (background tabs may not paint); null without permission. |
+| `captureWithDebugger(tabId, runId?)` | `Page.captureScreenshot` JPEG 60, raced against 4 s (background tabs may not paint); null without permission. |
 
 `withDebugger` is also used by `screenshots.ts` (full page, element clips) and `navigation.ts` (response
-bodies), each attaching for its own call only.
+bodies). These share the run's attachment with real input. `host.ts` implements optional `Host.forRun`
+and `Host.finishRun`; the engine invokes them before running blocks and before publishing the terminal
+record. The scoped Host injects the run id into page driver and response-body calls. Screenshots already
+carry it in their options. Child runs get separate leases, so child cleanup cannot detach its parent.
+
+`cdpSessions.ts` is the injectable, tested ownership state machine. It serialises attach/detach per tab,
+deduplicates default domain enables (`Network.enable` etc.) and invalidates closed sessions. A finished
+run cannot acquire another lease or send through a retained callback. A failed attach is never treated
+as permission to borrow someone else's debugger.
+
+`initialiseDebuggerSessions` runs synchronously inside `defineBackground`. It installs tab/permission
+listeners and one debugger event/detach listener, multiplexed by tab. When the optional debugger API is
+absent at startup, the synchronous permission listener installs its API listeners when granted. Removing
+the permission invalidates existing connections. Per-operation event subscriptions (drag interception,
+response bodies) are local to the manager and removed in `finally`, rather than adding browser listeners.
+API-initiated detach may have no `onDetach` event: a "Debugger is not attached" transport error also
+invalidates ownership. Closing a tab during cleanup is benign; other cleanup errors are surfaced.
+
+The final record has `usedDebugger: true` after a successful acquisition; HTML and the Reports view
+label it. Firefox still returns `permission.missing` for debugger features and ordinary runs never attach.
+This groundwork does not add Route, HAR, Emulate or console capture. Response body capture still listens
+only from the Wait For call; it does not gain historical response-body lookup in this change.
 
 ## popups.ts
 

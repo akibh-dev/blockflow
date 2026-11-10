@@ -55,6 +55,7 @@ function schema() {
           droppedSteps: { type: 'integer', description: 'Steps not kept because the run was very long.' },
           error: { type: 'string', description: 'Why the run failed or stopped, in one line.' },
           parentRunId: { type: 'string', description: 'Set when a Run Workflow block started this run.' },
+          usedDebugger: { type: 'boolean', description: 'This run acquired a Chromium debugger session (CDP).' },
         },
       },
       step: {

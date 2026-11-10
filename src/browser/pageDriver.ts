@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { insertText, mouseClick, mouseDrag, pressKey, typeInto, withDebugger } from './cdp';
+import type { CdpSend } from './cdpSessions';
 import { sleep, tabExists } from './tabs';
 import { CodedError } from '../core/errors';
 import type { AgentCall, AgentErrorInfo, AgentRequest, AgentResponse } from '../core/page';
@@ -83,10 +84,11 @@ function locatorOf(request: AgentRequest): string | undefined {
  * keyboard events then come from the browser itself. Selects and other non-typing fields use the
  * normal path, since a real dropdown cannot be driven by coordinates.
  */
-async function actWithRealInput(tabId: number, request: AgentRequest, timeoutMs: number): Promise<Record<string, unknown>> {
+async function actWithRealInput(tabId: number, request: AgentRequest, timeoutMs: number, runId?: string): Promise<Record<string, unknown>> {
+  const debug = <T>(fn: (send: CdpSend) => Promise<T>) => withDebugger(tabId, fn, runId);
   if (!('locator' in request) || !request.locator) {
-    if (request.op === 'press') await withDebugger(tabId, (send) => pressKey(send, request.key));
-    if (request.op === 'insert-text') await withDebugger(tabId, (send) => insertText(send, request.text));
+    if (request.op === 'press') await debug((send) => pressKey(send, request.key));
+    if (request.op === 'insert-text') await debug((send) => insertText(send, request.text));
     return { real: true };
   }
   const purpose = request.op === 'click' || request.op === 'fill' || request.op === 'set-field' || request.op === 'check' || request.op === 'press' ? request.op : request.op === 'insert-text' ? 'fill' : 'click';
@@ -98,36 +100,36 @@ async function actWithRealInput(tabId: number, request: AgentRequest, timeoutMs:
     case 'click': {
       const clicks = Math.max(request.action === 'double' ? 2 : 1, Math.floor(request.clickCount ?? 1));
       const button = request.action === 'right' ? 'right' : (request.button ?? 'left');
-      await withDebugger(tabId, (send) => mouseClick(send, x, y, { button, clicks, hoverOnly: request.action === 'hover', modifiers: request.modifiers }));
+      await debug((send) => mouseClick(send, x, y, { button, clicks, hoverOnly: request.action === 'hover', modifiers: request.modifiers }));
       return { clicked: request.locator, real: true };
     }
     case 'drag': {
       const target = await actInTab(tabId, { op: 'locate', locator: request.to, purpose: 'drop', ...(request.toPosition ? { position: request.toPosition } : {}) }, timeoutMs);
-      const mode = await mouseDrag(tabId, { x, y }, { x: Number(target.x), y: Number(target.y) }, { modifiers: request.modifiers });
+      const mode = await mouseDrag(tabId, { x, y }, { x: Number(target.x), y: Number(target.y) }, { modifiers: request.modifiers, runId });
       return { dragged: request.locator, to: request.to, mode, real: true };
     }
     case 'fill':
-      await withDebugger(tabId, (send) => typeInto(send, x, y, request.value));
+      await debug((send) => typeInto(send, x, y, request.value));
       return { value: request.value, real: true };
     case 'set-field':
       if (where.kind !== 'text') return actInTab(tabId, request, timeoutMs);
-      await withDebugger(tabId, (send) => typeInto(send, x, y, request.value));
+      await debug((send) => typeInto(send, x, y, request.value));
       return { value: request.value, real: true };
     case 'check': {
       const state = await actInTab(tabId, { op: 'read', locator: request.locator, kind: 'checked' }, timeoutMs);
       if ((state.text === 'true') === request.checked) return { changed: false, checked: request.checked };
-      await withDebugger(tabId, (send) => mouseClick(send, x, y));
+      await debug((send) => mouseClick(send, x, y));
       return { changed: true, checked: request.checked, real: true };
     }
     case 'press':
-      await withDebugger(tabId, async (send) => {
+      await debug(async (send) => {
         await mouseClick(send, x, y);
         await pressKey(send, request.key);
       });
       return { key: request.key, real: true };
     case 'insert-text':
       // Clicking puts the caret where it lands (the middle of the field), as a person would.
-      await withDebugger(tabId, async (send) => {
+      await debug(async (send) => {
         await mouseClick(send, x, y);
         await insertText(send, request.text);
       });
@@ -141,8 +143,8 @@ async function actWithRealInput(tabId: number, request: AgentRequest, timeoutMs:
  * `Host.page.act`: carries out one page request. Actions with `realInput` go through the debugger
  * (`actWithRealInput`); everything else through the page agent (`actInTab`).
  */
-export async function act(tabId: number, request: AgentRequest, timeoutMs: number, options?: { realInput?: boolean }): Promise<Record<string, unknown>> {
-  return options?.realInput && ACTIONS.has(request.op) ? actWithRealInput(tabId, request, timeoutMs) : actInTab(tabId, request, timeoutMs);
+export async function act(tabId: number, request: AgentRequest, timeoutMs: number, options?: { realInput?: boolean; runId?: string }): Promise<Record<string, unknown>> {
+  return options?.realInput && ACTIONS.has(request.op) ? actWithRealInput(tabId, request, timeoutMs, options.runId) : actInTab(tabId, request, timeoutMs);
 }
 
 /**

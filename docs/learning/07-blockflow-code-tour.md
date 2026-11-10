@@ -141,6 +141,31 @@ know from Jest/Playwright:
 The screenshot store (`src/browser/blobStore.ts`) is plain IndexedDB, the same API you would use in a
 web app: extension pages and the worker share it because they share the `chrome-extension://` origin.
 
+### Run resources: a connection pool around a request
+
+In a Next.js app, you would not close a shared database connection after every query if another request
+still uses it. The debugger API has the same ownership problem: real input, a screenshot and a network
+listener can all need the same tab. Read `src/browser/cdpSessions.ts` with
+`tests/browser/cdpSessions.test.ts` open. One run retains one reference per tab; the last owner detaches.
+An action outside a run holds a temporary reference. Attach and detach are serialised so a finishing
+action cannot close the next action's session.
+
+Follow the boundary: `inRun` calls optional `Host.forRun(runId)`, blocks receive that scoped Host,
+and `finishRun(runId)` is awaited before the final record is published. The browser implementation
+adds run ids to CDP operations; the core engine knows only resource lifecycle, not browser APIs.
+Cancellation, a thrown block and a timeout all reach cleanup. Child runs have separate ownership.
+
+The extension-specific catch is optional permissions. The background registers permission and tab
+listeners synchronously, even if `browser.debugger` is not available yet. After a grant it can install
+the debugger listeners. Losing a tab, permission or debugging session invalidates its connection;
+late callbacks are rejected instead of silently reattaching. API detach does not always emit an event,
+so the transport also recognises "not attached" errors. Do not interpret "already attached" as ownership.
+
+Checkpoint: run `npm test -- tests/browser/cdpSessions.test.ts tests/browser/cdp.test.ts tests/core/runResources.test.ts`,
+then `BF_HEADLESS=1 npm run e2e -- m3-sessions`. The browser scenario checks attachment between steps
+and release after success, failure and Stop. JSON reports show `usedDebugger: true` for acquisitions.
+Exercise: trace the two-runs/one-tab unit test and predict exactly which run causes the detach.
+
 ## 10. Data features: an interpreter, an offscreen page, IndexedDB
 
 - `src/core/expression.ts` is a tiny language: tokenizer → parser → evaluator, ~400 lines. Extensions

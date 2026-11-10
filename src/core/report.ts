@@ -121,7 +121,7 @@ export function toHtmlReport(runs: RunRecord[], options: ReportOptions): string 
       })
       .join('');
     return `<section class="${run.status}"><h2><span class="badge ${run.status}">${html(run.status)}</span> ${html(run.workflowName)}</h2>
-<p class="meta">${html(new Date(run.startedAt).toLocaleString())} · ${html(run.trigger)} · ${(durationOf(run) / 1000).toFixed(1)} s${run.error ? ` · <b>${html(run.error)}</b>` : ''}</p>
+<p class="meta">${html(new Date(run.startedAt).toLocaleString())} · ${html(run.trigger)} · ${(durationOf(run) / 1000).toFixed(1)} s${run.usedDebugger ? ' · Chromium debugger (CDP)' : ''}${run.error ? ` · <b>${html(run.error)}</b>` : ''}</p>
 <table><thead><tr><th>Status</th><th>Block</th><th>Time</th><th>Details</th></tr></thead><tbody>${rows}</tbody></table></section>`;
   });
   return `<!doctype html>

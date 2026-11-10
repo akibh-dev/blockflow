@@ -376,6 +376,12 @@ on the stable line. Results of manual runs are logged in README
 
 ## CI
 
+M3 session groundwork adds `tests/browser/cdpSessions.test.ts` (injected transport, reference counts,
+overlapping owners, failed/late acquisition, domain enables and detach races), `tests/browser/cdp.test.ts`
+(optional API grant/revocation and transport invalidation), and `tests/core/runResources.test.ts`
+(scoped Host cleanup on all exits). `npm run e2e -- m3-sessions` checks actual Chromium attachment
+between steps and release after success, failure, cancellation and API detach, plus the report marker.
+
 [.github/workflows/ci.yml](../../.github/workflows/ci.yml) runs on pushes to `main` and on pull requests, with
 two jobs on Ubuntu and Node 22:
 

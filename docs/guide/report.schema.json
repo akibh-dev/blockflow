@@ -122,6 +122,10 @@
         "parentRunId": {
           "type": "string",
           "description": "Set when a Run Workflow block started this run."
+        },
+        "usedDebugger": {
+          "type": "boolean",
+          "description": "This run acquired a Chromium debugger session (CDP)."
         }
       }
     },

@@ -111,6 +111,7 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
             <p className="bf-muted">
               {new Date(open.startedAt).toLocaleString()} · {TRIGGER_LABELS[open.trigger] ?? open.trigger}
               {open.parentRunId && ' · called by another workflow'} ·{' '}
+              {open.usedDebugger && 'Chromium debugger (CDP) · '}
               <button type="button" className="bf-link" onClick={() => onShowOnCanvas(open)}>
                 show on canvas
               </button>

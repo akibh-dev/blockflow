@@ -49,6 +49,8 @@ export interface RunnerOptions {
 /** Book-keeping for one run while it is going. */
 interface ActiveRun {
   record: RunRecord;
+  host: Host;
+  closed: boolean;
   steps: number;
   failed: boolean;
   cancelled: boolean;
@@ -266,6 +268,8 @@ export class WorkflowRunner {
         ...(parentRunId ? { parentRunId } : {}),
       },
       steps: 0,
+      host: this.host,
+      closed: false,
       failed: false,
       cancelled: false,
       budgetHit: false,
@@ -273,12 +277,21 @@ export class WorkflowRunner {
     };
     this.publish(run);
     try {
+      run.host = this.host.forRun?.(run.record.id) ?? this.host;
       run.secrets = await this.host.secrets.all();
       this.secretValues = Object.values(run.secrets).filter((value) => value.length >= 3);
       await body(run);
     } catch (error) {
       run.failed = true;
       run.record.error ??= this.mask(errorMessage(error));
+    }
+    run.closed = true;
+    try {
+      const resources = await run.host.finishRun?.(run.record.id);
+      if (resources?.usedDebugger) run.record.usedDebugger = true;
+    } catch (error) {
+      run.failed = true;
+      run.record.error ??= this.mask(`Run cleanup failed: ${errorMessage(error)}`);
     }
     if (run.cancelled || this.isCancelled(run.record.id)) {
       run.record.status = 'cancelled';
@@ -297,7 +310,7 @@ export class WorkflowRunner {
    */
   private async runStep(node: NodeDef, input: Payload, run: ActiveRun, invoke?: Invoke): Promise<void> {
     // A branch still in flight when its run ended (after a timed-out loop, say) starts nothing new.
-    if (run.record.status !== 'running') return;
+    if (run.closed || run.record.status !== 'running') return;
     if (this.stopped || run.cancelled || this.isCancelled(run.record.id)) {
       run.cancelled = true;
       return;
@@ -482,7 +495,7 @@ export class WorkflowRunner {
     if (tabId === undefined) return;
     try {
       // A tab that is not rendering can make a capture hang: never let that hold up the run.
-      const id = await Promise.race([this.host.screenshots.capture(tabId, run.record.id), this.host.sleep(SCREENSHOT_TIMEOUT_MS).then(() => null)]);
+      const id = await Promise.race([run.host.screenshots.capture(tabId, run.record.id), this.host.sleep(SCREENSHOT_TIMEOUT_MS).then(() => null)]);
       if (id) {
         step.screenshot = id;
         this.publish(run);
@@ -494,7 +507,7 @@ export class WorkflowRunner {
 
   /** Sends `payload` out of `port` of `nodeId`, to every block connected there. */
   private async emitFrom(nodeId: string, payload: Payload, port: string, run: ActiveRun): Promise<void> {
-    if (this.stopped) return;
+    if (this.stopped || run.closed) return;
     const source = this.nodesById.get(nodeId);
     const ports = nodePorts(source ? this.registry.get(source.type) : undefined, source ?? {});
     let sent = false;
@@ -625,9 +638,10 @@ export class WorkflowRunner {
   ): BlockContext<never> {
     const workflowId = this.workflow.id;
     const refuseIfAbandoned = (what: string): void => {
-      if (!abandoned()) return;
-      this.log('warn', node.id, `${what} ignored: this step already timed out`);
-      throw new Error('This step already timed out');
+      if (!abandoned() && !run?.closed) return;
+      const reason = run?.closed ? 'this run has ended' : 'this step already timed out';
+      this.log('warn', node.id, `${what} ignored: ${reason}`);
+      throw new Error(run?.closed && !abandoned() ? 'This run has ended' : 'This step already timed out');
     };
     const emit = async (payload: Payload, port: string = DEFAULT_PORT): Promise<Payload | undefined> => {
       refuseIfAbandoned('Output');
@@ -659,7 +673,7 @@ export class WorkflowRunner {
       timeoutMs,
       realInput: node.step?.realInput === true,
       runId: run?.record.id ?? '',
-      aborted: () => abandoned() || this.stopped || (run ? run.cancelled || this.isCancelled(run.record.id) : false),
+      aborted: () => abandoned() || this.stopped || (run ? run.closed || run.cancelled || this.isCancelled(run.record.id) : false),
       softFail,
       callWorkflow: async (id, input) => {
         if (!run) throw new Error('Run Workflow can only be used inside a run');
@@ -675,7 +689,7 @@ export class WorkflowRunner {
           throw error;
         }
       },
-      host: this.host,
+      host: run?.host ?? this.host,
       emit,
       log: (level, message) => this.log(level, node.id, message),
       timers: {

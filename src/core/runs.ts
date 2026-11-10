@@ -67,6 +67,8 @@ export interface RunRecord {
   error?: string;
   /** Set when a Run Workflow block started this run. */
   parentRunId?: string;
+  /** This run successfully acquired a Chromium debugger session (CDP). */
+  usedDebugger?: boolean;
 }
 
 /** Receives a fresh copy of a run after every change. The background stores it; tests collect it. */

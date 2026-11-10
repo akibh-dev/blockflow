@@ -1,48 +1,84 @@
 import { browser } from 'wxt/browser';
 import { CodedError } from '../core/errors';
+import { DebuggerSessions } from './cdpSessions';
+import type { CdpListener, CdpSend } from './cdpSessions';
 
 /**
  * Real mouse and keyboard input through the Chrome DevTools Protocol (`debugger` API, optional
  * permission, Chromium only). Events made this way are `isTrusted: true`, which some sites require.
- * The browser shows "BlockFlow started debugging this browser" while attached, so each action
- * attaches and detaches again.
+ * The browser shows "BlockFlow started debugging this browser" while attached. Runs retain one
+ * attachment per tab; calls outside a run attach only for the action. Shared leases prevent one
+ * operation from detaching another's session.
  */
 
 /** Sends one CDP command to the attached tab. */
-type Send = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+type Send = CdpSend;
 
 /** True if the optional "debugger" permission is granted (false where the API does not exist). */
 export async function hasDebugger(): Promise<boolean> {
   try {
-    return await browser.permissions.contains({ permissions: ['debugger'] });
+    return Boolean(browser.debugger) && await browser.permissions.contains({ permissions: ['debugger'] });
   } catch {
     return false;
   }
 }
 
-/**
- * Attaches the debugger to `tabId` (protocol 1.3), runs `fn`, and always detaches. Throws a readable
- * error when the permission is missing.
- */
-export async function withDebugger<T>(tabId: number, fn: (send: Send) => Promise<T>): Promise<T> {
-  if (!(await hasDebugger()) || !browser.debugger) {
-    throw new CodedError(
-      'permission.missing',
-      'Real input needs the "debugger" permission (Chrome, Edge, Brave). Tick "Use real mouse and keyboard" in the step settings again to grant it.',
-    );
-  }
-  const target = { tabId };
-  try {
-    await browser.debugger.attach(target, '1.3');
-  } catch (error) {
-    // Already attached by an earlier action that did not finish: reuse it.
-    if (!String(error).includes('already attached')) throw error;
-  }
-  try {
-    return await fn((method, params) => browser.debugger.sendCommand(target, method, params));
-  } finally {
-    await browser.debugger.detach(target).catch(() => {});
-  }
+/** API-initiated detach does not emit onDetach; detect that transport failure too. */
+const isDetachedError = (error: unknown) => /debugger is not attached|no tab with (?:given )?id|no target with given id|target closed/i.test(String(error));
+
+const sessions = new DebuggerSessions({
+  available: hasDebugger,
+  attach: (tabId) => browser.debugger.attach({ tabId }, '1.3'),
+  detach: async (tabId) => {
+    try { await browser.debugger.detach({ tabId }); }
+    catch (error) { if (!isDetachedError(error)) throw error; }
+  },
+  send: async (tabId, method, params) => {
+    try { return await browser.debugger.sendCommand({ tabId }, method, params); }
+    catch (error) {
+      if (!isDetachedError(error)) throw error;
+      sessions.detached(tabId);
+      throw new CodedError('step.failed', 'The debugger was detached or the tab closed. Run the workflow again; do not close the debugging bar during a run.');
+    }
+  },
+});
+
+let listening = false;
+let debuggerApi: typeof browser.debugger | undefined;
+function listenToDebugger(): void {
+  const api = browser.debugger;
+  // Optional API namespaces may appear only after their permission is granted.
+  if (!api || debuggerApi === api) return;
+  debuggerApi = api;
+  api.onDetach.addListener((source) => {
+    if (source.tabId !== undefined) sessions.detached(source.tabId);
+  });
+  api.onEvent.addListener((source, method, params) => {
+    if (source.tabId !== undefined) sessions.event(source.tabId, method, params);
+  });
+}
+
+/** Called synchronously from defineBackground: MV3 listeners must exist before the worker idles. */
+export function initialiseDebuggerSessions(): void {
+  if (listening) return;
+  listening = true;
+  browser.tabs.onRemoved.addListener((tabId) => sessions.detached(tabId));
+  browser.permissions.onAdded.addListener(listenToDebugger);
+  browser.permissions.onRemoved.addListener((permissions) => {
+    if (permissions.permissions?.includes('debugger')) sessions.invalidateAll();
+  });
+  listenToDebugger();
+}
+
+export const startDebuggerRun = (runId: string): void => sessions.startRun(runId);
+export const finishDebuggerRun = (runId: string): Promise<{ usedDebugger?: boolean }> => sessions.finishRun(runId);
+
+/** Subscribe inside a withDebugger callback; the browser listener itself is registered at startup. */
+export const onDebuggerEvent = (tabId: number, listener: CdpListener): (() => void) => sessions.subscribe(tabId, listener);
+
+/** A scoped action shares its run's attachment; an unscoped action releases its lease in finally. */
+export function withDebugger<T>(tabId: number, fn: (send: Send) => Promise<T>, runId?: string): Promise<T> {
+  return sessions.withSession(tabId, fn, runId);
 }
 
 const KEYS: Record<string, { code: string; keyCode: number; text?: string }> = {
@@ -115,12 +151,12 @@ const DRAG_START_WAIT_MS = 150;
  * (dragEnter, dragOver, drop), the way Playwright does it; without a native drag the moves stay plain
  * mouse moves with the left button held (sliders, pointer-based sortables). Returns which it was.
  */
-export async function mouseDrag(tabId: number, from: { x: number; y: number }, to: { x: number; y: number }, options: { modifiers?: readonly string[] } = {}): Promise<'html5' | 'pointer'> {
+export async function mouseDrag(tabId: number, from: { x: number; y: number }, to: { x: number; y: number }, options: { modifiers?: readonly string[]; runId?: string } = {}): Promise<'html5' | 'pointer'> {
   const modifiers = modifierMask(options.modifiers);
   let intercepted: unknown;
   let wake: (() => void) | undefined;
-  const listener = (source: { tabId?: number }, method: string, params?: unknown) => {
-    if (source.tabId !== tabId || method !== 'Input.dragIntercepted') return;
+  const listener = (method: string, params?: object) => {
+    if (method !== 'Input.dragIntercepted') return;
     intercepted = (params as { data?: unknown } | undefined)?.data;
     wake?.();
   };
@@ -135,7 +171,7 @@ export async function mouseDrag(tabId: number, from: { x: number; y: number }, t
           };
         });
   return withDebugger(tabId, async (send) => {
-    browser.debugger.onEvent.addListener(listener);
+    const unsubscribe = onDebuggerEvent(tabId, listener);
     try {
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: from.x, y: from.y, button: 'none', modifiers });
       await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: from.x, y: from.y, button: 'left', buttons: 1, clickCount: 1, modifiers });
@@ -168,9 +204,9 @@ export async function mouseDrag(tabId: number, from: { x: number; y: number }, t
       }
       return dragging ? 'html5' : 'pointer';
     } finally {
-      browser.debugger.onEvent.removeListener(listener);
+      unsubscribe();
     }
-  });
+  }, options.runId);
 }
 
 /**
@@ -220,7 +256,7 @@ export async function typeInto(send: Send, x: number, y: number, text: string): 
 }
 
 /** Screenshot of a tab even when it is not showing (debugger permission needed). */
-export async function captureWithDebugger(tabId: number): Promise<string | null> {
+export async function captureWithDebugger(tabId: number, runId?: string): Promise<string | null> {
   if (!(await hasDebugger())) return null;
   return withDebugger(tabId, async (send) => {
     // A background tab may not paint: give it 4 s, then go without a screenshot.
@@ -229,5 +265,5 @@ export async function captureWithDebugger(tabId: number): Promise<string | null>
       new Promise((resolve) => setTimeout(() => resolve({}), 4_000)),
     ])) as { data?: string };
     return shot.data ? `data:image/jpeg;base64,${shot.data}` : null;
-  });
+  }, runId);
 }

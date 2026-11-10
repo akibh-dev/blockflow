@@ -565,6 +565,10 @@ export interface NotifyOptions {
  * `src/browser/host.ts` with extension APIs and by `tests/helpers/fakeHost.ts` in memory.
  */
 export interface Host {
+  /** Optional run-scoped resources. The engine gives this Host to that run's block contexts. */
+  forRun?(runId: string): Host;
+  /** Release run-scoped resources before publishing its final record, on every exit path. */
+  finishRun?(runId: string): Promise<{ usedDebugger?: boolean }>;
   /** Wait without blocking. Used for step timeouts and retry backoff. */
   sleep(ms: number): Promise<void>;
   http: {

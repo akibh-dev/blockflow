@@ -1,7 +1,7 @@
 # Implementation plan
 
 > **Status:** 2026-11-06. **M0 done** (v0.2.0), **M1 done** (v0.3.0), **M2 done** (branch `m2-essentials`,
-> v0.4.0); M3 and M4 are next (independent of each other). This is the
+> v0.4.0); M3 is in progress on `m3-network` (session groundwork); M4 remains independent. This is the
 > task-level plan for [PLAN.md](PLAN.md): *what* to build is decided there (goal, gaps, decisions in §8).
 > This file says *how*, in which order, with which files, tests and docs. Tick tasks off here as they
 > land, and update the matching wiki pages in the same change.
@@ -254,6 +254,15 @@ Playwright export covers the new blocks (or marks them), and Capabilities-and-Li
 
 Shared groundwork:
 
+- [x] **M3.0: run-scoped CDP session lifecycle.** `cdpSessions.ts` owns refcounted tab attachments;
+  `Host.forRun` / `finishRun` keep the engine browser-free. Real input, drag interception, response
+  bodies and screenshots use the run's lease. Default domain enables are lazy and deduplicated.
+  Completion, failure, cancellation and tab removal release ownership; late callbacks cannot send
+  commands after cleanup. Optional permission grant/revocation and missing APIs are handled explicitly.
+  Successful acquisitions add `usedDebugger` to the JSON report and a CDP label to HTML/Reports.
+  Unit coverage and `tests/e2e/specs/m3-sessions.mjs` cover ownership and exit paths.
+- [ ] **M3.1–M3.5** below remain to be implemented. M3 is not complete and the version stays 0.4.0.
+
 - **`src/browser/cdp.ts` sessions per run**: attach once per tab per run (refcounted), enable domains
   lazily, detach at run end (`onRun` finished) or tab close. A run that used CDP shows it in the report.
 - Every CDP feature checks `browser.debugger` and the optional permission; on Firefox and without the
@@ -356,7 +365,7 @@ site, the CLI runs the guide examples in CI, and suites produce a combined JUnit
 | M0 | `m0-stabilise` | ✅ Done: 395 unit tests, 122 Chromium e2e checks (Brave), 14 Firefox e2e checks |
 | M1 | `m1-script-first` | ✅ Done: 544 unit tests, 154 Chromium e2e checks in 14 specs (system Chromium), 14 Firefox e2e checks; eval set: 10/10 reference solutions pass |
 | M2 | `m2-essentials` | ✅ Done: 680 unit tests, 207 Chromium e2e checks in 18 specs (system Chromium), 30 Firefox e2e checks; 6 new blocks (Switch, Element Action, Drag, Wait for Download, Screenshot, Cookies & Storage) |
-| M3 | `m3-network` | Not started |
+| M3 | `m3-network` | In progress: session groundwork complete; Route, HAR, Emulate, clean-site-data and console capture pending |
 | M4 | `m4-outside-access` | Not started |
 | M5 | `m5-debugging` | Not started |
 | M6 | `m6-ship` | Not started |

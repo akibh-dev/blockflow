@@ -386,6 +386,10 @@ A workflow may have several start blocks; each starts its own runs.
   embedded), **JUnit XML** (for CI dashboards), **JSON**.
 - If the browser stops the extension's background worker during a run, the run is marked
   **interrupted**.
+- Chromium debugger features share one attachment per tab for the run. Chrome's debugging bar
+  stays visible until the run finishes (or the tab closes). Closing that bar invalidates the session;
+  later debugger actions fail clearly. Reports and HTML exports label runs that used CDP; JSON
+  includes `usedDebugger: true`. Workflows that do not use CDP do not request or acquire a session.
 - The **JSON** export is for programs: `{ "$schema", "schemaVersion": 1, "generatedAt", "summary", "runs" }`
   ([schema](report.schema.json)). Each step of a run has `nodeId`, `sourceId` (the block's `id` in the
   file you imported, when it had one), `blockType`, `status`, `durationMs`, `attempts`, `input`, `output`

@@ -135,10 +135,15 @@ Exported helpers: `DEFAULT_MAX_STEPS` (1000), `DEFAULT_TIMEOUT_SECONDS` (60), `M
 
 ### Run lifecycle
 
-1. `inRun(trigger, body)` creates a `RunRecord` (`status: 'running'`), publishes it, loads
+1. `inRun(trigger, body)` creates a `RunRecord` (`status: 'running'`), publishes it, obtains the optional
+   `host.forRun(runId)` scoped Host for block contexts, and loads
    `host.secrets.all()` (values of 3+ characters are used for masking), runs `body`.
 2. `body` calls `runStep(node, input, run)` for the entry blocks.
-3. Anything thrown out of `body` fails the run. At the end the status is `cancelled` (if cancelled),
+3. Anything thrown out of `body` fails the run. The run is then closed to late emits and calls;
+   its optional `host.finishRun(runId)` is awaited on success, failure and cancellation, before
+   publishing the terminal record. Cleanup failures fail an otherwise successful run. Resource
+   metadata can add `usedDebugger: true`; the engine itself never imports a browser/CDP module.
+4. At the end the status is `cancelled` (if cancelled),
    else `failed` or `passed`; `endedAt` is set; the final copy is published and returned.
 
 ### One step (`runStep`)
@@ -221,7 +226,7 @@ Details: [Scheduling and Timers](Scheduling-and-Timers.md),
 | `RunStatus` | `running` / `passed` / `failed` / `cancelled` / `interrupted`. |
 | `StepStatus` | `running` / `passed` / `failed` / `handled` (failed but dealt with) / `skipped`. |
 | `StepRecord` | `nodeId, blockType, status, startedAt, durationMs?, attempts, input?, output?, port?, error?, code?, locator?, url?, matches?, sourceId?, screenshot?, childRunId?`. `code` (an `ErrorCode`) is set whenever `error` is; `locator`, `url` and `matches` (up to 5 element descriptions, strict-mode errors) when the error had them. `sourceId` is the node's `origin` (its id in the imported file), so a report maps back to the script. |
-| `RunRecord` | `id, workflowId, workflowName, trigger, status, startedAt, endedAt?, steps, droppedSteps?, error?, parentRunId?`. |
+| `RunRecord` | `id, workflowId, workflowName, trigger, status, startedAt, endedAt?, steps, droppedSteps?, error?, parentRunId?, usedDebugger?`. `usedDebugger` marks successful CDP acquisition. |
 | `RunObserver` | `(run) => void`; receives a fresh copy after every change. |
 | `MAX_STEPS_KEPT` | 300. |
 | `compactPayload(p)` | Payloads over 3000 JSON chars become `{ $preview, $size }`; unserialisable ones `{ $preview: '[not serialisable]' }`. |

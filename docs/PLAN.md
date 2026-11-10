@@ -3,6 +3,9 @@
 > **Status:** agreed, 2026-11-05 (decisions in §8). M0 done (v0.2.0), M1 done (v0.3.0, 2026-11-06), M2 done (v0.4.0, 2026-11-06). Task-level steps: [IMPLEMENTATION.md](IMPLEMENTATION.md). This plan replaces the
 > phase list in [PLAN-automation.md](PLAN-automation.md) (phases A–F, all built) as the guide for what comes next.
 
+M3 has started on `m3-network`: run-scoped debugger ownership and cleanup are implemented. The
+network/environment blocks remain pending; see the M3 checklist in IMPLEMENTATION.md.
+
 ## 1. Goal
 
 BlockFlow should do what people use Playwright for: test, automate, scrape and monitor web pages. It runs
