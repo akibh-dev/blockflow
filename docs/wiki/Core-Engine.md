@@ -107,6 +107,13 @@ Implemented by `src/browser/host.ts` ([Browser Host](Browser-Host.md)) and by
 | `downloads.readText` | `(DownloadInfo, tabId?) => Promise<string>` | Wait for Download `read`: the content, fetched again from its URL. |
 | `html.act` | `(html, baseUrl, AgentRequest)` | Extract from fetched HTML (agent on a parsed document). |
 | `prompt.ask` | `({ runId, workflowName, message, timeoutMs }) => Promise<boolean>` | Manual Step. |
+| `network.route` | `(tabId, RouteOptions) => Promise<RouteResult>` | Route. `RouteOptions` = `{ action: add/clear, rules: RouteRule[], backend: auto/cdp/dnr }`; result `{ rules, backend }` (types in [network.ts](../../src/core/network.ts)). |
+| `network.har` | `(tabId, 'start' \| 'stop') => Promise<HarResult>` | HAR Record. `{ recording, har?: HarLog, truncated? }`. |
+| `network.console` | `(tabId) => Promise<ConsoleEntry[]>` | Assert `console-errors` (counts `level: 'error'`). `ConsoleEntry` = `{ level, text, timestamp, url? }`. |
+| `environment.emulate` | `(tabId, EmulateOptions) => Promise<void>` | Emulate. |
+| `environment.clearSiteData` | `({ origins }) => Promise<void>` | Clear Site Data. |
+| `diagnostics?` | `{ beginStep(nodeId), finishStep(nodeId) => ConsoleEntry[] }` | Optional; the engine, around every step (below). |
+| `forRun?` / `finishRun?` | `(runId) => Host`, `(runId) => Promise<{ usedDebugger? }>` | Optional run-scoped Host and its cleanup (Run lifecycle). |
 | `now` | `() => Date` | All engine timestamps. |
 
 `Scheduler`: `set(key, options, data?)`, `clear(key)`, `clearPrefix(prefix)`, `take(key)`. `take` returns the
@@ -180,6 +187,12 @@ them onto the step record next to `error` (masked like the message).
 getting a shallow copy `{ ...payload }`. If no edge leaves that port, the payload is stored as
 `run.lastOutput` (the result of a called workflow).
 
+**Console** (`beginStep` / `endStep`): the engine calls the optional `host.diagnostics.beginStep(nodeId)`
+when a step record starts and `finishStep(nodeId)` when its status is set. Returned entries are stored on
+`step.console`: at most 100, each `text` cut to 2000 chars, masked with the run's secrets. The browser
+Host fills them from the page console once the run has used the debugger on the tab
+([Browser Host: telemetry.ts](Browser-Host.md#telemetryts)).
+
 **Screenshots** (`afterStep`): by `step.screenshot` (default only when something went wrong), of the tab
 named by `config.tab` (else `main`) looked up in the payload's `$session`. Raced against 8 s; errors are
 swallowed. A block that took a picture itself puts its id in its output as `screenshotId` (Screenshot):
@@ -225,7 +238,7 @@ Details: [Scheduling and Timers](Scheduling-and-Timers.md),
 | `RunTrigger` | `manual` / `start` / `timer` / `call` / `event`. |
 | `RunStatus` | `running` / `passed` / `failed` / `cancelled` / `interrupted`. |
 | `StepStatus` | `running` / `passed` / `failed` / `handled` (failed but dealt with) / `skipped`. |
-| `StepRecord` | `nodeId, blockType, status, startedAt, durationMs?, attempts, input?, output?, port?, error?, code?, locator?, url?, matches?, sourceId?, screenshot?, childRunId?`. `code` (an `ErrorCode`) is set whenever `error` is; `locator`, `url` and `matches` (up to 5 element descriptions, strict-mode errors) when the error had them. `sourceId` is the node's `origin` (its id in the imported file), so a report maps back to the script. |
+| `StepRecord` | `nodeId, blockType, status, startedAt, durationMs?, attempts, input?, output?, port?, error?, code?, locator?, url?, matches?, sourceId?, screenshot?, childRunId?, console?`. `code` (an `ErrorCode`) is set whenever `error` is; `locator`, `url` and `matches` (up to 5 element descriptions, strict-mode errors) when the error had them. `sourceId` is the node's `origin` (its id in the imported file), so a report maps back to the script. `console` holds the step's page console entries (bounded, masked). |
 | `RunRecord` | `id, workflowId, workflowName, trigger, status, startedAt, endedAt?, steps, droppedSteps?, error?, parentRunId?, usedDebugger?`. `usedDebugger` marks successful CDP acquisition. |
 | `RunObserver` | `(run) => void`; receives a fresh copy after every change. |
 | `MAX_STEPS_KEPT` | 300. |

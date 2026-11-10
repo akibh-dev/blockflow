@@ -8,6 +8,7 @@
 
 import type { AgentRequest, ReadKind, WaitUntil } from './page';
 import type { Routed } from './ports';
+import type { ClearSiteDataOptions, ConsoleEntry, EmulateOptions, HarResult, RouteOptions, RouteResult } from './network';
 
 export type { ReadKind } from './page';
 
@@ -256,7 +257,7 @@ export interface BlockContext<C extends object = BlockConfig> {
 }
 
 /** Optional permissions a block can ask for (see `BlockDefinition.permissions`). */
-export type OptionalPermission = 'debugger' | 'userScripts' | 'cookies';
+export type OptionalPermission = 'debugger' | 'userScripts' | 'cookies' | 'declarativeNetRequest' | 'browsingData';
 
 /** Palette group of a block. */
 export type BlockCategory = 'start' | 'browser' | 'page' | 'read' | 'test' | 'logic' | 'data' | 'output';
@@ -569,6 +570,19 @@ export interface Host {
   forRun?(runId: string): Host;
   /** Release run-scoped resources before publishing its final record, on every exit path. */
   finishRun?(runId: string): Promise<{ usedDebugger?: boolean }>;
+  diagnostics?: {
+    beginStep(nodeId: string): void;
+    finishStep(nodeId: string): ConsoleEntry[];
+  };
+  network: {
+    route(tabId: number, options: RouteOptions): Promise<RouteResult>;
+    har(tabId: number, action: 'start' | 'stop'): Promise<HarResult>;
+    console(tabId: number): Promise<ConsoleEntry[]>;
+  };
+  environment: {
+    emulate(tabId: number, options: EmulateOptions): Promise<void>;
+    clearSiteData(options: ClearSiteDataOptions): Promise<void>;
+  };
   /** Wait without blocking. Used for step timeouts and retry backoff. */
   sleep(ms: number): Promise<void>;
   http: {

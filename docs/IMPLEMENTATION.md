@@ -1,7 +1,7 @@
 # Implementation plan
 
 > **Status:** 2026-11-06. **M0 done** (v0.2.0), **M1 done** (v0.3.0), **M2 done** (branch `m2-essentials`,
-> v0.4.0); M3 is in progress on `m3-network` (session groundwork); M4 remains independent. This is the
+> v0.4.0); M3 is done on `m3-network` (2026-11-10); M4 remains independent. This is the
 > task-level plan for [PLAN.md](PLAN.md): *what* to build is decided there (goal, gaps, decisions in §8).
 > This file says *how*, in which order, with which files, tests and docs. Tick tasks off here as they
 > land, and update the matching wiki pages in the same change.
@@ -261,7 +261,10 @@ Shared groundwork:
   commands after cleanup. Optional permission grant/revocation and missing APIs are handled explicitly.
   Successful acquisitions add `usedDebugger` to the JSON report and a CDP label to HTML/Reports.
   Unit coverage and `tests/e2e/specs/m3-sessions.mjs` cover ownership and exit paths.
-- [ ] **M3.1–M3.5** below remain to be implemented. M3 is not complete and the version stays 0.4.0.
+- [x] **M3.1–M3.5** done (2026-11-10). `src/browser/m3Host.ts` builds one feature set per run (routes,
+  environment, telemetry) on the run's CDP lease; `finishRun` runs every feature cleanup, then releases the
+  debugger, on every exit path. Route and emulation overrides *claim* the tab, so a second run on the same
+  tab fails clearly instead of fighting the first. The version stays 0.4.0 until M4 also lands (0.5).
 
 - **`src/browser/cdp.ts` sessions per run**: attach once per tab per run (refcounted), enable domains
   lazily, detach at run end (`onRun` finished) or tab close. A run that used CDP shows it in the report.
@@ -270,11 +273,11 @@ Shared groundwork:
 
 | ID | Feature | Design | Size |
 | --- | --- | --- | --- |
-| M3.1 | **Route block** (`route`) | Rules `{url pattern, method?, action: fulfill \| abort \| continue \| modify}` with `status`, `headers`, `body` (templated, JSON helper), `delayMs`. CDP `Fetch.enable({patterns})` + `Fetch.requestPaused` handler in the background for the run's tabs; rules live for the rest of the run (or until a `route` block with `clear`). Cross-browser subset (`abort`, redirect) through `declarativeNetRequest` session rules scoped to the tab id | L |
-| M3.2 | **HAR recording** (`har-record` start/stop) | Collect `Network.*` events for the run's tab into HAR 1.2; on stop, save into a dataset or Download. Replay is deferred | M |
-| M3.3 | **Emulate block** (`emulate`) | `device` presets (from a small built-in table: iPhone, Pixel, iPad, desktop sizes), `viewport`, `deviceScaleFactor`, `userAgent`, `locale`, `timezone`, `geolocation`, `colorScheme`, `reducedMotion`, `offline`. CDP `Emulation.*` / `Network.emulateNetworkConditions`; cleared at run end | M |
-| M3.4 | **Clean site data before run** | Step-less workflow setting `isolation: { clearSiteData: [origins] }` or block `clear-site-data`; `browsingData.remove({ origins }, { cookies, localStorage, indexedDB, cacheStorage, serviceWorkers })` (new optional permission `browsingData`) | S |
-| M3.5 | **Console and errors capture** | With CDP attached, record `Runtime.consoleAPICalled` and `Runtime.exceptionThrown` per step into the run record (bounded), shown in Reports; Assert subject `console-errors` count | M |
+| M3.1 | **Route block** (`route`) | Rules `{url pattern, method?, action: fulfill \| abort \| continue \| modify}` with `status`, `headers`, `body` (templated, JSON helper), `delayMs`. CDP `Fetch.enable({patterns})` + `Fetch.requestPaused` handler in the background for the run's tabs; rules live for the rest of the run (or until a `route` block with `clear`). Cross-browser subset (`abort`, redirect) through `declarativeNetRequest` session rules scoped to the tab id | L · **Done** (`routes.ts`, e2e `m3-route`): also `redirect`; newest match wins; `backend: auto` picks DNR when every rule is abort/redirect without delay, so no debugging bar. DNR ids in a reserved range, stale rules removed at worker start (`initialiseRoutes`). Paused requests are aborted, not leaked, at run end. Firefox: DNR works, CDP actions fail with `permission.missing` |
+| M3.2 | **HAR recording** (`har-record` start/stop) | Collect `Network.*` events for the run's tab into HAR 1.2; on stop, save into a dataset or Download. Replay is deferred | M · **Done** (`telemetry.ts`, e2e `m3-telemetry`): metadata only, at most 500 entries (`truncated`); no bodies, cookies or auth headers, sensitive query values redacted, secrets masked before dataset/download |
+| M3.3 | **Emulate block** (`emulate`) | `device` presets (from a small built-in table: iPhone, Pixel, iPad, desktop sizes), `viewport`, `deviceScaleFactor`, `userAgent`, `locale`, `timezone`, `geolocation`, `colorScheme`, `reducedMotion`, `offline`. CDP `Emulation.*` / `Network.emulateNetworkConditions`; cleared at run end | M · **Done** (`environment.ts`, e2e `m3-environment`): resets only the groups a run changed, also after a failed run; `action: clear` resets mid-run. Geolocation does not grant the site permission |
+| M3.4 | **Clean site data before run** | Step-less workflow setting `isolation: { clearSiteData: [origins] }` or block `clear-site-data`; `browsingData.remove({ origins }, { cookies, localStorage, indexedDB, cacheStorage, serviceWorkers })` (new optional permission `browsingData`) | S · **Done as the block** (`clear-site-data`, first in the workflow); the workflow setting was not needed. Exact HTTP(S) origins only, never an unfiltered remove; cookies use registrable-domain scope. Chromium only: Firefox cannot filter all data types by origin, so it refuses and the Firefox manifest does not ask for `browsingData` |
+| M3.5 | **Console and errors capture** | With CDP attached, record `Runtime.consoleAPICalled` and `Runtime.exceptionThrown` per step into the run record (bounded), shown in Reports; Assert subject `console-errors` count | M · **Done** (`telemetry.ts`, `Host.diagnostics`, e2e `m3-telemetry`): `StepRecord.console` (at most 100 per step, text 2000 chars, secrets masked), in Reports, HTML and JSON (`report.schema.json`). Assert `console-errors` attaches the debugger for the tab |
 
 Fixtures: `api.html` and new `geo.html` (shows timezone, locale, geolocation, color scheme, online
 state). e2e per feature. **M3 done when:** Route, HAR, Emulate, clean data and console capture pass e2e
@@ -365,7 +368,7 @@ site, the CLI runs the guide examples in CI, and suites produce a combined JUnit
 | M0 | `m0-stabilise` | ✅ Done: 395 unit tests, 122 Chromium e2e checks (Brave), 14 Firefox e2e checks |
 | M1 | `m1-script-first` | ✅ Done: 544 unit tests, 154 Chromium e2e checks in 14 specs (system Chromium), 14 Firefox e2e checks; eval set: 10/10 reference solutions pass |
 | M2 | `m2-essentials` | ✅ Done: 680 unit tests, 207 Chromium e2e checks in 18 specs (system Chromium), 30 Firefox e2e checks; 6 new blocks (Switch, Element Action, Drag, Wait for Download, Screenshot, Cookies & Storage) |
-| M3 | `m3-network` | In progress: session groundwork complete; Route, HAR, Emulate, clean-site-data and console capture pending |
+| M3 | `m3-network` | ✅ Done (2026-11-10, version stays 0.4.0 until M4): 771 unit tests, 234 Chromium e2e checks in 22 specs (system Chromium 156), 34 Firefox e2e checks; 4 new blocks (Route, HAR Record, Emulate, Clear Site Data) and Assert `console-errors` |
 | M4 | `m4-outside-access` | Not started |
 | M5 | `m5-debugging` | Not started |
 | M6 | `m6-ship` | Not started |

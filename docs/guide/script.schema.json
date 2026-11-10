@@ -410,6 +410,102 @@
         },
         {
           "type": "object",
+          "title": "Route",
+          "required": [
+            "route"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Optional step id (kept as the node id; shown in run reports). Default s<N> for the Nth step."
+            },
+            "route": {
+              "$ref": "#/$defs/config/route"
+            },
+            "step": {
+              "$ref": "#/$defs/stepSettings"
+            },
+            "onError": {
+              "$ref": "#/$defs/steps",
+              "description": "Steps on the error output (sets step.onError to \"port\")."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "title": "HAR Record",
+          "required": [
+            "har-record"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Optional step id (kept as the node id; shown in run reports). Default s<N> for the Nth step."
+            },
+            "har-record": {
+              "$ref": "#/$defs/config/har-record"
+            },
+            "step": {
+              "$ref": "#/$defs/stepSettings"
+            },
+            "onError": {
+              "$ref": "#/$defs/steps",
+              "description": "Steps on the error output (sets step.onError to \"port\")."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "title": "Emulate",
+          "required": [
+            "emulate"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Optional step id (kept as the node id; shown in run reports). Default s<N> for the Nth step."
+            },
+            "emulate": {
+              "$ref": "#/$defs/config/emulate"
+            },
+            "step": {
+              "$ref": "#/$defs/stepSettings"
+            },
+            "onError": {
+              "$ref": "#/$defs/steps",
+              "description": "Steps on the error output (sets step.onError to \"port\")."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "title": "Clear Site Data",
+          "required": [
+            "clear-site-data"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Optional step id (kept as the node id; shown in run reports). Default s<N> for the Nth step."
+            },
+            "clear-site-data": {
+              "$ref": "#/$defs/config/clear-site-data"
+            },
+            "step": {
+              "$ref": "#/$defs/stepSettings"
+            },
+            "onError": {
+              "$ref": "#/$defs/steps",
+              "description": "Steps on the error output (sets step.onError to \"port\")."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "title": "Close Tab",
           "required": [
             "close-tab"
@@ -1858,6 +1954,164 @@
         },
         "additionalProperties": false
       },
+      "route": {
+        "type": "object",
+        "description": "Route: Mock, block or modify page requests for this run. Newest matching rule wins; clear removes the tab’s rules.",
+        "properties": {
+          "action": {
+            "description": "Do",
+            "enum": [
+              "add",
+              "clear"
+            ]
+          },
+          "backend": {
+            "description": "Use",
+            "enum": [
+              "auto",
+              "cdp",
+              "dnr"
+            ]
+          },
+          "rules": {
+            "description": "An array: url pattern, optional method, action, optional status/headers/body/redirectUrl/delayMs. Last matching rule wins. CDP modify changes the outgoing request; browser rules support abort/redirect without delays.",
+            "type": "string"
+          },
+          "tab": {
+            "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "har-record": {
+        "type": "object",
+        "description": "HAR Record: Start or stop recording network metadata as HAR 1.2. Chromium only; bodies, cookies and headers are excluded.",
+        "properties": {
+          "action": {
+            "description": "Do",
+            "enum": [
+              "start",
+              "stop"
+            ]
+          },
+          "dataset": {
+            "description": "Replaces this dataset with the HAR entries.",
+            "type": "string"
+          },
+          "filename": {
+            "description": "Leave blank to return the HAR without downloading it.",
+            "type": "string"
+          },
+          "tab": {
+            "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "emulate": {
+        "type": "object",
+        "description": "Emulate: Chromium only: change viewport/device, locale, timezone, location, media preferences or offline state until this run ends. Location still needs the site’s permission.",
+        "properties": {
+          "action": {
+            "description": "Do",
+            "enum": [
+              "set",
+              "clear"
+            ]
+          },
+          "device": {
+            "description": "Device preset",
+            "enum": [
+              "",
+              "iphone",
+              "pixel",
+              "ipad",
+              "desktop"
+            ]
+          },
+          "width": {
+            "description": "0 uses the preset/default. Supply width and height together.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "height": {
+            "description": "Viewport height",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "deviceScaleFactor": {
+            "description": "0 uses the preset/default.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 8
+          },
+          "userAgent": {
+            "description": "Optional override of the preset user agent. Changes may need a later Navigate/reload.",
+            "type": "string"
+          },
+          "locale": {
+            "description": "Intl locale and language override; reload for page code that reads language at startup.",
+            "type": "string"
+          },
+          "timezone": {
+            "description": "Timezone",
+            "type": "string"
+          },
+          "latitude": {
+            "description": "Latitude",
+            "type": "string"
+          },
+          "longitude": {
+            "description": "Both coordinates required. This does not grant the site geolocation permission.",
+            "type": "string"
+          },
+          "accuracy": {
+            "description": "Location accuracy (metres)",
+            "type": "number",
+            "minimum": 0
+          },
+          "colorScheme": {
+            "description": "Color scheme",
+            "enum": [
+              "",
+              "light",
+              "dark"
+            ]
+          },
+          "reducedMotion": {
+            "description": "Reduced motion",
+            "enum": [
+              "",
+              "reduce",
+              "no-preference"
+            ]
+          },
+          "offline": {
+            "description": "Blocks network requests from this tab. Cleared automatically at run end.",
+            "type": "boolean"
+          },
+          "tab": {
+            "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "clear-site-data": {
+        "type": "object",
+        "description": "Clear Site Data: Chromium only: delete cookies, local storage, IndexedDB, Cache Storage and service workers for listed sites. Cookie deletion affects the whole registrable domain, including its subdomains.",
+        "properties": {
+          "origins": {
+            "description": "Explicit HTTP(S) origins only, separated by newlines or commas. Deletion is permanent. Cookies are cleared for each whole registrable domain, including subdomains; other storage is filtered by origin. Never clears history, downloads, passwords or extension data.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "close-tab": {
         "type": "object",
         "description": "Close Tab: Close a tab this run opened.",
@@ -2551,6 +2805,7 @@
               "accessible-description",
               "url",
               "title",
+              "console-errors",
               "value"
             ]
           },

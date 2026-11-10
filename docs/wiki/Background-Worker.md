@@ -27,6 +27,7 @@ and every wake-up after Chrome stopped the worker), not just once.
 
 | Step | Code | Why |
 | --- | --- | --- |
+| 0 | `initialiseDebuggerSessions()`, then `initialiseRoutes()` (not awaited; errors logged) | Debugger event/detach listeners, multiplexed by tab ([Browser Host: cdp.ts](Browser-Host.md#cdpts)); remove Route's `declarativeNetRequest` session rules left by runs of a previous worker (reserved ids 1 000 000–1 099 999). |
 | 1 | `createBrowserScheduler(key => onAlarm(key))` | Real [HybridScheduler](Scheduling-and-Timers.md); short timers firing from memory go down the same path as alarms. |
 | 2 | `createExtensionHost(scheduler)` | The real `Host` ([Browser Host](Browser-Host.md)). |
 | 3 | `createDefaultRegistry()` | All built-in blocks. |

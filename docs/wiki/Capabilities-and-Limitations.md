@@ -38,6 +38,7 @@ and Brave, using the optional `debugger` permission.
 | Screenshots on demand: visible area, full page, element | ✅ | Screenshot (Chromium: full page and tabs not showing need `debugger`; Firefox: all without extra permissions) |
 | Assert text, value, attribute, count, visible/hidden, enabled, checked, URL, title | ✅ | Assert (retries like `expect`) |
 | Soft asserts | ✅ | `soft: true` |
+| Page console errors and uncaught exceptions | 🟡 | Chromium only: Assert `console-errors` (count); each step's console lines in Reports. Captured once the run has used the debugger on the tab |
 | Assert class, CSS, focus, in-viewport | ❌ | planned |
 | Visual comparison (screenshots against a baseline) | ❌ | planned |
 
@@ -67,10 +68,11 @@ and Brave, using the optional `debugger` permission.
 | Reports: HTML, JUnit XML, JSON, with screenshots | ✅ | Reports page |
 | Run in CI | 🟡 | export to Playwright; a CLI runner is planned |
 | Headless | ⛔ | an extension lives in a visible browser (the CLI runner will start one for you) |
-| Fresh browser profile per test | ⛔ / ❌ | profiles are shared; "clean site data before run" is planned |
+| Fresh browser profile per test | ⛔ / 🟡 | profiles are shared; Clear Site Data (Chromium, optional `browsingData`) wipes cookies, storage, IndexedDB, caches and service workers of listed origins (cookies: the whole registrable domain) |
 | Test suites with parallel workers | ❌ | planned: a Suite view runs several workflows in sequence with one report |
-| Mock or block network requests | ❌ | planned (Chromium) |
-| Emulate device, viewport, location, timezone, offline | ❌ | planned (Chromium) |
+| Mock, block, redirect or modify network requests | 🟡 | Route: mocking, modifying and delays Chromium only (CDP); block and redirect also on Firefox (optional `declarativeNetRequest`). Per tab, until cleared or the run ends |
+| Record network traffic (HAR) | 🟡 | HAR Record, Chromium only; metadata only (no headers, cookies or bodies), up to 500 requests |
+| Emulate device, viewport, location, timezone, locale, color scheme, reduced motion, offline | 🟡 | Emulate, Chromium only; reset at run end. Location still needs the site's geolocation permission. One run at a time may own a tab's route/emulation overrides |
 | Step-through debugging, trace viewer | ❌ | planned; today, click a block after a run to see its input and output |
 
 ## Driving it from outside
@@ -88,7 +90,7 @@ and Brave, using the optional `debugger` permission.
 | Browser | Status |
 | --- | --- |
 | Chrome, Brave, Edge | ✅ main target. End-to-end tests run in Chromium 131 and Brave; Chrome and Edge use the same build |
-| Firefox | ✅ verified with `npm run e2e:firefox` (Firefox 159): page actions, forms, scraping, datasets, uploads, popups, dialogs, screenshots (all three areas, `tabs.captureTab`), Wait for Download, Cookies & Storage, Wait For request. No `realInput`, no Run Script, no response bodies (Chromium only) |
+| Firefox | ✅ verified with `npm run e2e:firefox` (Firefox 159): page actions, forms, scraping, datasets, uploads, popups, dialogs, screenshots (all three areas, `tabs.captureTab`), Wait for Download, Cookies & Storage, Wait For request, Route block/redirect. No `realInput`, no Run Script, no response bodies, no Route mocking, Emulate, HAR Record, console capture or Clear Site Data (Chromium only) |
 | Safari | 🟡 builds; never converted or run |
 
 ## Things no extension can do

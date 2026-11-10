@@ -9,6 +9,8 @@ const WHY: Record<Permission, string> = {
   debugger: 'real mouse and keyboard input (the browser shows a "debugging" bar while it is used)',
   userScripts: 'running your own scripts. In chrome://extensions, also switch on "Allow User Scripts" for BlockFlow',
   cookies: "reading and changing the browser's cookies (HttpOnly ones too)",
+  declarativeNetRequest: 'blocking and redirecting requests in this workflow’s tab',
+  browsingData: 'clearing the explicitly listed sites’ browser data (cookies may affect their whole registrable domain)',
 };
 
 /** Asks for an optional permission when a block needs it. Must be a click: browsers only ask then. */
@@ -16,7 +18,7 @@ export async function requestPermission(permission: Permission): Promise<boolean
   try {
     return await browser.permissions.request({ permissions: [permission] });
   } catch {
-    toast(`This browser does not offer the "${permission}" permission.${permission === 'cookies' ? '' : ' It works in Chrome, Edge and Brave.'}`, 'error');
+    toast(`This browser does not offer the "${permission}" permission.${permission === 'cookies' || permission === 'declarativeNetRequest' ? '' : ' It works in Chrome, Edge and Brave.'}`, 'error');
     return false;
   }
 }

@@ -33,10 +33,13 @@ export default defineConfig({
       // Chrome parses fetched HTML in an offscreen document; Firefox's background page can do it itself.
       ...(browser === 'firefox' ? [] : ['offscreen']),
       ...(e2e && browser !== 'firefox' ? ['debugger', 'userScripts'] : []),
-      ...(e2e ? ['cookies'] : []),
+      ...(e2e ? ['cookies', 'declarativeNetRequest'] : []),
+      // Clear Site Data needs exact-origin filtering, which Firefox's browsingData does not offer.
+      ...(e2e && browser !== 'firefox' ? ['browsingData'] : []),
     ],
-    // Asked for only when a block needs them: real mouse/keyboard input, Run Script, Cookies & Storage.
-    ...(e2e ? {} : { optional_permissions: browser === 'firefox' ? ['cookies'] : ['debugger', 'userScripts', 'cookies'] }),
+    // Asked for only when a block needs them: real mouse/keyboard input, Run Script, Cookies & Storage,
+    // Route (browser rules) and Clear Site Data.
+    ...(e2e ? {} : { optional_permissions: browser === 'firefox' ? ['cookies', 'declarativeNetRequest'] : ['debugger', 'userScripts', 'cookies', 'declarativeNetRequest', 'browsingData'] }),
     // Prototype: broad host access so "watch element" works on any site.
     // Later: switch to optional_host_permissions and ask per workflow.
     host_permissions: ['<all_urls>'],

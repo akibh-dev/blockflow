@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { initialiseDebuggerSessions } from '../browser/cdp';
+import { initialiseRoutes } from '../browser/routes';
 import { createExtensionHost } from '../browser/host';
 import { createBrowserScheduler } from '../browser/scheduler';
 import { cancelPicking, finishPicking, relayPickerSync, snapshotForEditor, startPicking } from '../browser/picking';
@@ -33,6 +34,7 @@ import { forgetLegacyWatchTabs } from '../browser/pageReader';
  */
 export default defineBackground(() => {
   initialiseDebuggerSessions();
+  void initialiseRoutes().catch((error) => console.error('BlockFlow: could not clear stale route rules', error));
   // e2e builds only: a bridge content script on the local fixture server, for the Firefox e2e runner.
   if (import.meta.env.BF_E2E) {
     void browser.scripting

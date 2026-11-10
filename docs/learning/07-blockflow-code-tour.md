@@ -73,6 +73,8 @@ exercise: read the tests first and try to implement `render` yourself before rea
 | `prompts.ts` | Manual Step: notification buttons + editor banner | 4 |
 | `recording.ts`, `ownTabs.ts` | the recorder's tab; tabs BlockFlow opened | 11 below |
 | `cdp.ts`, `popups.ts` | real input through the debugger; popups of a run's tab | 12 below |
+| `cdpSessions.ts`, `m3Host.ts` | one debugger session per run; the run's network/environment features and their cleanup | 9 below |
+| `routes.ts`, `environment.ts`, `telemetry.ts` | Route (CDP `Fetch` + browser rules), Emulate and Clear Site Data, HAR and console capture | 9 below |
 | `host.ts` | assembles the `Host` | 6 |
 
 Read `hybridScheduler.ts` with its test file `tests/browser/hybridScheduler.test.ts` open. The test uses a
@@ -165,6 +167,43 @@ Checkpoint: run `npm test -- tests/browser/cdpSessions.test.ts tests/browser/cdp
 then `BF_HEADLESS=1 npm run e2e -- m3-sessions`. The browser scenario checks attachment between steps
 and release after success, failure and Stop. JSON reports show `usedDebugger: true` for acquisitions.
 Exercise: trace the two-runs/one-tab unit test and predict exactly which run causes the detach.
+
+### Network and environment: middleware you install on someone else's tab
+
+M3 builds on that one session per run. Read `src/browser/m3Host.ts` first: `createRunHost` makes one
+set of features per run (routes, environment, telemetry) that share the run's CDP lease, and its
+`finishRun` calls every feature's cleanup before releasing the debugger, on success, failure and Stop.
+
+| You know | In BlockFlow (`src/browser/`) |
+| --- | --- |
+| MSW / Playwright `page.route()` mocking `fetch` | `routes.ts`: CDP `Fetch.enable` pauses each request, `Fetch.requestPaused` picks the newest matching rule, then `fulfillRequest` / `failRequest` / `continueRequest` |
+| Next.js middleware that blocks or redirects | the same file, `declarativeNetRequest` **session rules** scoped to one tab id: no debugger bar, works on Firefox, but only abort and redirect |
+| Responsive mode / `page.emulate()` in DevTools | `environment.ts`: `Emulation.setDeviceMetricsOverride`, `setTimezoneOverride`, `setEmulatedMedia`, `Network.emulateNetworkConditions` |
+| Sentry breadcrumbs for `console.error` | `telemetry.ts`: `Runtime.consoleAPICalled` / `exceptionThrown`, bounded per step and masked before storage |
+| Clearing cookies between Cypress tests | `environment.ts` `clearSiteData`: `browsingData.remove({ origins })`, never an unfiltered remove |
+
+The extension-specific lessons:
+
+- **Overrides belong to the tab, not to your code.** A web app's state dies with the page. An emulation
+  or route rule stays on the user's real tab until something removes it, so each feature remembers what it
+  changed and resets only that. `m3Host.ts` also *claims* the tab: a second run that tries to emulate the
+  same tab fails instead of silently fighting the first.
+- **Session rules outlive your worker.** DNR session rules survive a service-worker restart, but the run
+  that owned them does not. BlockFlow uses a reserved id range and `initialiseRoutes()` (called at the top
+  of `background.ts`) deletes leftovers at start-up. Same idea as cleaning orphaned jobs on boot.
+- **Someone else may be emulating too.** Playwright puts its own light colour scheme and viewport on every
+  page. Our reset at run end clears those as well, until the page reloads. That is why
+  `tests/e2e/specs/m3-environment.mjs` reloads before comparing. In a normal browser nothing else emulates.
+- **Ask for the narrowest permission.** Blocking and redirecting needs `declarativeNetRequest`, mocking needs
+  `debugger`. Route's `permissions()` picks one from the rules, so a block-only workflow never shows the
+  "debugging" bar. Firefox's `browsingData` cannot filter every data type by origin, so BlockFlow refuses
+  there rather than deleting other sites' data.
+
+Checkpoint: `npm test -- tests/browser/routes.test.ts tests/browser/environment.test.ts tests/browser/m3Host.test.ts`,
+then `BF_HEADLESS=1 npm run e2e -- m3-route m3-environment m3-telemetry`. In the editor, a Route block with
+only `abort` rules asks for `declarativeNetRequest`; add a `fulfill` rule and it asks for `debugger` instead.
+Exercise: in `m3-route.html`'s spec, add a rule with `delayMs: 2000` and assert the page shows a loading
+state first. Then break `finish()` in `routes.ts` (skip `Fetch.disable`) and see which test catches it.
 
 ## 10. Data features: an interpreter, an offscreen page, IndexedDB
 

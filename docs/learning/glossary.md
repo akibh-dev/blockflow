@@ -26,10 +26,13 @@
 | **Root block** | A block with nothing connected to its input; it starts the flow. |
 | **Baseline** | Watch Element's first read of a value, stored so later reads can be compared; not itself a change. |
 | **Idempotent** | Safe to run twice with the same result. Worker handlers should be, since restarts replay setup code. |
-| **Optional permission** | Declared in `optional_permissions`, granted at runtime with `permissions.request()` after a user click. BlockFlow: `debugger`, `userScripts`. |
+| **Optional permission** | Declared in `optional_permissions`, granted at runtime with `permissions.request()` after a user click. BlockFlow: `debugger`, `userScripts`, `cookies`, `declarativeNetRequest`, `browsingData`. |
 | **Offscreen document** | A hidden extension page Chrome's service worker can open to get a DOM (BlockFlow parses fetched HTML there). |
 | **MAIN world** | The page's own JavaScript world, as opposed to the isolated world; `executeScript({ world: 'MAIN' })`. BlockFlow's Dialogs block uses it. |
 | **CDP (Chrome DevTools Protocol)** | What Playwright and Puppeteer speak; extensions reach it through the `debugger` API. Gives trusted (`isTrusted: true`) input. |
+| **`declarativeNetRequest` (DNR)** | Rules the browser applies to requests without running your code per request: block, redirect, change headers. *Session* rules last until the browser restarts. BlockFlow's Route block uses them for abort/redirect, scoped to one tab. |
+| **CDP `Fetch` domain** | Pauses matching requests so the extension can answer them (mock), fail them or let them continue changed. Needs `debugger`; it is what Playwright's `page.route()` uses. |
+| **Emulation override** | A CDP setting (viewport, timezone, colour scheme, offline) that stays on the tab until reset. BlockFlow resets what a run changed when it ends. |
 | **Page agent (BlockFlow)** | `src/dom/agent.ts`, injected into a tab on demand; finds elements by locator, auto-waits, then acts. |
 | **Locator (BlockFlow)** | Playwright-style element address: CSS, `text=`, `role=`, `label=`, `frame=`, chained with `>>`. |
 | **Run / step (BlockFlow)** | One trip of data through a workflow / one block it passed, with status, input and output. |

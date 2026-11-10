@@ -1,5 +1,6 @@
 import type { ErrorCode } from './errors';
 import type { Payload } from './types';
+import type { ConsoleEntry } from './network';
 
 /**
  * A run is one trip of data through a workflow: from a start block firing (or the Run button)
@@ -49,6 +50,8 @@ export interface StepRecord {
   screenshot?: string;
   /** For Run Workflow steps: the run of the called workflow. */
   childRunId?: string;
+  /** Bounded page console/exception diagnostics, with secret values masked by the engine. */
+  console?: ConsoleEntry[];
 }
 
 /** One run, as stored in `bf:runs` and shown in the editor. */

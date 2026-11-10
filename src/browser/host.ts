@@ -12,7 +12,7 @@ import { waitForPopup } from './popups';
 import { capture, take } from './screenshots';
 import { getCookies, removeCookies, setCookie } from './cookies';
 import { readDownloadText, waitForDownload } from './downloads';
-import { finishDebuggerRun, startDebuggerRun } from './cdp';
+import { createRunHost } from './m3Host';
 import { readElement } from './pageReader';
 import { requireTabId, sleep } from './tabs';
 import type { Host, HttpRequestOptions, HttpResult, NavigateOptions, NotifyOptions, OpenTabOptions, TabInfo, Scheduler, StateStore } from '../core/types';
@@ -223,9 +223,9 @@ async function runScript(tabId: number, code: string, data: Record<string, unkno
 export function createExtensionHost(scheduler: Scheduler): Host {
   const host: Host = {
     forRun: (runId) => {
-      startDebuggerRun(runId);
+      const scoped = createRunHost(host, runId);
       return {
-        ...host,
+        ...scoped,
         page: { ...host.page, act: (tabId, request, timeoutMs, options) => act(tabId, request, timeoutMs, { ...options, runId }) },
         tabs: {
           ...host.tabs,
@@ -233,7 +233,15 @@ export function createExtensionHost(scheduler: Scheduler): Host {
         },
       };
     },
-    finishRun: finishDebuggerRun,
+    network: {
+      route: async () => { throw new CodedError('config.invalid', 'Route can only be used inside a run'); },
+      har: async () => { throw new CodedError('config.invalid', 'HAR recording can only be used inside a run'); },
+      console: async () => { throw new CodedError('config.invalid', 'Console capture can only be used inside a run'); },
+    },
+    environment: {
+      emulate: async () => { throw new CodedError('config.invalid', 'Emulation can only be used inside a run'); },
+      clearSiteData: async () => { throw new CodedError('config.invalid', 'Clear site data can only be used inside a run'); },
+    },
     sleep,
     http: { fetch: httpFetch, download: downloadFile },
     notify,

@@ -23,6 +23,20 @@ function setup() {
 }
 
 describe('debugger session ownership', () => {
+  it('initialises run diagnostics once before any callback and retries failed setup', async () => {
+    const { sessions, port } = setup();
+    const setupRun = vi.fn(async (_tab: number, send: CdpSend) => { await send('Runtime.enable'); });
+    setupRun.mockRejectedValueOnce(new Error('setup failed'));
+    sessions.startRun('run', setupRun);
+    const callback = vi.fn(async () => {});
+    await expect(sessions.withSession(1, callback, 'run')).rejects.toThrow('setup failed');
+    expect(callback).not.toHaveBeenCalled();
+    await Promise.all([sessions.withSession(1, callback, 'run'), sessions.withSession(1, callback, 'run')]);
+    expect(setupRun).toHaveBeenCalledTimes(2);
+    expect(callback).toHaveBeenCalledTimes(2);
+    expect(port.attach).toHaveBeenCalledTimes(1);
+    await sessions.finishRun('run');
+  });
   it('does not attach for a run that never needs CDP', async () => {
     const { sessions, port } = setup();
     sessions.startRun('plain');

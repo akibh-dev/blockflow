@@ -193,7 +193,8 @@ A text input or textarea that offers data names after `{{`, IDE style.
 
 **Exports:** `PermissionNote({ permissions })` and `requestPermission(permission)`.
 
-- `permissions`: `('debugger' | 'userScripts')[]` from the block definition.
+- `permissions`: `OptionalPermission[]` (`debugger`, `userScripts`, `cookies`, `declarativeNetRequest`,
+  `browsingData`) from the block definition.
 - On mount, checks each with `browser.permissions.contains` and lists the missing ones with a reason and a
   **Grant** button.
 - `requestPermission` calls `browser.permissions.request`. It must run inside a click handler (browsers only
@@ -301,8 +302,9 @@ Test-report view over the stored runs.
   event, called by another workflow.
 - Totals line from `summarize(shown)` (`src/core/report.ts`).
 - Detail: steps with status, block label, duration, attempts, port taken, error, error code
-  (`ErrorDetails` from ConfigPanel), [Screenshot](#screenshot), and **open called run** for Run Workflow
-  steps (`childRunId`).
+  (`ErrorDetails` from ConfigPanel), [Screenshot](#screenshot), **open called run** for Run Workflow
+  steps (`childRunId`), and a collapsed **Console (n)** list (`[level] text (url)`) when the step has
+  `console` entries.
 - Exports (of the filtered runs) through `downloadText`: **JSON** (`toJsonReport`: versioned, see
   `docs/guide/report.schema.json`), **JUnit XML** (`toJUnitXml`) and
   **HTML** (`toHtmlReport`, with screenshots loaded from IndexedDB and inlined as data URLs, so the file

@@ -49,9 +49,17 @@ import { stopBlock } from './stopRun';
 import { timerBlock } from './timer';
 import { waitForBlock } from './waitFor';
 import { watchElementBlock } from './watchElement';
+import { routeBlock } from './route';
+import { harRecordBlock } from './harRecord';
+import { emulateBlock } from './emulate';
+import { clearSiteDataBlock } from './clearSiteData';
 
 /** Every built-in block definition, re-exported so tests and tools can use one block directly. */
 export {
+  routeBlock,
+  harRecordBlock,
+  emulateBlock,
+  clearSiteDataBlock,
   waitForDownloadBlock,
   screenshotBlock,
   cookiesStorageBlock,
@@ -109,7 +117,7 @@ export {
  */
 export const BLOCK_GROUPS: { category: BlockCategory; blocks: AnyBlockDefinition[] }[] = [
   { category: 'start', blocks: [manualStartBlock, timerBlock, scheduleBlock, pageVisitedBlock, contextMenuBlock, watchElementBlock] },
-  { category: 'browser', blocks: [openUrlBlock, navigateBlock, waitForPopupBlock, waitForDownloadBlock, cookiesStorageBlock, closeTabBlock] },
+  { category: 'browser', blocks: [openUrlBlock, navigateBlock, waitForPopupBlock, waitForDownloadBlock, cookiesStorageBlock, routeBlock, harRecordBlock, emulateBlock, clearSiteDataBlock, closeTabBlock] },
   { category: 'page', blocks: [clickBlock, fillBlock, fillFormBlock, selectOptionBlock, checkBlock, pressKeyBlock, dragBlock, elementActionBlock, uploadFileBlock, scrollBlock, dialogsBlock, waitForBlock, runScriptBlock] },
   { category: 'read', blocks: [readElementBlock, extractListBlock, extractTableBlock, paginateBlock, pageInfoBlock, pageSnapshotBlock, screenshotBlock] },
   { category: 'test', blocks: [assertBlock, manualStepBlock, stopBlock] },

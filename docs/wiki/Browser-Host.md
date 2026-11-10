@@ -9,7 +9,9 @@ capability, or when you need to know which permission or browser a feature depen
 [ownTabs.ts](../../src/browser/ownTabs.ts), [navigation.ts](../../src/browser/navigation.ts),
 [pageDriver.ts](../../src/browser/pageDriver.ts), [pageReader.ts](../../src/browser/pageReader.ts),
 [htmlParse.ts](../../src/browser/htmlParse.ts), [cdp.ts](../../src/browser/cdp.ts),
-[cdpSessions.ts](../../src/browser/cdpSessions.ts),
+[cdpSessions.ts](../../src/browser/cdpSessions.ts), [m3Host.ts](../../src/browser/m3Host.ts),
+[m3Runtime.ts](../../src/browser/m3Runtime.ts), [routes.ts](../../src/browser/routes.ts),
+[environment.ts](../../src/browser/environment.ts), [telemetry.ts](../../src/browser/telemetry.ts),
 [popups.ts](../../src/browser/popups.ts), [prompts.ts](../../src/browser/prompts.ts),
 [picking.ts](../../src/browser/picking.ts), [recording.ts](../../src/browser/recording.ts),
 [blobStore.ts](../../src/browser/blobStore.ts), [stores.ts](../../src/browser/stores.ts)
@@ -33,6 +35,11 @@ workflow timing goes through the scheduler.
 | `pageReader.ts` | Watch Element / Read Element with a URL | `readElement` | host |
 | `htmlParse.ts` | Agent on an HTML string | `actOnHtml`, `runOnHtml` | host, offscreen document |
 | `cdp.ts` | Real input and background screenshots via `debugger` | `withDebugger`, `mouseClick`, `mouseDrag`, `modifierMask`, `pressKey`, `insertText`, `typeInto`, `captureWithDebugger`, `hasDebugger` | pageDriver, host |
+| `m3Host.ts` | Per-run network, environment and console features; tab claims; run cleanup | `createRunHost(base, runId)` | host |
+| `m3Runtime.ts` | The interface features use to reach the run's CDP session | `M3Runtime` (type) | routes, environment, telemetry |
+| `routes.ts` | Route block: CDP `Fetch` interception or `declarativeNetRequest` session rules | `createRoutes(runtime, dnr?)`, `initialiseRoutes(port?)`, `DnrPort` | m3Host, background |
+| `environment.ts` | Emulate (CDP `Emulation.*`) and Clear Site Data (`browsingData`) | `createEnvironment(runtime)`, `DEVICE_PRESETS` | m3Host |
+| `telemetry.ts` | Console / exception capture, HAR recording | `createTelemetry(runtime)`, `MAX_CONSOLE_ENTRIES`, `MAX_STEP_CONSOLE_ENTRIES`, `MAX_HAR_ENTRIES` | m3Host |
 | `popups.ts` | Tabs opened by pages | `recordPopup`, `waitForPopup` | background, host |
 | `screenshots.ts` | Step screenshots and the Screenshot block | `capture`, `take` | host |
 | `downloads.ts` | Wait for Download | `waitForDownload`, `readDownloadText` | host |
@@ -76,6 +83,9 @@ workflow timing goes through the scheduler.
 | `downloads.waitFor(pattern, lookBackMs, timeoutMs)` | `downloads.ts`: polls `downloads.search({startedAfter: now - lookBackMs})` every 250 ms for an unclaimed download that is not BlockFlow's own (`byExtensionId`, or a `blob:` URL of the extension's origin) whose URL, final URL or file name matches `pattern`; claims it (`storage.session` `bf:downloads-claimed`), then polls until `state: complete` (`interrupted` → `download.failed`). Returns `{downloadId, url, filename, path, size, mime}`. The browser's own download list is the look-back, so nothing is recorded while the worker sleeps and no listener is needed. | `downloads` |
 | `downloads.readText(download, tabId?)` | `downloads.ts`: extensions cannot read files on disk, so the content is fetched again: `data:` decoded, http(s) `fetch` from the background with cookies, `blob:` fetched in the tab by `executeScript` (only while the page still holds it). Cut to 2 000 000 chars. Errors → `download.failed`. | host permissions, `scripting` |
 | `html.act` | `htmlParse.actOnHtml` | `offscreen` (Chrome) |
+| `forRun(runId)` / `finishRun(runId)` | `m3Host.createRunHost` (below), plus the run id injected into `page.act` and response-body waits | see below |
+| `network.route` / `har` / `console`, `environment.emulate` / `clearSiteData` | Outside a run: throw `config.invalid` ("… can only be used inside a run"). Inside one: the run's feature set from `createRunHost` | `debugger`, `declarativeNetRequest`, `browsingData` |
+| `diagnostics.beginStep` / `finishStep` | Only on the run-scoped Host: per-step console frames from `telemetry.ts` | `debugger` (passive) |
 | `now()` | `new Date()` | none |
 
 ## tabs.ts
@@ -205,8 +215,87 @@ invalidates ownership. Closing a tab during cleanup is benign; other cleanup err
 
 The final record has `usedDebugger: true` after a successful acquisition; HTML and the Reports view
 label it. Firefox still returns `permission.missing` for debugger features and ordinary runs never attach.
-This groundwork does not add Route, HAR, Emulate or console capture. Response body capture still listens
-only from the Wait For call; it does not gain historical response-body lookup in this change.
+Response body capture still listens only from the Wait For call (no historical response-body lookup).
+
+`startDebuggerRun(runId, setup?)` takes an optional per-tab setup callback: the first time a run's
+`withDebugger` callback reaches a tab, `setup(tabId, send)` runs (once per tab, retried if it failed)
+before `fn`. `m3Host.ts` passes `telemetry.attach`, so any CDP use in a run also starts console capture.
+
+## m3Host.ts: per-run network, environment and console
+
+`host.ts`'s `forRun` calls `createRunHost(host, runId)`, which builds one feature set per run, all sharing
+the run's CDP session through an `M3Runtime` (`m3Runtime.ts`):
+
+| `M3Runtime` member | Meaning |
+| --- | --- |
+| `withTab(tabId, fn)` | `withDebugger(tabId, fn, runId)`; rejects once the run is closing |
+| `cleanupTab(tabId, fn)` | same, allowed while closing (resetting overrides) |
+| `subscribe(tabId, listener)` | `onDebuggerEvent` (the session manager's multiplexer; no new browser listeners) |
+| `isClosed()` | true once `finishRun` started; checked in delayed callbacks |
+| `claim(tabId, 'route' \| 'emulation')` | module-level `claims` map: a tab's mutable overrides belong to one run. Another run's claim → `config.invalid` "Another run owns network/emulation overrides for this tab. Finish that run before changing …" |
+
+`finishRun` (memoised, idempotent) marks the run closing, runs `routes.finish()`, `environment.finish()`
+and `telemetry.finish()` with `Promise.allSettled`, then `finishDebuggerRun(runId)`; in `finally` it drops
+the run's claims. The first feature cleanup error is rethrown after the debugger is released, so failed
+and stopped runs are cleaned up too. HAR and console capture are passive and do not claim the tab.
+
+### routes.ts
+
+`createRoutes(runtime, dnr?)` → `{apply(tabId, options), finish()}`. Calls per tab are serialised. Rules
+come through `parseRouteRules` (from `src/core/blocks/route.ts`, so the browser boundary validates too); a
+tab holds at most `MAX_ROUTE_RULES` (100). The newest matching rule wins (`url` with `urlMatches`, optional
+`method`). Backend `auto` picks `dnr` when every rule is `abort`/`redirect` without `delayMs`
+(`dnrCompatible`), else `cdp`; a tab keeps its first backend until cleared (switching → `config.invalid`).
+
+| Backend | How |
+| --- | --- |
+| `cdp` | `Fetch.enable` with `{urlPattern: '*', requestStage: 'Request'}` and a `Fetch.requestPaused` subscription. No match / `continue` → `Fetch.continueRequest`; `abort` → `Fetch.failRequest` `BlockedByClient`; `redirect` → `continueRequest` with `url`; `fulfill` → `Fetch.fulfillRequest` (status default 200, `Content-Type: text/plain; charset=utf-8` unless overridden, base64 body); `modify` → `continueRequest` with merged headers / `postData` (`content-length` dropped when the body changes). `delayMs` (≤ 30 000) waits before answering. At most 256 paused requests. An interception error fails the request (never sends an intended mock to the real server). |
+| `dnr` | `declarativeNetRequest.updateSessionRules` with ids from the reserved range 1 000 000–1 099 999, `condition.tabIds: [tabId]`, a `regexFilter` built from the glob (or a `/regex/` with only the `i` flag), checked with `isRegexSupported`; `abort` → `block`, `redirect` → `redirect`. Needs the optional `declarativeNetRequest` permission (`permission.missing` otherwise). Works on Firefox. |
+
+Clearing (the `clear` action or run end) aborts still-paused CDP requests before `Fetch.disable` (disable
+would let them through) or removes the tab's DNR rule ids. `initialiseRoutes()` runs from
+`defineBackground` (not awaited) and removes stale rules in the reserved range: a worker restart ends old
+runs without their cleanup.
+
+### environment.ts
+
+`createEnvironment(runtime)` → `{emulate(tabId, options), clearSiteData(options), finish()}`.
+
+- `emulate` re-checks the options, claims the tab (`'emulation'`), resets this run's earlier overrides on
+  that tab, then applies: `Emulation.setDeviceMetricsOverride` (preset or width/height; missing size from
+  `Page.getLayoutMetrics`) and `setTouchEmulationEnabled` for presets, `setUserAgentOverride` (preset UA and
+  `platform`, `acceptLanguage` from the locale), `setLocaleOverride`, `setTimezoneOverride`,
+  `setGeolocationOverride` (does not grant the geolocation permission), `setEmulatedMedia` features
+  (`prefers-color-scheme`, `prefers-reduced-motion`) and `Network.emulateNetworkConditions` for offline.
+  Presets (`DEVICE_PRESETS`): iphone 390×844 @3, pixel 412×915 @2.625, ipad 820×1180 @2, desktop 1440×900 @1.
+  A failure part-way rolls back what was applied.
+- Resets touch only the groups this run changed (metrics, touch, ua, locale, timezone, geo, media,
+  network). `action: 'clear'` and `finish()` reset; a detached/closed tab counts as reset. No
+  `Browser.grantPermissions` or other profile-wide changes.
+- `clearSiteData` re-parses origins with `parseSiteOrigins`, then `browsingData.remove({origins, since: 0},
+  {cookies, localStorage, indexedDB, cacheStorage, serviceWorkers})`. On Firefox (detected by
+  `runtime.getBrowserInfo`) or without the `browsingData` permission it throws `permission.missing` and
+  clears nothing: it never falls back to an unfiltered removal. Chromium's cookie removal by origin covers
+  the whole registrable domain.
+
+### telemetry.ts
+
+`createTelemetry(runtime)` → `{attach, har, console, beginStep, finishStep, finish}`.
+
+- `attach(tabId, send)` (the `startDebuggerRun` setup hook) subscribes once per tab and sends
+  `Runtime.enable`. `Runtime.consoleAPICalled` and `Runtime.exceptionThrown` become `ConsoleEntry`
+  (`level`: `warning` → `warn`, `assert` and exceptions → `error`; text ≤ 2000 chars from ≤ 16 args; URL
+  sanitised). Entries older than the run's start (replayed by `Runtime.enable`) are dropped. Per tab the
+  last `MAX_CONSOLE_ENTRIES` (200) are kept; the current step frame keeps up to
+  `MAX_STEP_CONSOLE_ENTRIES` (50), handed to the engine by `finishStep`.
+- `console(tabId)` returns a copy of the tab's entries for this run (attaching first if needed), used by
+  Assert `console-errors`. Capture only starts once the run has used the debugger on that tab.
+- `har(tabId, 'start')` sends `Network.enable` and records `Network.requestWillBeSent` /
+  `responseReceived` / `loadingFinished` / `loadingFailed`; `'stop'` returns a HAR 1.2 log of at most
+  `MAX_HAR_ENTRIES` (500, `truncated: true` past it). Metadata only: headers, cookies and bodies are empty;
+  URL credentials and fragments are removed and query values whose names look secret (`token`, `password`,
+  `authorization`, `secret`, `session`, `api_key`, `access_key`) become `[redacted]`. Only http(s) requests.
+- `finish()` unsubscribes and drops all buffers; it never disables shared CDP domains.
 
 ## popups.ts
 
@@ -305,6 +394,9 @@ Shapes and lifecycles: [Storage Keys](Storage-Keys.md).
 | Real input, background-tab screenshots (`debugger`) | optional permission | not available | not available |
 | Screenshot block | visible: `captureVisibleTab` (showing tab); full page, background tabs: `debugger`; element: `debugger`, or cut from the visible area | `tabs.captureTab` with `rect`: all areas, any tab, no extra permission | not verified |
 | Response bodies (Wait For `captureBody`) | `debugger` | not available (`permission.missing`) | not available |
+| Route, `cdp` backend; Emulate; HAR Record; Assert `console-errors` | `debugger` | not available (`permission.missing`) | not available |
+| Route, `dnr` backend (block / redirect) | optional `declarativeNetRequest`, session rules | optional `declarativeNetRequest` (e2e verified) | not verified |
+| Clear Site Data (`browsingData` by origin) | optional `browsingData` | refused (`permission.missing`): no exact-origin filter | not verified |
 | Cookies (`cookies` API) | optional permission | optional permission | not verified |
 | Wait for Download | `downloads.search`; `byExtensionId` filters our own | same (own = `blob:moz-extension://…`) | not verified |
 | Run Script (`userScripts.execute`) | Chrome 135+, optional permission + toggle | not available | not available |

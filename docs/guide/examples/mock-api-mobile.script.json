@@ -1,0 +1,33 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Cart error state on a phone (mocked API)",
+  "steps": [
+    {
+      "id": "open",
+      "open-url": { "url": "https://shop.example.com/cart" }
+    },
+    {
+      "id": "phone",
+      "emulate": { "device": "iphone", "colorScheme": "dark", "timezone": "Europe/Berlin" }
+    },
+    {
+      "id": "mock",
+      "route": {
+        "rules": "[{\"url\":\"**/api/cart\",\"action\":\"fulfill\",\"status\":503,\"headers\":{\"content-type\":\"application/json\"},\"body\":\"{\\\"error\\\":\\\"maintenance\\\"}\"},{\"url\":\"**/analytics/**\",\"action\":\"abort\"}]"
+      }
+    },
+    {
+      "id": "reload",
+      "navigate": { "action": "reload" }
+    },
+    {
+      "id": "message",
+      "assert": { "subject": "text", "locator": "role=alert", "operator": "contains", "expected": "try again" }
+    },
+    {
+      "id": "no-errors",
+      "assert": { "subject": "console-errors", "operator": "equals", "expected": "0", "soft": true }
+    }
+  ]
+}

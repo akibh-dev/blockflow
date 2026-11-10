@@ -394,8 +394,8 @@ Chrome 135+) covers some of them.
 | `page.waitForEvent('popup')` | Click, then **Wait for Popup** `wait-for-popup`; later blocks use `"tab": "popup"` |
 | `page.close()` | **Close Tab** `close-tab` |
 | `page.frameLocator('#pay').getByLabel('Card')` | locator `frame=#pay >> label=Card` |
-| `page.setViewportSize`, `emulateMedia`, geolocation, locale | no equivalent yet |
-| new browser context per test, `storageState` | no equivalent yet (runs share your browser profile) |
+| `page.setViewportSize`, `devices[…]`, `emulateMedia`, geolocation, locale, `timezoneId`, `context.setOffline` | **Emulate** `emulate` (`device`, `width`/`height`, `deviceScaleFactor`, `userAgent`, `locale`, `timezone`, `latitude`/`longitude`, `colorScheme`, `reducedMotion`, `offline`; Chromium only, reset when the run ends) |
+| new browser context per test, `storageState` | no equivalent (runs share your browser profile); **Clear Site Data** `clear-site-data` wipes listed origins first (Chromium) |
 | `context.cookies()`, `addCookies`, `clearCookies` | **Cookies & Storage** `cookies-storage`, `area: "cookies"`, `action` `get` / `set` / `delete` / `clear` |
 | `page.evaluate(() => localStorage.setItem(…))` | **Cookies & Storage** `area: "local"` / `"session"` |
 | `page.screenshot({ fullPage })`, `locator.screenshot()` | **Screenshot** `screenshot`, `area` `visible` / `full` / `element` |
@@ -471,14 +471,16 @@ Chrome 135+) covers some of them.
 | `toBeFocused`, `toHaveCSS`, `toBeEditable`, `toBeInViewport`, `toHaveScreenshot`, ARIA snapshots | no equivalent yet |
 | `textContent()`, `inputValue()`, `getAttribute()`, `count()`, `isVisible()` | **Read Element** `read-element` with `tab` (no `url`), `read`: `text` / `value` / `attribute` / `has-class` / `exists` / `count` |
 | `page.title()`, meta tags, `context.cookies()`, localStorage | **Page Info** `page-info` (read only; setting cookies: no equivalent yet) |
-| `page.screenshot()` | step setting `"screenshot": "always"` (visible tab only) |
+| `page.screenshot()` | **Screenshot** block (or step setting `"screenshot": "always"` for a visible-tab shot per step) |
 
 ### Network, data and test structure
 
 | Playwright | BlockFlow |
 | --- | --- |
 | `request.get/post(...)` | **HTTP Request** `http-request` |
-| `page.route` (mock, block, modify) | no equivalent yet |
+| `page.route` (mock, block, modify) | **Route** `route`: `rules` is a JSON array of `{url, method?, action: fulfill/abort/continue/modify/redirect, status?, headers?, body?, redirectUrl?, delayMs?}`; newest match wins, until `action: "clear"` or the run ends. Mocking needs Chromium; block/redirect also run on Firefox (`backend: "dnr"`) |
+| `recordHar` | **HAR Record** `har-record` `start` … `stop` (metadata only, Chromium) |
+| `page.on('console')` / `pageerror` collected and expected empty | **Assert** `subject: "console-errors"`, `operator: "equals"`, `expected: "0"` (Chromium) |
 | `test.beforeEach` login, shared helpers | **Run Workflow** `run-workflow` calls another workflow in the same tab |
 | parameterised tests | **Data Table** → **For Each** (see [Recipes](Recipes.md#data-driven-test)) |
 | `test.retries` | per-block `"step": { "retries": 2 }` |
@@ -558,6 +560,8 @@ Known limits (from [src/core/playwright.ts](../../src/core/playwright.ts)):
 | Notify, Save to Dataset, Download | a comment `// BlockFlow-only: <Block> has no Playwright equivalent, skipped.` Later steps that need their data will not get it. |
 | Triggers (Timer or Schedule at the start, Page Visited, Context Menu, Watch Element) | a comment; the test starts there. |
 | Extract List from HTML (`source: "html"`) | a `// BlockFlow-only:` comment |
+| Route, HAR Record, Emulate, Clear Site Data | `// BlockFlow-only: <Block> is not exported; implement Playwright routing/context options explicitly.` |
+| Assert `console-errors` | a comment: it needs a Playwright `console` / `pageerror` collector |
 | Read Element `previous` / `changed` | not available (no state between test runs) |
 | `realInput` | ignored (Playwright's input is always trusted) |
 | `screenshot` step setting | ignored (use Playwright's `screenshot: 'only-on-failure'` option) |

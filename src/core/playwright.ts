@@ -613,6 +613,12 @@ class Writer {
       case 'watch-element':
         this.line(`// ${label}: a BlockFlow trigger; the test starts here instead.`);
         break;
+      case 'route':
+      case 'har-record':
+      case 'emulate':
+      case 'clear-site-data':
+        this.line(`// BlockFlow-only: ${commentText(label)} is not exported; implement Playwright routing/context options explicitly.`);
+        break;
       default:
         this.line(`// BlockFlow-only: ${commentText(label)} has no Playwright equivalent, skipped.`);
     }
@@ -664,6 +670,10 @@ class Writer {
     const expectFn = soft ? 'expect.soft' : 'expect';
     const message = c.message ? template(c.message) : '';
     const subject = String(c.subject || 'text');
+    if (subject === 'console-errors') {
+      this.line('// BlockFlow-only: console-errors assertion needs a Playwright console/pageerror collector; not exported.');
+      return;
+    }
     const operator = String(c.operator || 'contains');
     const expected = template(c.expected);
     const states: Record<string, string> = {

@@ -79,6 +79,10 @@ function schema() {
           matches: { type: 'array', maxItems: 5, items: { type: 'string' }, description: 'For locator.strict: the elements that matched, described.' },
           screenshot: { type: 'string', description: 'Id of a screenshot (not embedded in JSON).' },
           childRunId: { type: 'string', description: 'For Run Workflow: the run of the called workflow.' },
+          console: {
+            type: 'array', maxItems: 100, description: 'Bounded page console and exceptions, secret values masked.',
+            items: { type: 'object', required: ['level', 'text', 'timestamp'], properties: { level: { type: 'string' }, text: { type: 'string', maxLength: 2000 }, timestamp: { type: 'number' }, url: { type: 'string' } } },
+          },
         },
       },
       errorCode: {

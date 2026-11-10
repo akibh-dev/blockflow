@@ -1,0 +1,147 @@
+{
+  "format": "blockflow-workflows",
+  "version": 1,
+  "workflows": [
+    {
+      "schemaVersion": 2,
+      "id": "mock-api-mobile",
+      "name": "Cart error state on a phone (mocked API)",
+      "enabled": false,
+      "nodes": [
+        {
+          "id": "open",
+          "type": "open-url",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "config": {
+            "url": "https://shop.example.com/cart",
+            "where": "new",
+            "tab": "main",
+            "active": true,
+            "waitUntil": "load"
+          }
+        },
+        {
+          "id": "phone",
+          "type": "emulate",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "config": {
+            "action": "set",
+            "device": "iphone",
+            "width": 0,
+            "height": 0,
+            "deviceScaleFactor": 0,
+            "userAgent": "",
+            "locale": "",
+            "timezone": "Europe/Berlin",
+            "latitude": "",
+            "longitude": "",
+            "accuracy": 1,
+            "colorScheme": "dark",
+            "reducedMotion": "",
+            "offline": false,
+            "tab": "main"
+          }
+        },
+        {
+          "id": "mock",
+          "type": "route",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "config": {
+            "action": "add",
+            "backend": "auto",
+            "rules": "[{\"url\":\"**/api/cart\",\"action\":\"fulfill\",\"status\":503,\"headers\":{\"content-type\":\"application/json\"},\"body\":\"{\\\"error\\\":\\\"maintenance\\\"}\"},{\"url\":\"**/analytics/**\",\"action\":\"abort\"}]",
+            "tab": "main"
+          }
+        },
+        {
+          "id": "reload",
+          "type": "navigate",
+          "position": {
+            "x": 780,
+            "y": 0
+          },
+          "config": {
+            "tab": "main",
+            "action": "reload",
+            "url": "",
+            "waitUntil": "load"
+          }
+        },
+        {
+          "id": "message",
+          "type": "assert",
+          "position": {
+            "x": 1040,
+            "y": 0
+          },
+          "config": {
+            "subject": "text",
+            "value": "",
+            "locator": "role=alert",
+            "name": "",
+            "operator": "contains",
+            "expected": "try again",
+            "message": "",
+            "soft": false,
+            "tab": "main"
+          }
+        },
+        {
+          "id": "no-errors",
+          "type": "assert",
+          "position": {
+            "x": 1300,
+            "y": 0
+          },
+          "config": {
+            "subject": "console-errors",
+            "value": "",
+            "locator": "",
+            "name": "",
+            "operator": "equals",
+            "expected": "0",
+            "message": "",
+            "soft": true,
+            "tab": "main"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "open",
+          "target": "phone"
+        },
+        {
+          "id": "e2",
+          "source": "phone",
+          "target": "mock"
+        },
+        {
+          "id": "e3",
+          "source": "mock",
+          "target": "reload"
+        },
+        {
+          "id": "e4",
+          "source": "reload",
+          "target": "message"
+        },
+        {
+          "id": "e5",
+          "source": "message",
+          "target": "no-errors"
+        }
+      ]
+    }
+  ]
+}

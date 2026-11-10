@@ -565,6 +565,7 @@ export class WorkflowRunner {
 
   /** Adds a running step record (masked, compacted input). Past `MAX_STEPS_KEPT` it is only counted. */
   private beginStep(run: ActiveRun, node: NodeDef, input: Payload): StepRecord {
+    run.host.diagnostics?.beginStep(node.id);
     const step: StepRecord = {
       nodeId: node.id,
       blockType: node.type,
@@ -589,6 +590,8 @@ export class WorkflowRunner {
     extra: { output?: Payload; port?: string; error?: string; details?: ErrorDetails } = {},
   ): void {
     step.status = status;
+    const consoleEntries = run.host.diagnostics?.finishStep(step.nodeId);
+    if (consoleEntries?.length) step.console = maskPayload(consoleEntries.slice(0, 100).map((entry) => ({ ...entry, text: entry.text.slice(0, 2000) })), this.secretValues);
     step.durationMs = this.host.now().getTime() - Date.parse(step.startedAt);
     if (extra.output) step.output = compactPayload(maskPayload(extra.output, this.secretValues));
     if (extra.port) step.port = extra.port;

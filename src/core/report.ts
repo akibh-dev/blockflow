@@ -117,7 +117,7 @@ export function toHtmlReport(runs: RunRecord[], options: ReportOptions): string 
     const rows = run.steps
       .map((step) => {
         const shot = step.screenshot ? options.screenshots?.[step.screenshot] : undefined;
-        return `<tr class="${step.status}"><td>${html(step.status)}</td><td>${html(options.blockLabel(step.blockType))}</td><td>${step.durationMs ?? ''} ms</td><td>${step.code ? `<code>${html(step.code)}</code> ` : ''}${html(step.error ?? '')}${shot ? `<br><img src="${shot}" alt="Screenshot">` : ''}</td></tr>`;
+        return `<tr class="${step.status}"><td>${html(step.status)}</td><td>${html(options.blockLabel(step.blockType))}</td><td>${step.durationMs ?? ''} ms</td><td>${step.code ? `<code>${html(step.code)}</code> ` : ''}${html(step.error ?? '')}${step.console?.length ? `<details><summary>Console (${step.console.length})</summary><pre>${step.console.map((entry) => html(`[${entry.level}] ${entry.text}${entry.url ? ` (${entry.url})` : ''}`)).join('\n')}</pre></details>` : ''}${shot ? `<br><img src="${shot}" alt="Screenshot">` : ''}</td></tr>`;
       })
       .join('');
     return `<section class="${run.status}"><h2><span class="badge ${run.status}">${html(run.status)}</span> ${html(run.workflowName)}</h2>

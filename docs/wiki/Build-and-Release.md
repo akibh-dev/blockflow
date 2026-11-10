@@ -71,6 +71,9 @@ are the same everywhere. `version` comes from `package.json`. Icons are picked u
 | `debugger` (optional) | Real (trusted) mouse/keyboard input, background-tab, full-page and element screenshots, and response bodies via the Chrome DevTools Protocol (`src/browser/cdp.ts`, `screenshots.ts`, `navigation.ts`) |
 | `cookies` (optional, Chrome and Firefox) | Cookies & Storage block on cookies (`src/browser/cookies.ts`). Regular in e2e builds |
 | `userScripts` (optional) | Run Script block (Chrome 135+, also needs "Allow User Scripts" in `chrome://extensions`) |
+| `debugger` (optional, again) | Route mocking (`Fetch`), Emulate (`Emulation.*`), HAR Record and console capture (`Network.*`, `Runtime.*`) (`src/browser/routes.ts`, `environment.ts`, `telemetry.ts`) |
+| `declarativeNetRequest` (optional, Chrome and Firefox) | Route with browser rules: tab-scoped session rules that block or redirect (`src/browser/routes.ts`) |
+| `browsingData` (optional, Chrome/Safari only) | Clear Site Data by exact origin (`src/browser/environment.ts`). Left out on Firefox, whose `browsingData` cannot filter every data type by origin |
 | host `<all_urls>` | Watch/act on any site. Prototype choice; the comment in the config notes the plan to move to `optional_host_permissions` per workflow |
 
 `debugger` and `userScripts` are **optional** on Chrome/Safari: the editor's `PermissionNote` component asks
@@ -82,11 +85,11 @@ for them with `permissions.request` only when a block needs them, and `cdp.ts` c
 | | Chrome (`chrome-mv3`) | Firefox (`firefox-mv3`) | Safari (`safari-mv3`) |
 | --- | --- | --- | --- |
 | `offscreen` permission | yes | no | yes (same branch as Chrome) |
-| `optional_permissions` | `debugger`, `userScripts` | none: real input and Run Script are unavailable | same as Chrome (untested whether Safari honours them) |
+| `optional_permissions` | `debugger`, `userScripts`, `cookies`, `declarativeNetRequest`, `browsingData` | `cookies`, `declarativeNetRequest`: real input, Run Script and the CDP features are unavailable | same as Chrome (untested whether Safari honours them) |
 | `browser_specific_settings` | none | `gecko.id: blockflow@akibh-dev`, `data_collection_permissions: { required: ['none'] }` (required for new AMO listings) | none |
 | Background | service worker | event page (WXT) | per WXT |
 | Host access | granted at install | user must grant site access after install (see README) | per Safari settings |
-| E2E build (`BF_E2E=1`) | `debugger`, `userScripts` move to `permissions` | unchanged | `debugger`, `userScripts` move to `permissions` |
+| E2E build (`BF_E2E=1`) | `debugger`, `userScripts`, `cookies`, `declarativeNetRequest`, `browsingData` move to `permissions` | `cookies`, `declarativeNetRequest` move to `permissions` | same as Chrome |
 
 ## Build outputs
 

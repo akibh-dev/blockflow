@@ -70,7 +70,7 @@ export function initialiseDebuggerSessions(): void {
   listenToDebugger();
 }
 
-export const startDebuggerRun = (runId: string): void => sessions.startRun(runId);
+export const startDebuggerRun = (runId: string, setup?: (tabId: number, send: CdpSend) => Promise<void>): void => sessions.startRun(runId, setup);
 export const finishDebuggerRun = (runId: string): Promise<{ usedDebugger?: boolean }> => sessions.finishRun(runId);
 
 /** Subscribe inside a withDebugger callback; the browser listener itself is registered at startup. */

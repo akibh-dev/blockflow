@@ -3,8 +3,8 @@
 > **Status:** agreed, 2026-11-05 (decisions in §8). M0 done (v0.2.0), M1 done (v0.3.0, 2026-11-06), M2 done (v0.4.0, 2026-11-06). Task-level steps: [IMPLEMENTATION.md](IMPLEMENTATION.md). This plan replaces the
 > phase list in [PLAN-automation.md](PLAN-automation.md) (phases A–F, all built) as the guide for what comes next.
 
-M3 has started on `m3-network`: run-scoped debugger ownership and cleanup are implemented. The
-network/environment blocks remain pending; see the M3 checklist in IMPLEMENTATION.md.
+M3 is done on `m3-network` (2026-11-10): Route, HAR Record, Emulate, Clear Site Data and console capture,
+on run-scoped debugger sessions. v0.5.0 ships when M4 also lands; see the M3 checklist in IMPLEMENTATION.md.
 
 ## 1. Goal
 
@@ -94,11 +94,11 @@ Nothing is proposed for removal at the feature level.
 | ARIA snapshot | `toMatchAriaSnapshot` | ❌ | **M1** as an authoring tool for LLMs (§5), **M5** as an assertion |
 | Screenshots: page, full page, element, on demand | ✅ | ✅ Screenshot block (Chromium: full page / background tabs via CDP; Firefox: `captureTab`) | **M2** ✅ |
 | Network: wait for response / request | `waitForResponse`, `waitForRequest` | ✅ Wait For `response` (method, body via CDP on Chromium) and `request` | **M2** ✅ |
-| Network: mock, block, modify (`route`) | ✅ | ❌ | **M3**: Route block via CDP `Fetch` (Chromium); simple block/redirect rules via `declarativeNetRequest` on every browser |
-| HAR record/replay | ✅ | ❌ | **M3** record (CDP), replay later |
-| Emulation: viewport, device, geolocation, locale, timezone, offline, color scheme | ✅ | ❌ | **M3**: Emulate block via CDP `Emulation` |
+| Network: mock, block, modify (`route`) | ✅ | ✅ Route block: fulfill/abort/continue/modify/redirect via CDP `Fetch` (Chromium); abort/redirect via `declarativeNetRequest` on every browser | **M3** ✅ |
+| HAR record/replay | ✅ | 🟡 HAR Record (metadata only, CDP) | **M3** ✅ record; replay later |
+| Emulation: viewport, device, geolocation, locale, timezone, offline, color scheme | ✅ | ✅ Emulate block (CDP `Emulation`), also reduced motion; reset at run end | **M3** ✅ |
 | Cookies and storage: read / set / clear | `context.cookies()`, `storageState` | ✅ Cookies & Storage (cookies API, HttpOnly too; page storage) | `storageState` save/load later |
-| Isolation between tests | new context per test | ❌ shared profile | **M3**: optional "clean site data before run" (`browsingData`); incognito runs only if needed (§8) |
+| Isolation between tests | new context per test | 🟡 shared profile + Clear Site Data block (`browsingData`, Chromium) | **M3** ✅; incognito runs only if needed (§8) |
 | API testing | `request` fixture | ✅ HTTP Request | Make `failOnError` actually fail (§6) |
 | `evaluate` | ✅ | ✅ Run Script | — |
 | Test runner: suites, tags, retries, parallel workers | ✅ | 🟡 per-step retries, Run Workflow | **M4**: a "Suite" view: run several workflows in sequence, one combined report |

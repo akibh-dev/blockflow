@@ -28,6 +28,8 @@ interface Lease {
 interface RunOwner {
   tabs: Map<number, Promise<Lease>>;
   used: boolean;
+  setup?: (tabId: number, send: CdpSend) => Promise<void>;
+  initialized: Map<number, Promise<void>>;
 }
 
 const ended = () => new CodedError('step.failed', 'The run has ended; its debugger session is closed.');
@@ -48,9 +50,9 @@ export class DebuggerSessions {
 
   constructor(private readonly port: DebuggerPort) {}
 
-  startRun(runId: string): void {
+  startRun(runId: string, setup?: (tabId: number, send: CdpSend) => Promise<void>): void {
     if (!runId || this.runs.has(runId)) throw new Error('A debugger run needs a new, non-empty id');
-    this.runs.set(runId, { tabs: new Map(), used: false });
+    this.runs.set(runId, { tabs: new Map(), used: false, setup, initialized: new Map() });
   }
 
   /** Close before awaiting anything: late/timed-out callbacks cannot attach or send more commands. */
@@ -81,7 +83,18 @@ export class DebuggerSessions {
       }
       const lease = await pending;
       if (this.runs.get(runId) !== owner) throw ended();
-      return fn((method, params) => this.runs.get(runId) === owner ? lease.send(method, params) : Promise.reject(ended()));
+      const send: CdpSend = (method, params) => this.runs.get(runId) === owner ? lease.send(method, params) : Promise.reject(ended());
+      if (owner.setup) {
+        let initialized = owner.initialized.get(tabId);
+        if (!initialized) {
+          initialized = owner.setup(tabId, send);
+          owner.initialized.set(tabId, initialized);
+          void initialized.catch(() => { if (owner.initialized.get(tabId) === initialized) owner.initialized.delete(tabId); });
+        }
+        await initialized;
+      }
+      if (this.runs.get(runId) !== owner) throw ended();
+      return fn(send);
     }
     const lease = await this.acquire(tabId);
     try {

@@ -59,7 +59,7 @@ The full list is in [Capabilities and Limitations](Capabilities-and-Limitations.
 
 ## Status
 
-BlockFlow is a **prototype**. It has 49 blocks, a canvas editor, a recorder, reports and a background
+BlockFlow is a **prototype**. It has 53 blocks, a canvas editor, a recorder, reports and a background
 engine. It has been verified in Chromium and Brave. Firefox and Safari aren't fully verified. What comes next is in the
 [Roadmap](Roadmap.md).
 

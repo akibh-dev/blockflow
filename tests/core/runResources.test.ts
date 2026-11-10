@@ -22,6 +22,18 @@ function setup(invoke: NonNullable<BlockDefinition['run']>) {
 }
 
 describe('run-scoped Host resource lifecycle', () => {
+  it('bounds and masks step console diagnostics before publishing or exporting them', async () => {
+    const h = setup(async () => ({}));
+    h.base.secrets.all = async () => ({ token: 'sensitive-token' });
+    const begin = vi.fn();
+    const finish = vi.fn(() => Array.from({ length: 120 }, () => ({ level: 'error', text: `sensitive-token ${'x'.repeat(2500)}`, timestamp: 1 })));
+    h.base.diagnostics = { beginStep: begin, finishStep: finish };
+    const record = await h.runner.runOnce();
+    expect(begin).toHaveBeenCalledWith('probe');
+    expect(record.steps[0]?.console).toHaveLength(100);
+    expect(JSON.stringify(record)).not.toContain('sensitive-token');
+    expect(record.steps[0]?.console?.every((entry) => entry.text.length <= 2000)).toBe(true);
+  });
   it('hands blocks the scoped Host and cleans it before publishing the final record', async () => {
     const h = setup(async (ctx) => { await ctx.host.notify({ title: 'Scoped', message: ctx.runId }); return {}; });
     let finalized = false;

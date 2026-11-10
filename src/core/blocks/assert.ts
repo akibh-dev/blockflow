@@ -27,7 +27,8 @@ export type AssertSubject =
   | 'editable'
   | 'in-viewport'
   | 'accessible-name'
-  | 'accessible-description';
+  | 'accessible-description'
+  | 'console-errors';
 
 /** Assert settings. `operator` / `expected` are ignored by the yes/no subjects. */
 export interface AssertConfig {
@@ -69,7 +70,7 @@ const READS: Partial<Record<AssertSubject, ReadKind>> = {
 /** Subjects that read something named by `name`: the attribute, or the CSS property. */
 const NEEDS_NAME: Partial<Record<AssertSubject, string>> = { attribute: 'Attribute name', css: 'CSS property' };
 /** Subjects that do not look at an element (everything else needs `locator`). */
-const NO_ELEMENT: AssertSubject[] = ['value', 'url', 'title'];
+const NO_ELEMENT: AssertSubject[] = ['value', 'url', 'title', 'console-errors'];
 const RETRY_EVERY_MS = 250;
 /** One look at the page; the retries do the waiting. */
 const READ_MS = 300;
@@ -79,6 +80,7 @@ async function actual(ctx: BlockContext<AssertConfig>, input: Payload): Promise<
   const { subject } = ctx.config;
   if (subject === 'value') return ctx.config.value;
   const tabId = requireSessionTab(input, ctx.config.tab);
+  if (subject === 'console-errors') return String((await ctx.host.network.console(tabId)).filter((entry) => entry.level === 'error').length);
   if (subject === 'url' || subject === 'title') {
     const info = await ctx.host.tabs.info(tabId);
     if (!info) throw new Error('The tab was closed');
@@ -111,7 +113,7 @@ function passes(config: AssertConfig, value: string | null): boolean {
 
 /** Human-readable statement of the check, for logs, the summary and the default failure message. */
 function describe(config: AssertConfig): string {
-  const what = config.subject === 'value' ? 'value' : `${config.subject}${config.locator ? ` of ${config.locator}` : ''}`;
+  const what = config.subject === 'value' ? 'value' : config.subject === 'console-errors' ? 'console errors' : `${config.subject}${config.locator ? ` of ${config.locator}` : ''}`;
   if (STATES[config.subject]) return `${config.locator} is ${config.subject}`;
   return `${what} ${operatorLabel(config.operator)} "${config.expected}"`;
 }
@@ -131,6 +133,7 @@ export const assertBlock: BlockDefinition<AssertConfig> = {
   accent: '#16a34a',
   defaultConfig: { subject: 'text', value: '', locator: '', name: '', operator: 'contains', expected: '', message: '', soft: false, tab: 'main' },
   timeoutSeconds: 10,
+  permissions: (config) => config.subject === 'console-errors' ? ['debugger'] : [],
   fields: [
     {
       key: 'subject',
@@ -156,6 +159,7 @@ export const assertBlock: BlockDefinition<AssertConfig> = {
         { value: 'accessible-description', label: 'accessible description of an element' },
         { value: 'url', label: 'page URL' },
         { value: 'title', label: 'page title' },
+        { value: 'console-errors', label: 'console errors and uncaught exceptions (Chromium)' },
         { value: 'value', label: 'a value from the data ({{…}})' },
       ],
     },
@@ -202,7 +206,7 @@ export const assertBlock: BlockDefinition<AssertConfig> = {
     }
     const got = found === null ? 'no matching element' : `"${truncate(found, 120)}"`;
     const message = ctx.config.message.trim() || `Expected ${describe(ctx.config)}, got ${got}`;
-    const failure = new CodedError('assert.failed', message, locator.trim() && subject !== 'value' && subject !== 'url' && subject !== 'title' ? { locator: locator.trim() } : {});
+    const failure = new CodedError('assert.failed', message, locator.trim() && !NO_ELEMENT.includes(subject) ? { locator: locator.trim() } : {});
     if (ctx.config.soft) {
       ctx.softFail(failure);
       return { ...input, actual: found };
