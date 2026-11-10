@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Telemetry fixture</title></head>
+<body>
+  <h1>Telemetry</h1>
+  <button id="console" type="button">Log a console error</button>
+  <button id="exception" type="button">Throw an exception</button>
+  <button id="fetch" type="button">Fetch metadata</button>
+  <p id="status">Ready</p>
+  <script>
+    document.querySelector('#console').onclick = () => console.error('fixture console error');
+    document.querySelector('#exception').onclick = () => setTimeout(() => { throw new Error('fixture uncaught exception'); }, 0);
+    document.querySelector('#fetch').onclick = async () => {
+      const response = await fetch('/export.csv?token=private-token&q=telemetry', { headers: { Authorization: 'private-authorization' } });
+      await response.text();
+      document.querySelector('#status').textContent = 'Fetched ' + response.status;
+    };
+  </script>
+</body></html>

@@ -111,6 +111,7 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
             <p className="bf-muted">
               {new Date(open.startedAt).toLocaleString()} · {TRIGGER_LABELS[open.trigger] ?? open.trigger}
               {open.parentRunId && ' · called by another workflow'} ·{' '}
+              {open.usedDebugger && 'Chromium debugger (CDP) · '}
               <button type="button" className="bf-link" onClick={() => onShowOnCanvas(open)}>
                 show on canvas
               </button>
@@ -132,6 +133,12 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
                   )}
                   {step.error && <div className="bf-error">{step.error}</div>}
                   <ErrorDetails step={step} />
+                  {step.console && step.console.length > 0 && (
+                    <details>
+                      <summary>Console ({step.console.length})</summary>
+                      <pre className="bf-json">{step.console.map((entry) => `[${entry.level}] ${entry.text}${entry.url ? ` (${entry.url})` : ''}`).join('\n')}</pre>
+                    </details>
+                  )}
                   {step.screenshot && <Screenshot id={step.screenshot} />}
                 </li>
               ))}

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fixture: environment and site data</title>
+<style>pre { white-space: pre-wrap; overflow-wrap: anywhere; }</style></head>
+<body>
+  <h1>Environment fixture</h1>
+  <button type="button" id="read">Read environment</button>
+  <pre id="state"></pre>
+  <button type="button" id="locate">Read location</button><pre id="location"></pre>
+  <button type="button" id="network">Fetch a page</button><pre id="network-result"></pre>
+  <button type="button" id="seed">Save site data</button><pre id="saved"></pre>
+  <button type="button" id="storage">Read site data</button><pre id="stored"></pre>
+<script>
+  function state() {
+    document.getElementById('state').textContent = JSON.stringify({
+      width: innerWidth, height: innerHeight, scale: devicePixelRatio,
+      userAgent: navigator.userAgent, language: navigator.language,
+      locale: Intl.DateTimeFormat().resolvedOptions().locale,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      dark: matchMedia('(prefers-color-scheme: dark)').matches,
+      reduce: matchMedia('(prefers-reduced-motion: reduce)').matches,
+      online: navigator.onLine,
+    });
+  }
+  document.getElementById('read').onclick = state;
+  document.getElementById('locate').onclick = () => navigator.geolocation.getCurrentPosition(
+    ({ coords }) => document.getElementById('location').textContent = JSON.stringify({ latitude: coords.latitude, longitude: coords.longitude }),
+    (error) => document.getElementById('location').textContent = `error: ${error.message}`,
+    { timeout: 5000, maximumAge: 0 }
+  );
+  document.getElementById('network').onclick = async () => {
+    try { await fetch(`/geo.html?network=${Date.now()}`, { cache: 'no-store' }); document.getElementById('network-result').textContent = 'online'; }
+    catch { document.getElementById('network-result').textContent = 'offline'; }
+  };
+  document.getElementById('seed').onclick = async () => {
+    localStorage.setItem('m3-environment', 'saved');
+    document.cookie = 'm3-environment=saved; Path=/; SameSite=Lax';
+    const cache = await caches.open('m3-environment');
+    await cache.put('/m3-cached', new Response('saved'));
+    await new Promise((resolve, reject) => {
+      const request = indexedDB.open('m3-environment', 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('rows');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('rows', 'readwrite');
+        tx.objectStore('rows').put('saved', 'key');
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+      };
+    });
+    document.getElementById('saved').textContent = 'saved';
+  };
+  document.getElementById('storage').onclick = async () => {
+    const dbs = typeof indexedDB.databases === 'function' ? await indexedDB.databases() : [];
+    document.getElementById('stored').textContent = JSON.stringify({ local: localStorage.getItem('m3-environment'), cookie: document.cookie.includes('m3-environment='), cache: (await caches.keys()).includes('m3-environment'), database: dbs.some(db => db.name === 'm3-environment') });
+  };
+  state();
+</script>
+</body></html>

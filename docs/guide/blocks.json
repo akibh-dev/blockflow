@@ -714,6 +714,314 @@
       ]
     },
     {
+      "type": "route",
+      "label": "Route",
+      "category": "browser",
+      "description": "Mock, block or modify page requests for this run. Newest matching rule wins; clear removes the tab’s rules.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 30,
+      "defaultConfig": {
+        "action": "add",
+        "backend": "auto",
+        "rules": "[]",
+        "tab": "main"
+      },
+      "fields": [
+        {
+          "key": "action",
+          "label": "Do",
+          "kind": "select",
+          "options": [
+            "add",
+            "clear"
+          ]
+        },
+        {
+          "key": "backend",
+          "label": "Use",
+          "kind": "select",
+          "options": [
+            "auto",
+            "cdp",
+            "dnr"
+          ]
+        },
+        {
+          "key": "rules",
+          "label": "Rules (JSON)",
+          "kind": "text",
+          "templated": true,
+          "help": "An array: url pattern, optional method, action, optional status/headers/body/redirectUrl/delayMs. Last matching rule wins. CDP modify changes the outgoing request; browser rules support abort/redirect without delays."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "route",
+          "description": "Installed rule count and backend ({rules, backend}). Cleared routes report zero rules."
+        }
+      ]
+    },
+    {
+      "type": "har-record",
+      "label": "HAR Record",
+      "category": "browser",
+      "description": "Start or stop recording network metadata as HAR 1.2. Chromium only; bodies, cookies and headers are excluded.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "action": "start",
+        "tab": "main",
+        "dataset": "",
+        "filename": ""
+      },
+      "fields": [
+        {
+          "key": "action",
+          "label": "Do",
+          "kind": "select",
+          "options": [
+            "start",
+            "stop"
+          ]
+        },
+        {
+          "key": "dataset",
+          "label": "Save entries to dataset (stop, optional)",
+          "kind": "text",
+          "templated": true,
+          "help": "Replaces this dataset with the HAR entries."
+        },
+        {
+          "key": "filename",
+          "label": "Download HAR file (stop, optional)",
+          "kind": "text",
+          "templated": true,
+          "help": "Leave blank to return the HAR without downloading it."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "recording",
+          "description": "Whether recording is active."
+        },
+        {
+          "key": "har",
+          "description": "On stop: HAR 1.2 log, metadata only (at most 500 entries)."
+        },
+        {
+          "key": "truncated",
+          "description": "True when more requests occurred than the recording limit."
+        },
+        {
+          "key": "datasetSize",
+          "description": "Entries written when a dataset was supplied."
+        }
+      ]
+    },
+    {
+      "type": "emulate",
+      "label": "Emulate",
+      "category": "browser",
+      "description": "Chromium only: change viewport/device, locale, timezone, location, media preferences or offline state until this run ends. Location still needs the site’s permission.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "action": "set",
+        "device": "",
+        "width": 0,
+        "height": 0,
+        "deviceScaleFactor": 0,
+        "userAgent": "",
+        "locale": "",
+        "timezone": "",
+        "latitude": "",
+        "longitude": "",
+        "accuracy": 1,
+        "colorScheme": "",
+        "reducedMotion": "",
+        "offline": false,
+        "tab": "main"
+      },
+      "fields": [
+        {
+          "key": "action",
+          "label": "Do",
+          "kind": "select",
+          "options": [
+            "set",
+            "clear"
+          ]
+        },
+        {
+          "key": "device",
+          "label": "Device preset",
+          "kind": "select",
+          "options": [
+            "",
+            "iphone",
+            "pixel",
+            "ipad",
+            "desktop"
+          ]
+        },
+        {
+          "key": "width",
+          "label": "Viewport width",
+          "kind": "number",
+          "min": 0,
+          "max": 10000,
+          "help": "0 uses the preset/default. Supply width and height together."
+        },
+        {
+          "key": "height",
+          "label": "Viewport height",
+          "kind": "number",
+          "min": 0,
+          "max": 10000
+        },
+        {
+          "key": "deviceScaleFactor",
+          "label": "Device scale factor",
+          "kind": "number",
+          "min": 0,
+          "max": 8,
+          "help": "0 uses the preset/default."
+        },
+        {
+          "key": "userAgent",
+          "label": "User agent",
+          "kind": "text",
+          "templated": true,
+          "help": "Optional override of the preset user agent. Changes may need a later Navigate/reload."
+        },
+        {
+          "key": "locale",
+          "label": "Locale",
+          "kind": "text",
+          "templated": true,
+          "help": "Intl locale and language override; reload for page code that reads language at startup."
+        },
+        {
+          "key": "timezone",
+          "label": "Timezone",
+          "kind": "text",
+          "templated": true
+        },
+        {
+          "key": "latitude",
+          "label": "Latitude",
+          "kind": "text",
+          "templated": true
+        },
+        {
+          "key": "longitude",
+          "label": "Longitude",
+          "kind": "text",
+          "templated": true,
+          "help": "Both coordinates required. This does not grant the site geolocation permission."
+        },
+        {
+          "key": "accuracy",
+          "label": "Location accuracy (metres)",
+          "kind": "number",
+          "min": 0
+        },
+        {
+          "key": "colorScheme",
+          "label": "Color scheme",
+          "kind": "select",
+          "options": [
+            "",
+            "light",
+            "dark"
+          ]
+        },
+        {
+          "key": "reducedMotion",
+          "label": "Reduced motion",
+          "kind": "select",
+          "options": [
+            "",
+            "reduce",
+            "no-preference"
+          ]
+        },
+        {
+          "key": "offline",
+          "label": "Offline",
+          "kind": "boolean",
+          "help": "Blocks network requests from this tab. Cleared automatically at run end."
+        },
+        {
+          "key": "tab",
+          "label": "Tab",
+          "kind": "text",
+          "help": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\"."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "emulated",
+          "description": "Environment options applied to the tab."
+        }
+      ]
+    },
+    {
+      "type": "clear-site-data",
+      "label": "Clear Site Data",
+      "category": "browser",
+      "description": "Chromium only: delete cookies, local storage, IndexedDB, Cache Storage and service workers for listed sites. Cookie deletion affects the whole registrable domain, including its subdomains.",
+      "canStart": true,
+      "canTakeInput": true,
+      "ports": [
+        "out"
+      ],
+      "timeoutSeconds": 60,
+      "defaultConfig": {
+        "origins": ""
+      },
+      "fields": [
+        {
+          "key": "origins",
+          "label": "Site origins to clear",
+          "kind": "text",
+          "required": true,
+          "templated": true,
+          "help": "Explicit HTTP(S) origins only, separated by newlines or commas. Deletion is permanent. Cookies are cleared for each whole registrable domain, including subdomains; other storage is filtered by origin. Never clears history, downloads, passwords or extension data."
+        }
+      ],
+      "outputs": [
+        {
+          "key": "clearedOrigins",
+          "description": "The exact origins whose site data was cleared (cookies use registrable-domain scope)."
+        }
+      ]
+    },
+    {
       "type": "close-tab",
       "label": "Close Tab",
       "category": "browser",
@@ -2148,6 +2456,7 @@
             "accessible-description",
             "url",
             "title",
+            "console-errors",
             "value"
           ]
         },

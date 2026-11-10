@@ -2,7 +2,7 @@ import { browser } from 'wxt/browser';
 import { urlMatches } from '../core/urlPattern';
 import { sleep } from './tabs';
 import { CodedError } from '../core/errors';
-import { hasDebugger, withDebugger } from './cdp';
+import { hasDebugger, onDebuggerEvent, withDebugger } from './cdp';
 import type { WaitUntil } from '../core/page';
 import type { RequestInfo, ResponseInfo } from '../core/types';
 
@@ -207,10 +207,10 @@ export async function waitForResponse(
   status: string,
   lookBackMs: number,
   timeoutMs: number,
-  options: { method?: string; captureBody?: boolean } = {},
+  options: { method?: string; captureBody?: boolean; runId?: string } = {},
 ): Promise<ResponseInfo> {
   watchNetwork(tabId);
-  if (options.captureBody) return waitForResponseBody(tabId, pattern, status, options.method ?? '', timeoutMs);
+  if (options.captureBody) return waitForResponseBody(tabId, pattern, status, options.method ?? '', timeoutMs, options.runId);
   const since = Date.now() - lookBackMs;
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -267,7 +267,7 @@ export async function waitForRequest(tabId: number, pattern: string, method: str
  * (`Network.getResponseBody`). Only responses that start after this call can be read: the browser keeps
  * bodies only for requests it saw with the debugger attached.
  */
-async function waitForResponseBody(tabId: number, pattern: string, status: string, method: string, timeoutMs: number): Promise<ResponseInfo> {
+async function waitForResponseBody(tabId: number, pattern: string, status: string, method: string, timeoutMs: number, runId?: string): Promise<ResponseInfo> {
   if (!browser.debugger || !(await hasDebugger())) {
     throw new CodedError(
       'permission.missing',
@@ -278,8 +278,8 @@ async function waitForResponseBody(tabId: number, pattern: string, status: strin
     const methods = new Map<string, string>();
     const candidates = new Map<string, ResponseInfo>();
     const finished: string[] = [];
-    const listener = (source: { tabId?: number }, event: string, params?: object) => {
-      if (source.tabId !== tabId || !params) return;
+    const listener = (event: string, params?: object) => {
+      if (!params) return;
       const p = params as { requestId: string; request?: { method: string }; response?: { url: string; status: number } };
       if (event === 'Network.requestWillBeSent' && p.request) methods.set(p.requestId, p.request.method);
       else if (event === 'Network.responseReceived' && p.response) {
@@ -290,7 +290,7 @@ async function waitForResponseBody(tabId: number, pattern: string, status: strin
       } else if (event === 'Network.loadingFinished' && candidates.has(p.requestId)) finished.push(p.requestId);
       else if (event === 'Network.loadingFailed') candidates.delete(p.requestId);
     };
-    browser.debugger.onEvent.addListener(listener);
+    const unsubscribe = onDebuggerEvent(tabId, listener);
     try {
       await send('Network.enable', {});
       const deadline = Date.now() + timeoutMs;
@@ -309,7 +309,7 @@ async function waitForResponseBody(tabId: number, pattern: string, status: strin
       const body = (await send('Network.getResponseBody', { requestId })) as { body: string; base64Encoded: boolean };
       return body.base64Encoded ? { ...response, bodyBase64: body.body.slice(0, MAX_BODY_CHARS) } : { ...response, body: body.body.slice(0, MAX_BODY_CHARS) };
     } finally {
-      browser.debugger.onEvent.removeListener(listener);
+      unsubscribe();
     }
-  });
+  }, runId);
 }

@@ -767,6 +767,294 @@
                     "type": "string"
                   },
                   "type": {
+                    "const": "route"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Mock, block or modify page requests for this run. Newest matching rule wins; clear removes the tab’s rules.",
+                    "properties": {
+                      "action": {
+                        "description": "Do",
+                        "enum": [
+                          "add",
+                          "clear"
+                        ]
+                      },
+                      "backend": {
+                        "description": "Use",
+                        "enum": [
+                          "auto",
+                          "cdp",
+                          "dnr"
+                        ]
+                      },
+                      "rules": {
+                        "description": "An array: url pattern, optional method, action, optional status/headers/body/redirectUrl/delayMs. Last matching rule wins. CDP modify changes the outgoing request; browser rules support abort/redirect without delays.",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "har-record"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Start or stop recording network metadata as HAR 1.2. Chromium only; bodies, cookies and headers are excluded.",
+                    "properties": {
+                      "action": {
+                        "description": "Do",
+                        "enum": [
+                          "start",
+                          "stop"
+                        ]
+                      },
+                      "dataset": {
+                        "description": "Replaces this dataset with the HAR entries.",
+                        "type": "string"
+                      },
+                      "filename": {
+                        "description": "Leave blank to return the HAR without downloading it.",
+                        "type": "string"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "emulate"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Chromium only: change viewport/device, locale, timezone, location, media preferences or offline state until this run ends. Location still needs the site’s permission.",
+                    "properties": {
+                      "action": {
+                        "description": "Do",
+                        "enum": [
+                          "set",
+                          "clear"
+                        ]
+                      },
+                      "device": {
+                        "description": "Device preset",
+                        "enum": [
+                          "",
+                          "iphone",
+                          "pixel",
+                          "ipad",
+                          "desktop"
+                        ]
+                      },
+                      "width": {
+                        "description": "0 uses the preset/default. Supply width and height together.",
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 10000
+                      },
+                      "height": {
+                        "description": "Viewport height",
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 10000
+                      },
+                      "deviceScaleFactor": {
+                        "description": "0 uses the preset/default.",
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 8
+                      },
+                      "userAgent": {
+                        "description": "Optional override of the preset user agent. Changes may need a later Navigate/reload.",
+                        "type": "string"
+                      },
+                      "locale": {
+                        "description": "Intl locale and language override; reload for page code that reads language at startup.",
+                        "type": "string"
+                      },
+                      "timezone": {
+                        "description": "Timezone",
+                        "type": "string"
+                      },
+                      "latitude": {
+                        "description": "Latitude",
+                        "type": "string"
+                      },
+                      "longitude": {
+                        "description": "Both coordinates required. This does not grant the site geolocation permission.",
+                        "type": "string"
+                      },
+                      "accuracy": {
+                        "description": "Location accuracy (metres)",
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "colorScheme": {
+                        "description": "Color scheme",
+                        "enum": [
+                          "",
+                          "light",
+                          "dark"
+                        ]
+                      },
+                      "reducedMotion": {
+                        "description": "Reduced motion",
+                        "enum": [
+                          "",
+                          "reduce",
+                          "no-preference"
+                        ]
+                      },
+                      "offline": {
+                        "description": "Blocks network requests from this tab. Cleared automatically at run end.",
+                        "type": "boolean"
+                      },
+                      "tab": {
+                        "description": "The name an Open Tab block gave the tab earlier in this run. Usually \"main\".",
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "clear-site-data"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "config": {
+                    "type": "object",
+                    "description": "Chromium only: delete cookies, local storage, IndexedDB, Cache Storage and service workers for listed sites. Cookie deletion affects the whole registrable domain, including its subdomains.",
+                    "properties": {
+                      "origins": {
+                        "description": "Explicit HTTP(S) origins only, separated by newlines or commas. Deletion is permanent. Cookies are cleared for each whole registrable domain, including subdomains; other storage is filtered by origin. Never clears history, downloads, passwords or extension data.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "origins"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "step": {
+                    "$ref": "#/$defs/step"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "type",
+                  "position",
+                  "config"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
                     "const": "close-tab"
                   },
                   "position": {
@@ -2173,6 +2461,7 @@
                           "accessible-description",
                           "url",
                           "title",
+                          "console-errors",
                           "value"
                         ]
                       },

@@ -12,6 +12,7 @@ import { waitForPopup } from './popups';
 import { capture, take } from './screenshots';
 import { getCookies, removeCookies, setCookie } from './cookies';
 import { readDownloadText, waitForDownload } from './downloads';
+import { createRunHost } from './m3Host';
 import { readElement } from './pageReader';
 import { requireTabId, sleep } from './tabs';
 import type { Host, HttpRequestOptions, HttpResult, NavigateOptions, NotifyOptions, OpenTabOptions, TabInfo, Scheduler, StateStore } from '../core/types';
@@ -220,7 +221,27 @@ async function runScript(tabId: number, code: string, data: Record<string, unkno
 
 /** The real Host: connects the engine to the browser. */
 export function createExtensionHost(scheduler: Scheduler): Host {
-  return {
+  const host: Host = {
+    forRun: (runId) => {
+      const scoped = createRunHost(host, runId);
+      return {
+        ...scoped,
+        page: { ...host.page, act: (tabId, request, timeoutMs, options) => act(tabId, request, timeoutMs, { ...options, runId }) },
+        tabs: {
+          ...host.tabs,
+          waitForResponse: (tabId, pattern, status, lookBackMs, timeoutMs, options) => waitForResponse(tabId, pattern, status, lookBackMs, timeoutMs, { ...options, runId }),
+        },
+      };
+    },
+    network: {
+      route: async () => { throw new CodedError('config.invalid', 'Route can only be used inside a run'); },
+      har: async () => { throw new CodedError('config.invalid', 'HAR recording can only be used inside a run'); },
+      console: async () => { throw new CodedError('config.invalid', 'Console capture can only be used inside a run'); },
+    },
+    environment: {
+      emulate: async () => { throw new CodedError('config.invalid', 'Emulation can only be used inside a run'); },
+      clearSiteData: async () => { throw new CodedError('config.invalid', 'Clear site data can only be used inside a run'); },
+    },
     sleep,
     http: { fetch: httpFetch, download: downloadFile },
     notify,
@@ -254,4 +275,5 @@ export function createExtensionHost(scheduler: Scheduler): Host {
     html: { act: actOnHtml },
     now: () => new Date(),
   };
+  return host;
 }

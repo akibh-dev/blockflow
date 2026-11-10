@@ -403,6 +403,41 @@ try {
   }
 
   {
+    // M3: browser rules (declarativeNetRequest) work on Firefox; CDP features fail clearly.
+    const rules = JSON.stringify([
+      { url: '**/api/m3-mock', action: 'abort' },
+      { url: '**/api/m3-redirect', action: 'redirect', redirectUrl: `${base}/export.csv` },
+    ]);
+    const routed = await run(workflow('m3 dnr route', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/m3-route.html`, active: false } },
+      { id: 'route', type: 'route', config: { backend: 'dnr', rules } },
+      { id: 'block', type: 'click', config: { locator: '#mock' } },
+      { id: 'blocked', type: 'assert', config: { subject: 'text', locator: '#mock-result', operator: 'equals', expected: 'blocked' } },
+      { id: 'redirect', type: 'click', config: { locator: '#redirect' } },
+      { id: 'redirected', type: 'assert', config: { subject: 'text', locator: '#redirect-result', operator: 'contains', expected: 'name,qty' } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    check('Route: browser rules block and redirect', routed.status === 'passed', summary(routed));
+
+    const chromiumOnly = [
+      ['Route mocking (CDP)', { id: 'x', type: 'route', config: { backend: 'cdp', rules: JSON.stringify([{ url: '**/api/**', action: 'fulfill', body: 'x' }]) } }],
+      ['Emulate', { id: 'x', type: 'emulate', config: { device: 'iphone' } }],
+      ['HAR Record', { id: 'x', type: 'har-record', config: { action: 'start' } }],
+      ['Assert console-errors', { id: 'x', type: 'assert', config: { subject: 'console-errors', operator: 'equals', expected: '0' } }],
+      ['Clear Site Data', { id: 'x', type: 'clear-site-data', config: { origins: base } }],
+    ];
+    for (const [label, node] of chromiumOnly) {
+      const record = await run(workflow(`m3 ${label}`, [
+        { id: 'open', type: 'open-url', config: { url: `${base}/m3-route.html`, active: false } },
+        { ...node, step: { timeoutSeconds: 5 } },
+        { id: 'close', type: 'close-tab' },
+      ]));
+      const failed = step(record, 'x');
+      check(`${label} explains it needs Chromium`, record.status === 'failed' && failed?.code === 'permission.missing' && /Chrom/.test(failed?.error ?? ''), `${failed?.code} ${failed?.error ?? summary(record)}`);
+    }
+  }
+
+  {
     const record = await run(workflow('notify', [{ id: 'n', type: 'notify', config: { title: 'BlockFlow e2e', message: 'hello' } }]));
     check('Notify', record.status === 'passed', summary(record));
   }

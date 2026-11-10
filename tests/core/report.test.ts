@@ -41,4 +41,9 @@ describe('reports', () => {
     expect(page).toContain('1 passed');
     expect(page).not.toMatch(/<(script|link)\b/);
   });
+
+  it('shows whether a run used the Chromium debugger', () => {
+    expect(toHtmlReport([run('cdp', 'passed', { usedDebugger: true })], options)).toContain('Chromium debugger (CDP)');
+    expect(toHtmlReport([run('plain', 'passed')], options)).not.toContain('Chromium debugger (CDP)');
+  });
 });

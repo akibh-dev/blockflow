@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Fixture: request routes</title></head>
+<body>
+  <h1>Request routes</h1>
+  <button type="button" id="mock">Load mock</button><output id="mock-result"></output>
+  <button type="button" id="save">Save order</button><output id="save-result"></output>
+  <button type="button" id="redirect">Load redirected CSV</button><output id="redirect-result"></output>
+  <button type="button" id="later">Load later</button><output id="later-result"></output>
+  <script>
+    async function load(url, target, options) {
+      try {
+        const response = await fetch(url, options);
+        document.getElementById(target).textContent = response.status + '|' + (await response.text()) + '|' + (response.headers.get('x-mock') || '');
+      } catch {
+        document.getElementById(target).textContent = 'blocked';
+      }
+    }
+    document.getElementById('mock').onclick = () => load('/api/m3-mock', 'mock-result');
+    document.getElementById('save').onclick = () => load('/api/save', 'save-result', { method: 'POST', headers: { 'content-type': 'application/json', 'x-route': 'original' }, body: JSON.stringify({ item: 'original' }) });
+    document.getElementById('redirect').onclick = () => load('/api/m3-redirect', 'redirect-result');
+    document.getElementById('later').onclick = () => setTimeout(() => load('/api/m3-later', 'later-result'), 1000);
+  </script>
+</body></html>

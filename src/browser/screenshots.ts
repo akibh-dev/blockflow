@@ -42,7 +42,7 @@ export async function capture(tabId: number, runId: string): Promise<string | nu
     ? await captureTab(tabId, { format: 'jpeg', quality: 60 })
     : tab.active && tab.windowId !== undefined
       ? await browser.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 60 })
-      : await captureWithDebugger(tabId).catch(() => null);
+      : await captureWithDebugger(tabId, runId).catch(() => null);
   if (!dataUrl) return null;
   const id = uid();
   await saveScreenshot({ id, runId, ts: Date.now(), dataUrl });
@@ -106,7 +106,7 @@ const needsDebugger = (what: string) =>
   );
 
 /** Chromium, with the debugger: `Page.captureScreenshot`, optionally beyond the viewport. */
-async function viaDebugger(tabId: number, format: 'png' | 'jpeg', quality: number, clip?: Rect): Promise<string> {
+async function viaDebugger(tabId: number, format: 'png' | 'jpeg', quality: number, clip?: Rect, runId?: string): Promise<string> {
   return withDebugger(tabId, async (send) => {
     // A tab that does not paint can leave the call hanging: give up after a while (and detach).
     const shot = (await Promise.race([
@@ -120,14 +120,14 @@ async function viaDebugger(tabId: number, format: 'png' | 'jpeg', quality: numbe
     ])) as { data?: string };
     if (!shot.data) throw new CodedError('timeout', 'The browser returned no image (the tab may not be painting)');
     return `data:image/${format};base64,${shot.data}`;
-  });
+  }, runId);
 }
 
 /** Chromium: the whole page through `Page.getLayoutMetrics` + a clip of the content size. */
-async function fullPageViaDebugger(tabId: number, format: 'png' | 'jpeg', quality: number): Promise<string> {
-  const metrics = await withDebugger(tabId, (send) => send('Page.getLayoutMetrics') as Promise<{ cssContentSize?: { width: number; height: number }; contentSize?: { width: number; height: number } }>);
+async function fullPageViaDebugger(tabId: number, format: 'png' | 'jpeg', quality: number, runId?: string): Promise<string> {
+  const metrics = await withDebugger(tabId, (send) => send('Page.getLayoutMetrics') as Promise<{ cssContentSize?: { width: number; height: number }; contentSize?: { width: number; height: number } }>, runId);
   const size = metrics.cssContentSize ?? metrics.contentSize ?? { width: 0, height: 0 };
-  return viaDebugger(tabId, format, quality, { x: 0, y: 0, width: Math.min(MAX_SIDE, Math.ceil(size.width)), height: Math.min(MAX_SIDE, Math.ceil(size.height)) });
+  return viaDebugger(tabId, format, quality, { x: 0, y: 0, width: Math.min(MAX_SIDE, Math.ceil(size.width)), height: Math.min(MAX_SIDE, Math.ceil(size.height)) }, runId);
 }
 
 /**
@@ -154,7 +154,7 @@ export async function take(tabId: number, options: ScreenshotOptions): Promise<S
       dataUrl = await captureTab(tabId, { ...imageOptions, rect: { x: box.x + page.scrollX, y: box.y + page.scrollY, width: box.width, height: box.height } });
     } else if (await hasDebugger()) {
       const page = await pageMetrics(tabId, options.timeoutMs);
-      dataUrl = await viaDebugger(tabId, format, quality, { x: box.x + page.scrollX, y: box.y + page.scrollY, width: box.width, height: box.height });
+      dataUrl = await viaDebugger(tabId, format, quality, { x: box.x + page.scrollX, y: box.y + page.scrollY, width: box.width, height: box.height }, options.runId);
     } else if (showing) {
       // Cut the element out of what the tab shows (it was scrolled into view).
       const page = await pageMetrics(tabId, options.timeoutMs);
@@ -166,11 +166,11 @@ export async function take(tabId: number, options: ScreenshotOptions): Promise<S
     if (captureTab) {
       const page = await pageMetrics(tabId, options.timeoutMs);
       dataUrl = await captureTab(tabId, { ...imageOptions, rect: { x: 0, y: 0, width: Math.min(MAX_SIDE, page.pageWidth), height: Math.min(MAX_SIDE, page.pageHeight) } });
-    } else if (await hasDebugger()) dataUrl = await fullPageViaDebugger(tabId, format, quality);
+    } else if (await hasDebugger()) dataUrl = await fullPageViaDebugger(tabId, format, quality, options.runId);
     else throw needsDebugger('A full-page screenshot');
   } else if (captureTab) dataUrl = await captureTab(tabId, imageOptions);
   else if (showing) dataUrl = await browser.tabs.captureVisibleTab(tab.windowId as number, imageOptions);
-  else if (await hasDebugger()) dataUrl = await viaDebugger(tabId, format, quality);
+  else if (await hasDebugger()) dataUrl = await viaDebugger(tabId, format, quality, undefined, options.runId);
   else throw needsDebugger('A screenshot of a tab that is not showing');
 
   const bitmap = await bitmapOf(dataUrl);

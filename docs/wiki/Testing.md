@@ -82,6 +82,13 @@ against real Chromium.
 | [core/guideExamples.test.ts](../../tests/core/guideExamples.test.ts) | Every `docs/guide/examples/*.blockflow.json`, and every complete JSON example in `docs/guide/README.md`, imports with `parseImport` with no issues at all (strict check) and no editor validation errors |
 | [core/script.test.ts](../../tests/core/script.test.ts) | Script format: aliases, shorthands, If rejoin, loop and error branches, ids, issue codes and JSON Pointer paths, several scripts per file, `parseImport` of scripts, `decompile` (and when it returns null) |
 | [core/layout.test.ts](../../tests/core/layout.test.ts) | Auto-layout: chains in one row, If and loop port order, joins, several starts, cycles, no overlaps on a random DAG |
+| [core/route.test.ts](../../tests/core/route.test.ts) | Route block: malformed JSON, unknown keys, bad patterns/status/headers refused; unsupported combinations (`dnr` with mocks); templates kept and methods upper-cased; the permission per backend; what reaches `network.route` |
+| [core/environment.test.ts](../../tests/core/environment.test.ts) | Emulate (options passed through, incomplete viewport/coordinates, scale, locale, timezone; templates checked after rendering; `clear` ignores old settings) and Clear Site Data (explicit origins, normalised and deduplicated) |
+| [core/telemetry.test.ts](../../tests/core/telemetry.test.ts) | HAR Record start/stop, dataset and download, start refusing destinations, secrets masked before export; Assert `console-errors`; console entries in the JSON and HTML reports |
+| [browser/routes.test.ts](../../tests/browser/routes.test.ts) | CDP routes on a fake `CdpSend` (newest match, method, Unicode bodies, modify, delayed requests aborted on cleanup, interception errors fail the request, partial installation, backend switch) and DNR routes on a fake `DnrPort` (stale reserved ids removed, tab-scoped rules and priorities, missing permission, closing during preparation) |
+| [browser/environment.test.ts](../../tests/browser/environment.test.ts) | Emulation commands for presets and each setting, reset of earlier overrides, rollback on a failed command, detached cleanup; Clear Site Data's exact filter, Firefox refusal, missing `browsingData` |
+| [browser/telemetry.test.ts](../../tests/browser/telemetry.test.ts) | Console capture (attach deduplicated, innermost step, exceptions, pre-run replays dropped, limits per tab and step, cleanup) and HAR (no headers/cookies/bodies/URL credentials, redirects and failures, truncation, restart) |
+| [browser/m3Host.test.ts](../../tests/browser/m3Host.test.ts) | `createRunHost`: console setup on every run CDP call, every feature cleanup before debugger release even when one rejects, late calls refused, tab claims between concurrent runs released after failure |
 | [browser/hybridScheduler.test.ts](../../tests/browser/hybridScheduler.test.ts) | Timers ≥ 30 s (alarms), < 30 s (in-memory + keep-alive), clearing, worker restart, end to end with the engine. Uses local `FakeClock`, `FakeAlarms`, `MemoryTimerStore`. See [Scheduling and Timers](Scheduling-and-Timers.md) |
 | [dom/agent.test.ts](../../tests/dom/agent.test.ts) | Page agent ops: click, fill/type, select/check/press, read/wait/detect-form, scraping, frames, upload and locate. See [Page Agent](Page-Agent.md) |
 | [dom/snapshot.test.ts](../../tests/dom/snapshot.test.ts) | The `snapshot` op: roles, names, flags and working locators, hidden elements skipped, shadow roots (slots), same-origin and cross-origin frames, the line cap, a part of the page, speed on 100 identical rows; error codes of agent answers (strict with `matches`, waits, wrong element type, invalid locator) |
@@ -223,7 +230,8 @@ machines), use another browser, e.g. Playwright's Chromium from `npx playwright 
 ### The e2e build
 
 With `BF_E2E=1`, [wxt.config.ts](../../wxt.config.ts) writes to `.output-e2e/` (never mixed up with the build
-you load by hand) and moves `debugger` and `userScripts` from `optional_permissions` into `permissions`,
+you load by hand) and moves the optional permissions into `permissions` (`cookies` and
+`declarativeNetRequest` everywhere; `debugger`, `userScripts` and `browsingData` on Chromium only),
 because an automated browser cannot click the permission prompt. See [Build and Release](Build-and-Release.md).
 
 It also defines `import.meta.env.BF_E2E` (`true` only in this build) for test-only hooks, which compile out of
@@ -281,6 +289,14 @@ Scenarios by spec:
 | Drop zone, upload from data | `upload.html` | Upload File `target: dropzone` (text, and a `data:` URL), HTTP Request `responseType: base64` → Upload File `source: data` with `{{body64}}` and `{{mime}}` |
 | **m2-browser** | | |
 | M2.7, M2.8, M2.10, M2.13 | `m2-browser.html`, `/export.csv`, `/login-cookie`, `/whoami` | Wait for Download of a CSV link (rows into a dataset) and of a page-made `blob:` JSON file; Screenshot visible (background tab), full page (taller than 2600 px), element (300×120 card), stored as PNG in IndexedDB; Cookies & Storage reading an HttpOnly cookie, setting one the server then receives, delete, clear; local/session storage set/get/delete/clear; Wait For request (POST body), response with a method filter and a captured body; the same blocks exported to Playwright and run with `npx playwright test` |
+| **m3-sessions** | | |
+| Run-scoped debugger | `trusted.html` | One attachment shared by real input, screenshots and asserts across steps; released after success, failure, cancellation and an API detach; the report's debugger marker |
+| **m3-route** | | |
+| Route | `m3-route.html` (`/api/m3-mock`, `/api/m3-redirect`, `/api/m3-later`, `POST /api/save`) | CDP fulfill (method, newest match, Unicode body, status, headers), CDP modify changes what the server receives, `clear` restores real traffic, abort; browser rules (DNR) block and redirect without CDP and are gone after the run |
+| **m3-environment** | | |
+| Emulate, Clear Site Data | `geo.html` (geolocation granted by the harness) | iPhone preset (viewport, pixel ratio, UA), locale, timezone, dark scheme, reduced motion, coordinates; reset at run end and after a failed run; offline then explicit clear; Clear Site Data removes cookies, localStorage, IndexedDB and Cache Storage of the exact origin and keeps the extension's run data |
+| **m3-telemetry** | | |
+| HAR, console | `m3-telemetry.html`, `/export.csv?token=…` | HAR start/stop with request metadata, auth header/body/cookies left out and `token` redacted, entries saved as a dataset; `console.error` and an uncaught exception on the step; Assert `console-errors` `equals 0` fails |
 | **scripts** | | |
 | M1.2 | `table.html` + editor UI | Importing a `.script.json` through the Import button: blocks laid out (If rejoin), the run passes; Export as script enabled; Tidy up after a drag puts the blocks back on the grid, and Undo reverts it |
 | **blocks-coverage** | | |
@@ -341,6 +357,9 @@ Exports `PASSWORD` (`Op3n-Sesame!`, the only password the fixture login accepts)
 | `meta.html` | Title, description and Open Graph meta, canonical link, `lang="en-GB"`, two JSON-LD blocks (one invalid), two links; sets localStorage `theme`/`cart`, sessionStorage `visit`, cookies `currency`/`consent` |
 | `keys.html` | Search form (`label=Search`) whose submit writes `submitted: <value>` to `#status`; selecting the field writes `selected N of M` |
 | `ticker.html` | `#price` counts up from 100 every 1.5 s, by itself |
+| `m3-route.html` | Buttons that fetch `/api/m3-mock`, `/api/m3-redirect`, `/api/m3-later` and POST `/api/save`, each writing the outcome to `#…-result` (Route) |
+| `geo.html` | `#read` → `#state` (viewport, pixel ratio, UA, locale, timezone, media, online), `#locate` → `#location`, `#network` fetch → `#network-result` online/offline, `#seed` writes a cookie, localStorage, IndexedDB and Cache Storage entry that `#storage` reads back (Emulate, Clear Site Data) |
+| `m3-telemetry.html` | `#console` logs an error, `#exception` throws, `#fetch` requests `/export.csv?token=…` with an `Authorization` header (HAR, console) |
 
 ## Firefox e2e (tests/e2e/firefox.mjs)
 
@@ -355,12 +374,14 @@ register a bridge content script on `http://127.0.0.1/*`
 `{ bfE2e, op, arg }` (`send` a runtime message, `get` from `storage.local`, `ping`) and the bridge answers.
 Workflows run through `bf:run-workflow`, exactly like the Chromium specs.
 
-The 30 checks cover forms, HTML parsing without an offscreen document, `storage.session` watch tabs,
+The checks cover forms, HTML parsing without an offscreen document, `storage.session` watch tabs,
 upload, popups, dialogs, IndexedDB datasets, in-run delays, screenshots on failure, Notify, the
 "Chromium only" errors for Run Script, real input and response bodies, and M2: Wait for Download (real file
 names, CSV and `blob:` JSON), Screenshot in all three areas through `tabs.captureTab`, Cookies & Storage,
 Wait For request, locator filters and role states, the new Assert subjects, click options, Element Action
-(focus in a background tab, a CustomEvent), synthetic Drag (HTML5 list and pointer slider) and a drop zone.
+(focus in a background tab, a CustomEvent), synthetic Drag (HTML5 list and pointer slider) and a drop zone,
+and M3: Route with browser rules (`backend: dnr`) blocks and redirects, while Route `cdp`, Emulate, HAR
+Record, Assert `console-errors` and Clear Site Data each fail with `permission.missing` naming Chromium.
 CI runs it in the `e2e-firefox` job.
 
 ## Manual test pages
@@ -375,6 +396,20 @@ on the stable line. Results of manual runs are logged in README
 [What has been verified](../../README.md#what-has-been-verified).
 
 ## CI
+
+M3 session groundwork adds `tests/browser/cdpSessions.test.ts` (injected transport, reference counts,
+overlapping owners, failed/late acquisition, domain enables and detach races), `tests/browser/cdp.test.ts`
+(optional API grant/revocation and transport invalidation), and `tests/core/runResources.test.ts`
+(scoped Host cleanup on all exits). `npm run e2e -- m3-sessions` checks actual Chromium attachment
+between steps and release after success, failure, cancellation and API detach, plus the report marker.
+The M3 features add the core and browser tests listed above and the `m3-route`, `m3-environment` and
+`m3-telemetry` specs.
+
+**Gotcha (m3-environment):** Playwright applies its own light color scheme and viewport to every page
+through its own CDP session. Our run-end `Emulation.*` reset clears those on the live page too, until it
+reloads (then Playwright applies them again). So the spec reloads the tab before comparing with the
+baseline; an override we failed to reset would survive the reload. In a real browser nothing else emulates,
+so the reset is correct.
 
 [.github/workflows/ci.yml](../../.github/workflows/ci.yml) runs on pushes to `main` and on pull requests, with
 two jobs on Ubuntu and Node 22:

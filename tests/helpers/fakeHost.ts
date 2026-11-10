@@ -25,6 +25,7 @@ import { WorkflowRunner } from '../../src/core/engine';
 import { urlMatches } from '../../src/core/urlPattern';
 import type { AgentRequest, WaitUntil } from '../../src/core/page';
 import type { RunRecord } from '../../src/core/runs';
+import type { ClearSiteDataOptions, ConsoleEntry, EmulateOptions, HarResult, RouteOptions, RouteResult } from '../../src/core/network';
 import { createDefaultRegistry } from '../../src/core/blocks';
 
 /** What FakeScheduler keeps per key: the timer options plus the JSON payload stored with it. */
@@ -89,6 +90,27 @@ export type PageReader = (options: ReadElementOptions) => Promise<ReadElementRes
  * Time is virtual: `now()` starts at 2026-01-01T00:00:00Z and moves only with `advance(ms)`.
  */
 export class FakeHost implements Host {
+  readonly routeCalls: { tabId: number; options: RouteOptions }[] = [];
+  readonly emulations: { tabId: number; options: EmulateOptions }[] = [];
+  readonly clearedSites: ClearSiteDataOptions[] = [];
+  readonly harCalls: { tabId: number; action: 'start' | 'stop' }[] = [];
+  consoleEntries: ConsoleEntry[] = [];
+  harResult: HarResult = { recording: false, har: { log: { version: '1.2', creator: { name: 'BlockFlow', version: '0.4.0' }, entries: [] } } };
+  network = {
+    route: async (tabId: number, options: RouteOptions): Promise<RouteResult> => {
+      this.routeCalls.push({ tabId, options });
+      return { rules: options.action === 'clear' ? 0 : options.rules.length, backend: options.backend === 'dnr' ? 'dnr' : 'cdp' };
+    },
+    har: async (tabId: number, action: 'start' | 'stop'): Promise<HarResult> => {
+      this.harCalls.push({ tabId, action });
+      return action === 'start' ? { recording: true } : this.harResult;
+    },
+    console: async (_tabId: number): Promise<ConsoleEntry[]> => this.consoleEntries,
+  };
+  environment = {
+    emulate: async (tabId: number, options: EmulateOptions): Promise<void> => { this.emulations.push({ tabId, options }); },
+    clearSiteData: async (options: ClearSiteDataOptions): Promise<void> => { this.clearedSites.push(options); },
+  };
   readonly scheduler = new FakeScheduler();
   readonly state = new MemoryState();
   readonly opened: OpenTabOptions[] = [];

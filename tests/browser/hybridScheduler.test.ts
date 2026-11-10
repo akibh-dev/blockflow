@@ -399,6 +399,8 @@ describe('with the workflow engine', () => {
     });
     // Same fake browser as FakeHost, but with the real HybridScheduler.
     const host: Host = {
+      network: base.network,
+      environment: base.environment,
       sleep: base.sleep,
       http: base.http,
       notify: base.notify,

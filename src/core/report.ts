@@ -117,11 +117,11 @@ export function toHtmlReport(runs: RunRecord[], options: ReportOptions): string 
     const rows = run.steps
       .map((step) => {
         const shot = step.screenshot ? options.screenshots?.[step.screenshot] : undefined;
-        return `<tr class="${step.status}"><td>${html(step.status)}</td><td>${html(options.blockLabel(step.blockType))}</td><td>${step.durationMs ?? ''} ms</td><td>${step.code ? `<code>${html(step.code)}</code> ` : ''}${html(step.error ?? '')}${shot ? `<br><img src="${shot}" alt="Screenshot">` : ''}</td></tr>`;
+        return `<tr class="${step.status}"><td>${html(step.status)}</td><td>${html(options.blockLabel(step.blockType))}</td><td>${step.durationMs ?? ''} ms</td><td>${step.code ? `<code>${html(step.code)}</code> ` : ''}${html(step.error ?? '')}${step.console?.length ? `<details><summary>Console (${step.console.length})</summary><pre>${step.console.map((entry) => html(`[${entry.level}] ${entry.text}${entry.url ? ` (${entry.url})` : ''}`)).join('\n')}</pre></details>` : ''}${shot ? `<br><img src="${shot}" alt="Screenshot">` : ''}</td></tr>`;
       })
       .join('');
     return `<section class="${run.status}"><h2><span class="badge ${run.status}">${html(run.status)}</span> ${html(run.workflowName)}</h2>
-<p class="meta">${html(new Date(run.startedAt).toLocaleString())} · ${html(run.trigger)} · ${(durationOf(run) / 1000).toFixed(1)} s${run.error ? ` · <b>${html(run.error)}</b>` : ''}</p>
+<p class="meta">${html(new Date(run.startedAt).toLocaleString())} · ${html(run.trigger)} · ${(durationOf(run) / 1000).toFixed(1)} s${run.usedDebugger ? ' · Chromium debugger (CDP)' : ''}${run.error ? ` · <b>${html(run.error)}</b>` : ''}</p>
 <table><thead><tr><th>Status</th><th>Block</th><th>Time</th><th>Details</th></tr></thead><tbody>${rows}</tbody></table></section>`;
   });
   return `<!doctype html>

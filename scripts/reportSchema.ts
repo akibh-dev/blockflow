@@ -55,6 +55,7 @@ function schema() {
           droppedSteps: { type: 'integer', description: 'Steps not kept because the run was very long.' },
           error: { type: 'string', description: 'Why the run failed or stopped, in one line.' },
           parentRunId: { type: 'string', description: 'Set when a Run Workflow block started this run.' },
+          usedDebugger: { type: 'boolean', description: 'This run acquired a Chromium debugger session (CDP).' },
         },
       },
       step: {
@@ -78,6 +79,10 @@ function schema() {
           matches: { type: 'array', maxItems: 5, items: { type: 'string' }, description: 'For locator.strict: the elements that matched, described.' },
           screenshot: { type: 'string', description: 'Id of a screenshot (not embedded in JSON).' },
           childRunId: { type: 'string', description: 'For Run Workflow: the run of the called workflow.' },
+          console: {
+            type: 'array', maxItems: 100, description: 'Bounded page console and exceptions, secret values masked.',
+            items: { type: 'object', required: ['level', 'text', 'timestamp'], properties: { level: { type: 'string' }, text: { type: 'string', maxLength: 2000 }, timestamp: { type: 'number' }, url: { type: 'string' } } },
+          },
         },
       },
       errorCode: {

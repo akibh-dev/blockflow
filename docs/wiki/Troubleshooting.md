@@ -192,6 +192,9 @@ as a new run.
 | Cookies & Storage on `cookies` | `cookies` (optional, Chrome and Firefox) | `Cookies need the "cookies" permission: press Grant on the Cookies & Storage block …`. localStorage / sessionStorage need nothing extra. |
 | Screenshot `full`, `element` of a tab that is not showing, any tab that is not showing (Chromium) | `debugger` (optional) | `A full-page screenshot needs the "debugger" permission …`. Firefox takes all of them with `tabs.captureTab`, no extra permission. Without the permission in Chromium, `visible` and `element` work on a tab that is showing (Open Tab with "bring to front"). |
 | Wait For `captureBody` | `debugger` (optional) | `Reading a response body needs the "debugger" permission, which only Chrome, Edge and Brave have …`. Not available in Firefox: switch it off; URL, status and method still work. |
+| Route mocking/modifying (`backend: cdp`, or `auto` with fulfill/modify/continue/delays), Emulate, HAR Record, Assert `console-errors` | `debugger` (optional) | `This operation needs the "debugger" permission (Chromium only: Chrome, Edge, Brave). Grant it on the block …`. In **Firefox** these always fail with `permission.missing`; Route block/redirect works there with `backend: dnr`. |
+| Route with browser rules (`backend: dnr`, or `auto` with only abort/redirect) | `declarativeNetRequest` (optional, Chrome and Firefox) | `Browser route rules need the "declarativeNetRequest" permission. Grant it on the Route block …` |
+| Clear Site Data | `browsingData` (optional, Chromium only) | `Clear Site Data needs Chromium and the optional browsingData permission … no data was cleared.` Firefox is refused on purpose: its `browsingData` cannot filter every data type by exact origin, and BlockFlow never falls back to clearing everything. |
 | Any page access in **Firefox** | host access | Firefox does not grant site access on install: `about:addons` → BlockFlow → Permissions → allow all sites. Without it the picker, Watch Element and page blocks fail with a permissions error. Not yet verified on a real Firefox install. |
 
 Blocks that need an optional permission show a **Grant** button in their settings until it is granted.
@@ -282,6 +285,14 @@ the toast's **Details** shows them. Every code is explained in the guide's
 | `Element is required for "visible"` / `Text is required for the text modes` / `URL pattern is required for …` | Wait For settings missing for the chosen `mode`. |
 | `Timed out … waiting for a response from … to read its body (only responses that start after the Wait For starts can be read)` | Wait For with `captureBody` attaches the debugger when it starts; a response that started before (during the Click) cannot be read. Use it for slow or later requests, or call the API with HTTP Request. |
 | `The browser refused the cookie "…"` | Cookies & Storage `set`: the cookie does not fit the site (a `domain` of another site, `secure` on http, `SameSite=None` without `secure`). |
+| `Another run owns network/emulation overrides for this tab. Finish that run before changing route/emulation.` | Route and Emulate change the whole tab, so one run at a time owns them. Another run (still running, or waiting at a Timer) set routes or emulation on this tab first. Stop or finish it, or use another tab; the claim is released when that run ends. |
+| `Route can only be used inside a run` (also HAR recording, Console capture, Emulation, Clear site data) | These Host calls exist only on a run's scoped Host; they are not available to triggers outside a run. |
+| `Clear this tab’s routes before switching between CDP and browser rules` | A tab keeps the backend of its first Route rules. Add a Route `clear` before rules for the other backend, or use one backend for all. |
+| `Browser rules support only abort/redirect without delays; use Chromium CDP` | `backend: dnr` cannot fulfill, modify, continue or delay. Use `cdp` (Chromium) or `auto`. |
+| `A tab can have at most 100 route rules` | Rules add up per tab until cleared. Use one pattern for several URLs, or `clear` first. |
+| `HAR recording is already running for this tab …` / `No HAR recording is running for this tab …` | HAR Record `start` and `stop` must alternate per tab within one run. |
+| Clear Site Data logged out other subdomains | Cookies are deleted for the whole registrable domain (clearing `https://shop.example.com` removes `example.com` cookies, so `www.` and `api.` lose theirs too). Other storage is cleared per exact origin only. Deletion cannot be undone. |
+| Emulated location is not reported by the page | Emulate sets the coordinates but does not grant the site geolocation permission; allow it for that site once. |
 | `sent data to an output it does not have: "x"` | An internal block error; report it. |
 
 HTTP Request with **Stop the flow on HTTP errors** on currently ends the path without marking the run

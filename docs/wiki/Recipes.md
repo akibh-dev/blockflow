@@ -356,6 +356,36 @@ Fill a file input without the file dialog, submit, and wait for the API call to 
 - Sites that only react to trusted events: set `"step": { "realInput": true }` on the drag (Chromium); it
   then uses the browser's own mouse, native drags included.
 
+## Mock an API and test on a phone
+
+Check that checkout shows a friendly message when the payment API is down, on an emulated iPhone in
+French and dark mode, without sending analytics, and that the page logs no errors meanwhile. Chromium only.
+
+```json
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "Checkout on a phone with a failing API",
+  "steps": [
+    { "open": "https://shop.example.com/cart" },
+    { "emulate": { "device": "iphone", "timezone": "Europe/Paris", "locale": "fr-FR", "colorScheme": "dark" } },
+    { "route": { "rules": "[{\"url\":\"**/api/payment\",\"method\":\"POST\",\"action\":\"fulfill\",\"status\":503,\"headers\":{\"Content-Type\":\"application/json\"},\"body\":\"{\\\"error\\\":\\\"down\\\"}\"},{\"url\":\"**/analytics/**\",\"action\":\"abort\"}]" } },
+    { "navigate": { "action": "reload" } },
+    { "click": "role=button[name=\"Pay\"]" },
+    { "assert": { "locator": "role=alert", "operator": "contains", "expected": "try again" } },
+    { "assert": { "subject": "console-errors", "operator": "equals", "expected": "0" } }
+  ]
+}
+```
+
+- Blocks: `emulate` (device preset, locale, timezone, color scheme), `route` (`rules` is a JSON array as
+  text; the newest matching rule wins; `fulfill` mocks, `abort` blocks), `navigate` `reload` (UA and
+  language changes reach page code on the next load), `assert` with `subject: "console-errors"`.
+- Grant `debugger` on the Route and Emulate blocks when asked. Routes and emulation are reset when the run
+  ends, even when it fails. With only `abort` / `redirect` rules, Route uses browser rules instead
+  (`declarativeNetRequest`, works on Firefox too).
+- To see every request the page made, put HAR Record `start` before and `stop` (with a `filename`) after.
+
 ## See also
 
 - [Workflows as Scripts](Workflows-as-Scripts.md): the file format, the prompt template, Playwright mapping

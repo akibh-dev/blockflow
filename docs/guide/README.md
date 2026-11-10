@@ -386,6 +386,11 @@ A workflow may have several start blocks; each starts its own runs.
   embedded), **JUnit XML** (for CI dashboards), **JSON**.
 - If the browser stops the extension's background worker during a run, the run is marked
   **interrupted**.
+- Chromium debugger features share one attachment per tab for the run. Chrome's debugging bar
+  stays visible until the run finishes (or the tab closes). Closing that bar invalidates the session;
+  later debugger actions fail clearly. Reports and HTML exports label runs that used CDP; JSON
+  includes `usedDebugger: true`. Steps run with the debugger attached also list the page's console
+  messages and exceptions (bounded, secrets masked; `console` in the JSON step). Workflows that do not use CDP do not request or acquire a session.
 - The **JSON** export is for programs: `{ "$schema", "schemaVersion": 1, "generatedAt", "summary", "runs" }`
   ([schema](report.schema.json)). Each step of a run has `nodeId`, `sourceId` (the block's `id` in the
   file you imported, when it had one), `blockType`, `status`, `durationMs`, `attempts`, `input`, `output`
@@ -505,7 +510,8 @@ profile's extension storage.
   attribute), `count`, `class` (`contains` = has the class(es), not a substring: `active` does not match
   `inactive`), `css` (`name` = the property, computed value: `rgb(0, 128, 0)`, `block`),
   `accessible-name`, `accessible-description` (what a screen reader announces), `url`, `title`, `value`
-  (a value from the data) with an `operator`; and the yes/no ones (no operator): `visible`, `hidden`,
+  (a value from the data), `console-errors` (number of `console.error` calls and uncaught exceptions in
+  this run's tab so far; Chromium, needs `debugger`, not exported to Playwright) with an `operator`; and the yes/no ones (no operator): `visible`, `hidden`,
   `checked`, `unchecked`, `enabled`, `disabled`, `focused`, `editable` (enabled, not read-only, a field),
   `in-viewport` (some of it is on screen; scroll first if needed). Playwright export maps them to
   `toHaveClass`/`toContainClass`, `toHaveCSS`, `toHaveAccessibleName`, `toHaveAccessibleDescription`,
@@ -522,6 +528,32 @@ profile's extension storage.
   notification or the editor banner.
 - **Data-driven tests**: Data Table (CSV/JSON) → For Each (`each` output) → the test steps using
   `{{row.email}}`. Use `step.onError: "continue"` or soft Asserts so one bad row does not stop the rest.
+
+### Network, device and clean state (Chromium)
+
+Rules and overrides last for the rest of the run and are removed when it ends (passed, failed or stopped).
+Only one run at a time can own a tab's routes and emulation.
+
+- **Route** mocks, blocks or changes the tab's requests. `rules` is a JSON array; the **newest** matching
+  rule wins. Each rule: `url` (pattern, `**/api/**`), optional `method`, `action` (`fulfill` with
+  `status`/`headers`/`body`, `abort`, `continue`, `modify` the outgoing `headers`/`body`, `redirect` to
+  `redirectUrl`), optional `delayMs`. `backend: "auto"` uses browser rules (`declarativeNetRequest`, also
+  Firefox, no debugging bar) when every rule is `abort`/`redirect` without a delay, else Chromium's debugger.
+  `"action": "clear"` removes the tab's rules.
+- **Emulate**: `device` (`iphone`, `pixel`, `ipad`, `desktop`), or `width`+`height`, `deviceScaleFactor`,
+  `userAgent`, `locale`, `timezone`, `latitude`+`longitude`, `colorScheme`, `reducedMotion`, `offline`.
+  Reload after it if the page reads these at load. `"action": "clear"` resets. Geolocation still needs the
+  site's own permission.
+- **HAR Record** `start` … `stop`: request metadata as HAR 1.2 (at most 500 entries, `truncated` past that),
+  into `{{har}}`, a `dataset` or a downloaded `filename`. No bodies, cookies or auth headers; sensitive URL
+  query values are redacted.
+- **Console**: with the debugger attached, each step records the page's console messages and uncaught
+  exceptions; Reports shows them under the step. Assert `console-errors` counts the errors.
+- **Clear Site Data** `origins` (exact `https://site.example` origins, one per line): deletes cookies,
+  localStorage, IndexedDB, Cache Storage and service workers for those sites, Chromium only, permanent.
+  Cookies are removed for the whole registrable domain (subdomains too). Put it first for a clean start.
+
+Example: [`mock-api-mobile`](examples/mock-api-mobile.blockflow.json).
 
 ## 14. Scraping and data
 
@@ -567,6 +599,7 @@ Each example is in both formats: `<name>.script.json` (the script, start here) a
 | [`scrape-to-csv`](examples/scrape-to-csv.blockflow.json) | Paginate + Extract List + dataset + CSV download |
 | [`data-driven-login`](examples/data-driven-login.blockflow.json) | Data Table + For Each + soft Assert, a secret chosen by an expression |
 | [`api-to-dataset`](examples/api-to-dataset.blockflow.json) | HTTP Request + Transform + dataset history + If |
+| [`mock-api-mobile`](examples/mock-api-mobile.blockflow.json) | Emulate a phone + dark mode, Route mocks a 503 and blocks analytics, Assert text and console errors |
 | [`playground-tour`](examples/playground-tour.blockflow.json) | the "Try it" workflow: Click, Fill, Select Option and Assert on `docs/manual-test/playground.html` (`npm run playground`) |
 
 ## 17. Limits (what a browser extension cannot do, or BlockFlow does not do yet)
@@ -585,6 +618,9 @@ Each example is in both formats: `<name>.script.json` (the script, start here) a
   start after the Wait For starts. Wait for Download cannot open the saved file: `read` fetches its
   address again (a link that makes a new file every time gives that new file; a POST form download
   cannot be read). Chromium full-page and background-tab screenshots need the debugger permission.
+- Route mocking, Emulate, HAR Record, console capture and Clear Site Data need Chromium (the `debugger`
+  or `browsingData` permission); Firefox explains that. Route with only `abort`/`redirect` rules works
+  everywhere. HAR replay is not built. Emulation covers the listed settings, not a full device.
 - Pages browsers protect: `chrome://`, the extension stores, other extensions, PDF viewer. `file://`
   only after the user enables "Allow access to file URLs".
 - CAPTCHAs and 2FA are not bypassed: use Manual Step.
