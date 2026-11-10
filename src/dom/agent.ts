@@ -3,7 +3,7 @@ import { FrameBoundaryError, LocatorError, describeElement, resolveLocator, text
 import { bestLocator } from './bestLocator';
 import { takeSnapshot } from './snapshot';
 import { SNAPSHOT_MAX_LINES } from '../core/page';
-import type { AgentCall, AgentRequest, AgentResponse, FormFieldRow, Modifier, Point, UploadFile } from '../core/page';
+import type { AgentCall, AgentRequest, AgentResponse, BoxResult, FormFieldRow, HighlightResult, Modifier, Point, UploadFile } from '../core/page';
 import type { ErrorCode } from '../core/errors';
 
 /**
@@ -1203,6 +1203,82 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
     return { x: rect.left + origin.x, y: rect.top + origin.y, width: rect.width, height: rect.height };
   }
 
+  /** M5.1: the first match's box in the tab's viewport, at once (no waiting, scrolling or strict mode). */
+  function box(request: Extract<AgentRequest, { op: 'box' }>): Done {
+    const found = all(request.locator);
+    const element = found[0];
+    if (!element) return { found: false, count: 0 } satisfies BoxResult;
+    const rect = element.getBoundingClientRect();
+    const origin = documentOrigin(element.ownerDocument);
+    return {
+      found: true,
+      x: rect.left + origin.x,
+      y: rect.top + origin.y,
+      width: rect.width,
+      height: rect.height,
+      count: found.length,
+      visible: isVisible(element),
+    } satisfies BoxResult;
+  }
+
+  /** Marks our overlay hosts; their content is in a closed shadow root, so locators and snapshots skip it. */
+  const HIGHLIGHT_ATTR = 'data-blockflow-highlight';
+
+  /** Removes every highlight overlay from `owner`. */
+  function clearHighlight(owner: Document): void {
+    for (const overlay of Array.from(owner.querySelectorAll(`[${HIGHLIGHT_ATTR}]`))) overlay.remove();
+  }
+
+  /**
+   * M5.1 / M5.2: an outline over the first match, drawn in the element's own document (absolute, in document
+   * coordinates, so it scrolls with the page). Replaces earlier highlights; removed after `ms` when given.
+   */
+  function highlight(request: Extract<AgentRequest, { op: 'highlight' }>): Done {
+    if (request.clear || !request.locator) {
+      clearHighlight(doc);
+      return { cleared: true } satisfies HighlightResult;
+    }
+    const found = all(request.locator);
+    const element = found[0];
+    clearHighlight(doc);
+    if (!element) return { highlighted: false, count: 0 } satisfies HighlightResult;
+    const owner = element.ownerDocument;
+    const view = owner.defaultView ?? win;
+    if (owner !== doc) clearHighlight(owner);
+    const rect = element.getBoundingClientRect();
+    const overlay = owner.createElement('div');
+    overlay.setAttribute(HIGHLIGHT_ATTR, '');
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.style.cssText = [
+      'position:absolute',
+      `left:${rect.left + view.scrollX - 2}px`,
+      `top:${rect.top + view.scrollY - 2}px`,
+      `width:${rect.width + 4}px`,
+      `height:${rect.height + 4}px`,
+      'box-sizing:border-box',
+      'border:2px solid #f59e0b',
+      'border-radius:3px',
+      'background:rgba(245,158,11,0.18)',
+      'pointer-events:none',
+      'z-index:2147483647',
+      'margin:0',
+      'padding:0',
+    ].join(';');
+    if (request.label && typeof overlay.attachShadow === 'function') {
+      const shadow = overlay.attachShadow({ mode: 'closed' });
+      const tag = owner.createElement('span');
+      tag.textContent = request.label.slice(0, 120);
+      tag.style.cssText =
+        'position:absolute;left:-2px;bottom:100%;margin-bottom:2px;padding:1px 6px;border-radius:3px;background:#f59e0b;color:#111;font:600 12px/1.4 system-ui,sans-serif;white-space:nowrap';
+      shadow.append(tag);
+    }
+    owner.documentElement.append(overlay);
+    if (request.ms !== undefined && request.ms > 0) {
+      view.setTimeout(() => overlay.remove(), request.ms);
+    }
+    return { highlighted: true, count: found.length } satisfies HighlightResult;
+  }
+
   /** The page (or the part under `locator`) as an outline, see src/dom/snapshot.ts. */
   function snapshot(request: Extract<AgentRequest, { op: 'snapshot' }>): Done {
     const root = request.locator ? all(request.locator)[0] : (doc.body ?? doc.documentElement);
@@ -1343,6 +1419,10 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
         return snapshot(request);
       case 'measure':
         return measure(request);
+      case 'box':
+        return box(request);
+      case 'highlight':
+        return highlight(request);
     }
   }
 
@@ -1354,7 +1434,13 @@ export function createAgent(win: PageWindow = window as PageWindow, doc: Documen
           return { status: 'done', result: await attempt(request) };
         } catch (error) {
           if (error instanceof FrameBoundaryError) {
-            const offset = (request.op === 'locate' || request.op === 'measure') && error.frame ? frameOffset(error.frame) : undefined;
+            // `box` only looks: where the frame's content starts, without scrolling it on screen.
+            const offset =
+              (request.op === 'locate' || request.op === 'measure') && error.frame
+                ? frameOffset(error.frame)
+                : request.op === 'box' && error.frame
+                  ? frameContentOrigin(error.frame)
+                  : undefined;
             return { status: 'frame', src: error.src, rest: error.rest, ...(offset ? { offset } : {}) };
           }
           const url = doc.URL;

@@ -54,16 +54,104 @@ export interface Screenshot {
   dataUrl: string;
 }
 
-/** Stores a screenshot and deletes the oldest beyond MAX_SCREENSHOTS. */
+/** Stores a screenshot and deletes the oldest beyond MAX_SCREENSHOTS (trace images have their own limits). */
 export async function saveScreenshot(shot: Screenshot): Promise<void> {
   await done((await store(SCREENSHOTS, 'readwrite')).put(shot));
-  // Keep the newest MAX_SCREENSHOTS.
-  const all = (await done((await store(SCREENSHOTS)).getAll())) as Screenshot[];
+  // Keep the newest MAX_SCREENSHOTS. Trace image keys start with "~", after every UUID: not loaded here.
+  const all = (await done((await store(SCREENSHOTS)).getAll(IDBKeyRange.upperBound(TRACE_PREFIX, true)))) as Screenshot[];
   if (all.length > MAX_SCREENSHOTS) {
     const old = all.sort((a, b) => a.ts - b.ts).slice(0, all.length - MAX_SCREENSHOTS);
     const writable = await store(SCREENSHOTS, 'readwrite');
     for (const item of old) writable.delete(item.id);
   }
+}
+
+// ---------- M5.1 trace images ----------
+
+/**
+ * Trace screenshots (before/after each traced step) share the `screenshots` store but not its limit, so a
+ * traced run cannot push out the failure screenshots of other runs. Their key carries what pruning needs
+ * (`~t|<time>|<runId>|<bytes>|<random>`), so it reads keys only, never the images.
+ *
+ * Limits: at most MAX_TRACE_IMAGES_PER_RUN images per run (later steps of a longer run get no images), and
+ * at most MAX_TRACE_IMAGES / MAX_TRACE_BYTES over all runs: the oldest runs' trace images go first, whole
+ * runs at a time, never the run being saved.
+ */
+export const TRACE_PREFIX = '~t|';
+/** Before + after for 100 steps. */
+export const MAX_TRACE_IMAGES_PER_RUN = 200;
+export const MAX_TRACE_IMAGES = 1_000;
+/** Sum of the data: URL lengths (about the stored size). */
+export const MAX_TRACE_BYTES = 120 * 1024 * 1024;
+
+/** What a trace image key says about the image. */
+export interface TraceKey {
+  id: string;
+  ts: number;
+  runId: string;
+  bytes: number;
+}
+
+/** The key of a new trace image. */
+export function traceKey(runId: string, ts: number, bytes: number, random: string): string {
+  return `${TRACE_PREFIX}${ts.toString(36).padStart(9, '0')}|${runId.replace(/\|/g, '_')}|${bytes}|${random}`;
+}
+
+/** Reads a trace image key; undefined for other screenshot ids. */
+export function parseTraceKey(id: string): TraceKey | undefined {
+  if (!id.startsWith(TRACE_PREFIX)) return undefined;
+  const [ts, runId, bytes] = id.slice(TRACE_PREFIX.length).split('|');
+  if (!ts || !runId || bytes === undefined) return undefined;
+  return { id, ts: parseInt(ts, 36), runId, bytes: Number(bytes) || 0 };
+}
+
+/**
+ * Which trace images to delete so that the stored ones fit the totals: whole runs, oldest first (by their
+ * first image), never `keepRunId`. Pure, for tests.
+ */
+export function traceEvictions(keys: TraceKey[], keepRunId: string, limits = { images: MAX_TRACE_IMAGES, bytes: MAX_TRACE_BYTES }): string[] {
+  let images = keys.length;
+  let bytes = keys.reduce((sum, key) => sum + key.bytes, 0);
+  if (images <= limits.images && bytes <= limits.bytes) return [];
+  const runs = new Map<string, TraceKey[]>();
+  for (const key of keys) runs.set(key.runId, [...(runs.get(key.runId) ?? []), key]);
+  const oldestFirst = [...runs.entries()]
+    .filter(([runId]) => runId !== keepRunId)
+    .sort(([, a], [, b]) => Math.min(...a.map((key) => key.ts)) - Math.min(...b.map((key) => key.ts)));
+  const evicted: string[] = [];
+  for (const [, list] of oldestFirst) {
+    if (images <= limits.images && bytes <= limits.bytes) break;
+    for (const key of list) {
+      evicted.push(key.id);
+      images -= 1;
+      bytes -= key.bytes;
+    }
+  }
+  return evicted;
+}
+
+/** The ids of every stored trace image (keys only). */
+async function traceKeys(): Promise<TraceKey[]> {
+  const keys = (await done((await store(SCREENSHOTS)).getAllKeys(IDBKeyRange.bound(TRACE_PREFIX, `${TRACE_PREFIX}\uffff`)))) as string[];
+  return keys.map(parseTraceKey).filter((key): key is TraceKey => key !== undefined);
+}
+
+/**
+ * Stores one trace image of `runId` and evicts the oldest runs' trace images beyond the totals. Returns its
+ * id, or null when the run already has MAX_TRACE_IMAGES_PER_RUN images (nothing is stored).
+ */
+export async function saveTraceImage(runId: string, dataUrl: string, random: string, now = Date.now()): Promise<string | null> {
+  const existing = await traceKeys();
+  const safeRun = runId.replace(/\|/g, '_');
+  if (existing.filter((key) => key.runId === safeRun).length >= MAX_TRACE_IMAGES_PER_RUN) return null;
+  const id = traceKey(runId, now, dataUrl.length, random);
+  await done((await store(SCREENSHOTS, 'readwrite')).put({ id, runId, ts: now, dataUrl } satisfies Screenshot));
+  const evict = traceEvictions([...existing, { id, ts: now, runId: safeRun, bytes: dataUrl.length }], safeRun);
+  if (evict.length > 0) {
+    const writable = await store(SCREENSHOTS, 'readwrite');
+    for (const old of evict) writable.delete(old);
+  }
+  return id;
 }
 
 /** One screenshot by id (editor: run inspector, Reports page). */

@@ -21,6 +21,7 @@ export const ERROR_CODES = {
   'option.not-found': { meaning: 'The select has no such option (or it is disabled).', fix: 'Use one of the options the message lists.' },
   timeout: { meaning: 'The step ran out of time waiting for something other than an element (text, URL, a response, a popup).', fix: 'Raise the step timeout, or wait for the right thing.' },
   'assert.failed': { meaning: 'An Assert did not hold.', fix: 'The page differs from what the test expects: fix the expectation or the steps before it.' },
+  'visual.mismatch': { meaning: 'A Screenshot with "compare" differs from its baseline by more than the allowed share of pixels (or has another size).', fix: 'Open the step in Reports: if the new look is right, press "Accept new baseline"; mask regions that change on their own.' },
   'http.status': { meaning: 'HTTP Request got a non-2xx answer with "fail on error" on.', fix: 'Check the URL, method, headers and body.' },
   'http.network': { meaning: 'HTTP Request could not reach the server.', fix: 'Check the URL and the host permission.' },
   'navigation.failed': { meaning: 'A page did not load (or the tab never finished loading).', fix: 'Check the URL; raise the timeout for slow pages.' },

@@ -1,0 +1,69 @@
+{
+  "format": "blockflow-workflows",
+  "version": 1,
+  "workflows": [
+    {
+      "schemaVersion": 2,
+      "id": "login-structure",
+      "name": "Login page structure",
+      "enabled": false,
+      "nodes": [
+        {
+          "id": "open",
+          "type": "open-url",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "config": {
+            "url": "https://example.com/login",
+            "where": "window",
+            "tab": "main",
+            "active": true,
+            "waitUntil": "load"
+          }
+        },
+        {
+          "id": "layout",
+          "type": "assert",
+          "position": {
+            "x": 260,
+            "y": 0
+          },
+          "config": {
+            "subject": "aria-snapshot",
+            "expected": "- heading \"Log in\" [level=1]\n- form \"Login\":\n  - textbox \"Email\"\n  - textbox \"Password\"\n  - button /Sign (in|up)/",
+            "tab": "main"
+          }
+        },
+        {
+          "id": "form",
+          "type": "assert",
+          "position": {
+            "x": 520,
+            "y": 0
+          },
+          "config": {
+            "subject": "aria-snapshot",
+            "locator": "role=form[name=\"Login\"]",
+            "expected": "- checkbox \"Remember me\" [checked=false]\n- button \"Sign in\"",
+            "message": "The login form changed",
+            "tab": "main"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "open",
+          "target": "layout"
+        },
+        {
+          "id": "e1",
+          "source": "layout",
+          "target": "form"
+        }
+      ]
+    }
+  ]
+}

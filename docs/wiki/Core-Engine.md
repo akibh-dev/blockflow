@@ -100,6 +100,7 @@ Implemented by `src/browser/host.ts` ([Browser Host](Browser-Host.md)) and by
 | `secrets.all` | `() => Promise<Record<string, string>>` | Loaded once per run. |
 | `screenshots.capture` | `(tabId, runId) => Promise<string \| null>` | After-step screenshots. |
 | `screenshots.take` | `(tabId, ScreenshotOptions) => Promise<{ id, width, height }>` | Screenshot block. Options: `runId`, `area` (`visible` / `full` / `element`), `locator?`, `format` (`png` / `jpeg`), `quality?`, `timeoutMs`. Throws when it cannot be taken. |
+| `visual?` | `{ compare(VisualCompareRequest) => Promise<VisualCompareResult> }` | Optional (M5.3); Screenshot `compare` (types in [visual.ts](../../src/core/visual.ts), [Core Modules](Core-Modules.md#visual)). Without it a `compare` step fails `config.invalid`. |
 | `cookies.get` / `set` / `remove` | `(url, name?) => Promise<CookieInfo[]>`, `(CookieSetOptions) => Promise<CookieInfo>`, `(url, name?) => Promise<number>` | Cookies & Storage. `CookieInfo` = `{ name, value, domain, path, expires (s, -1 = session), httpOnly, secure, sameSite }`; `remove` without `name` clears the site. |
 | `datasets.read` / `write` | `(name)`, `(name, rows, 'append' \| 'replace') => Promise<number>` | Save Dataset and friends. |
 | `downloads.save` | `(filename, content, mime)` | Download. |
@@ -259,10 +260,10 @@ Details: [Scheduling and Timers](Scheduling-and-Timers.md),
 
 Codes: `locator.not-found`, `locator.strict`, `locator.invalid`, `element.not-visible`, `element.disabled`,
 `element.not-editable`, `element.covered`, `element.unstable`, `element.wrong-type`, `option.not-found`,
-`timeout`, `assert.failed`, `http.status`, `http.network`, `navigation.failed`, `tab.missing`, `tab.closed`,
+`timeout`, `assert.failed`, `visual.mismatch`, `http.status`, `http.network`, `navigation.failed`, `tab.missing`, `tab.closed`,
 `frame.unreachable`, `page.restricted`, `permission.missing`, `script.error`, `config.invalid`,
 `workflow.failed`, `step.failed`. Who throws which: [Page Protocol](Page-Protocol.md#error-codes) for
-page ops; blocks and host: Assert `assert.failed`, HTTP Request `http.status` / `http.network`, Run Script
+page ops; blocks and host: Assert `assert.failed`, Screenshot `compare` `visual.mismatch`, HTTP Request `http.status` / `http.network`, Run Script
 `script.error`, Open Tab / Navigate / HTTP Request with a bad URL `config.invalid`, `requireSessionTab`
 `tab.missing`, page loads `navigation.failed`, the debugger and userScripts permissions
 `permission.missing`, URL / response / popup / network-idle waits `timeout`.

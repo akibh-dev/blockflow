@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { loadScreenshot } from '../../../browser/blobStore';
 import { durationOf, summarize, toHtmlReport, toJsonReport, toJUnitXml } from '../../../core/report';
 import { TRIGGER_LABELS } from '../../../core/runs';
@@ -7,6 +7,8 @@ import { downloadText } from '../files';
 import { registry } from '../registry';
 import { ErrorDetails, formatMs } from './ConfigPanel';
 import { Screenshot } from './Screenshot';
+import { Filmstrip, StepTraceView } from './TraceTimeline';
+import { VisualComparePanel } from './VisualComparePanel';
 
 interface ReportsPageProps {
   runs: RunRecord[];
@@ -21,6 +23,9 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
   const [workflow, setWorkflow] = useState('');
   const [status, setStatus] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+  /** M5.1: the step picked in the filmstrip (index into the open run's steps). */
+  const [picked, setPicked] = useState<number | null>(null);
+  useEffect(() => setPicked(null), [openId]);
 
   const workflows = useMemo(() => [...new Map(runs.map((run) => [run.workflowId, run.workflowName])).entries()], [runs]);
   const shown = useMemo(
@@ -40,9 +45,11 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
     const screenshots: Record<string, string> = {};
     for (const run of shown) {
       for (const step of run.steps) {
-        if (step.screenshot) {
-          const shot = await loadScreenshot(step.screenshot).catch(() => undefined);
-          if (shot) screenshots[step.screenshot] = shot.dataUrl;
+        // Step screenshots and M5.1 trace pictures.
+        for (const id of [step.screenshot, step.trace?.before, step.trace?.after]) {
+          if (!id || screenshots[id]) continue;
+          const shot = await loadScreenshot(id).catch(() => undefined);
+          if (shot) screenshots[id] = shot.dataUrl;
         }
       }
     }
@@ -117,11 +124,21 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
               </button>
             </p>
             {open.error && <p className="bf-error">{open.error}</p>}
+            {open.mode?.trace && <p className="bf-muted">Traced run: before/after pictures of every page step.</p>}
+            <Filmstrip
+              steps={open.steps}
+              selected={picked}
+              label={(step) => blockLabel(step.blockType)}
+              onSelect={(index) => {
+                setPicked(index);
+                document.getElementById(`bf-report-step-${index}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+              }}
+            />
             <ol className="bf-report-steps">
               {open.steps.map((step, index) => (
                 // Steps of one run have no ids of their own.
                 // eslint-disable-next-line react/no-array-index-key
-                <li key={index} className={step.status}>
+                <li key={index} id={`bf-report-step-${index}`} className={`${step.status}${picked === index ? ' bf-picked' : ''}`}>
                   <span className={`bf-run-badge ${step.status}`}>{step.status}</span> <strong>{blockLabel(step.blockType)}</strong>
                   {step.durationMs !== undefined && <span className="bf-muted"> · {formatMs(step.durationMs)}</span>}
                   {step.attempts > 1 && <span className="bf-muted"> · {step.attempts} attempts</span>}
@@ -140,6 +157,8 @@ export function ReportsPage({ runs, onShowOnCanvas, onClear }: ReportsPageProps)
                     </details>
                   )}
                   {step.screenshot && <Screenshot id={step.screenshot} />}
+                  {step.trace && <StepTraceView trace={step.trace} />}
+                  <VisualComparePanel step={step} />
                 </li>
               ))}
             </ol>

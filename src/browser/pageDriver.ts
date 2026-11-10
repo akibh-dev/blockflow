@@ -161,7 +161,7 @@ export async function actInTab(tabId: number, original: AgentRequest, timeoutMs:
   // Changes when the locator crosses into a cross-origin iframe.
   let request = original;
   let frameId: number | undefined;
-  // For `locate` / `measure`: where the frame we moved into starts in the tab's viewport (frames add up).
+  // For `locate` / `measure` / `box`: where the frame we moved into starts in the tab's viewport (frames add up).
   const offset = { x: 0, y: 0 };
   for (;;) {
     const budgetMs = Math.max(0, Math.min(SLICE_MS, deadline - Date.now() - 150));
@@ -194,7 +194,7 @@ export async function actInTab(tabId: number, original: AgentRequest, timeoutMs:
     }
     if (outcome?.status === 'done') {
       // The agent in a frame answers in that frame's coordinates; real input needs the tab's.
-      if ((request.op === 'locate' || request.op === 'measure') && typeof outcome.result.x === 'number' && typeof outcome.result.y === 'number') {
+      if ((request.op === 'locate' || request.op === 'measure' || request.op === 'box') && typeof outcome.result.x === 'number' && typeof outcome.result.y === 'number') {
         return { ...outcome.result, x: outcome.result.x + offset.x, y: outcome.result.y + offset.y };
       }
       return outcome.result;

@@ -1,15 +1,19 @@
 import { browser } from 'wxt/browser';
 import { CodedError } from '../core/errors';
 import { STORAGE_KEYS } from '../shared/keys';
-import { readDataset, writeDataset } from './blobStore';
+import { readDataset, saveTraceImage, writeDataset } from './blobStore';
+import { uid } from '../core/id';
 import { actOnHtml } from './htmlParse';
 import { tabInfo, waitForLoad, waitForRequest, waitForResponse, waitForUrl, watchNetwork } from './navigation';
 import { addOwnTab } from './ownTabs';
 import { askUser } from './prompts';
+import { pauseForDebug } from './debugChannel';
 import { loadWorkflows } from './stores';
 import { act } from './pageDriver';
 import { waitForPopup } from './popups';
-import { capture, take } from './screenshots';
+import { capture, captureForTrace, take } from './screenshots';
+import { createTrace } from './trace';
+import { createVisual } from './visual';
 import { getCookies, removeCookies, setCookie } from './cookies';
 import { readDownloadText, waitForDownload } from './downloads';
 import { createRunHost } from './m3Host';
@@ -223,9 +227,18 @@ async function runScript(tabId: number, code: string, data: Record<string, unkno
 export function createExtensionHost(scheduler: Scheduler): Host {
   const host: Host = {
     forRun: (runId) => {
-      const scoped = createRunHost(host, runId);
+      const { traceTelemetry, ...scoped } = createRunHost(host, runId);
       return {
         ...scoped,
+        // M5.1: screenshots around traced steps, element box, URL, network summary (src/browser/trace.ts).
+        trace: createTrace({
+          runId,
+          shoot: (tabId, useDebugger) => captureForTrace(tabId, runId, useDebugger),
+          save: (dataUrl) => saveTraceImage(runId, dataUrl, uid()),
+          act: (tabId, request, timeoutMs) => act(tabId, request, timeoutMs),
+          url: async (tabId) => (await tabInfo(tabId))?.url,
+          telemetry: traceTelemetry,
+        }),
         page: { ...host.page, act: (tabId, request, timeoutMs, options) => act(tabId, request, timeoutMs, { ...options, runId }) },
         tabs: {
           ...host.tabs,
@@ -267,6 +280,10 @@ export function createExtensionHost(scheduler: Scheduler): Host {
     screenshots: { capture, take },
     cookies: { get: getCookies, set: setCookie, remove: removeCookies },
     prompt: { ask: askUser },
+    // M5.3: Screenshot `compare` baselines and diffs (visual.ts); run-scoped hosts inherit it.
+    visual: createVisual(),
+    // M5.2: debug runs wait here at breakpoints (debugChannel.ts); run-scoped hosts inherit it.
+    debug: { pause: pauseForDebug },
     datasets: {
       read: async (name) => (await readDataset(name))?.rows ?? [],
       write: writeDataset,

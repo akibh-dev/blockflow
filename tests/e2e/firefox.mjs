@@ -499,6 +499,75 @@ try {
   }
 
   {
+    // M5 on Firefox: visual comparison (background page decode), trace (captureTab), a debug pause, ARIA snapshot.
+    const runWithOptions = async (wf, options, whilePending) => {
+      const readRuns = async () => (await bridge('get', 'bf:runs'))['bf:runs'] ?? [];
+      const seen = new Set((await readRuns()).filter((candidate) => candidate.workflowId === wf.id).map((candidate) => candidate.id));
+      await bridge('send', { type: 'bf:run-workflow', workflow: wf, options });
+      for (const deadline = Date.now() + 90_000; Date.now() < deadline; ) {
+        const done = (await readRuns()).findLast((candidate) => candidate.workflowId === wf.id && !seen.has(candidate.id) && candidate.status !== 'running');
+        if (done) return done;
+        await whilePending?.();
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      throw new Error(`Run of ${wf.name} did not finish`);
+    };
+
+    const visual = workflow('m5 visual', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/visual.html`, active: false } },
+      { id: 'page', type: 'screenshot', config: { compare: true, mask: [{ region: '#clock' }, { region: '272, 332, 40, 20' }] } },
+      { id: 'card', type: 'screenshot', config: { area: 'element', locator: '#card', compare: true, mask: [{ region: '#badge' }] } },
+      { id: 'close', type: 'close-tab' },
+    ]);
+    const visualAt = (query, update = false) => {
+      visual.nodes[0].config.url = `${base}/visual.html${query}`;
+      for (const node of visual.nodes.slice(1, 3)) node.config.updateBaseline = update;
+      return run(visual);
+    };
+    const first = await visualAt('');
+    check('M5 visual: first run saves baselines', first.status === 'passed' && ['page', 'card'].every((id) => step(first, id)?.output?.visual?.status === 'baseline-saved'), summary(first));
+    const same = await visualAt('');
+    check('M5 visual: same page matches with 0 pixels', same.status === 'passed' && step(same, 'page')?.output?.visual?.diffPixels === 0, summary(same));
+    const masked = await visualAt('?clock=23:59&badge=%23f59e0b');
+    check('M5 visual: masked changes pass', masked.status === 'passed', summary(masked));
+    const changed = await visualAt('?v=2');
+    check('M5 visual: a changed page fails with visual.mismatch', changed.status === 'failed' && step(changed, 'page')?.code === 'visual.mismatch', summary(changed));
+    const updated = await visualAt('?v=2', true);
+    check('M5 visual: updateBaseline, then the new look passes', updated.status === 'passed' && (await visualAt('?v=2')).status === 'passed', summary(updated));
+
+    const traced = await runWithOptions(workflow('m5 trace', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/clicks.html`, active: false } },
+      { id: 'click', type: 'click', config: { locator: '#target' } },
+      { id: 'close', type: 'close-tab' },
+    ]), { trace: true });
+    const clickTrace = step(traced, 'click')?.trace;
+    check('M5 trace: before/after pictures and the box (captureTab)', traced.status === 'passed' && traced.mode?.trace === true && Boolean(clickTrace?.before && clickTrace?.after && clickTrace?.box), JSON.stringify(clickTrace));
+
+    const pauses = [];
+    const debugged = await runWithOptions(workflow('m5 debug', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/welcome.html`, active: false } },
+      { id: 'see', type: 'assert', config: { subject: 'text', locator: '#greeting', operator: 'contains', expected: 'Welcome' }, step: { pause: true } },
+      { id: 'close', type: 'close-tab' },
+    ]), { debug: {} }, async () => {
+      const paused = (await bridge('session', 'bf:debug-pause'))['bf:debug-pause'] ?? [];
+      for (const pause of paused) {
+        if (pauses.some((seen) => seen.runId === pause.runId && seen.nodeId === pause.nodeId)) continue;
+        pauses.push(pause);
+        await bridge('send', { type: 'bf:debug-answer', runId: pause.runId, action: 'continue' });
+      }
+    });
+    check('M5 debug: pauses at the breakpoint, Continue finishes the run', debugged.status === 'passed' && pauses.length === 1 && pauses[0].nodeId === 'see' && pauses[0].reason === 'breakpoint', `${summary(debugged)} ${JSON.stringify(pauses)}`);
+
+    const aria = await run(workflow('m5 aria', [
+      { id: 'open', type: 'open-url', config: { url: `${base}/login.html`, active: false } },
+      { id: 'ok', type: 'assert', config: { subject: 'aria-snapshot', locator: 'form', expected: '- checkbox "Remember me"\n- paragraph:\n  - button /^Sign/' } },
+      { id: 'bad', type: 'assert', config: { subject: 'aria-snapshot', expected: '- button "Nope"' }, step: { onError: 'continue', timeoutSeconds: 2 } },
+      { id: 'close', type: 'close-tab' },
+    ]));
+    check('M5 ARIA snapshot: a matching template passes, a wrong one fails with a message', step(aria, 'ok')?.status === 'passed' && step(aria, 'bad')?.code === 'assert.failed' && /Nope/.test(step(aria, 'bad')?.error ?? ''), summary(aria));
+  }
+
+  {
     const record = await run(workflow('notify', [{ id: 'n', type: 'notify', config: { title: 'BlockFlow e2e', message: 'hello' } }]));
     check('Notify', record.status === 'passed', summary(record));
   }

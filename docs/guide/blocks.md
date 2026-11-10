@@ -654,9 +654,14 @@ Take a picture of what the tab shows, the whole page, or one element. Shown on t
 | `locator` (Element) | locator | `""` | supports `{{…}}`. For "one element". It is scrolled into view first. |
 | `format` (Format) | one of `png`, `jpeg` | `"png"` |  |
 | `quality` (JPEG quality) | number | `80` |  |
+| `compare` (Compare with the baseline) | boolean | `false` | Visual check: the first run keeps the picture as this block's baseline; later runs fail (visual.mismatch) when it looks different. PNG only. |
+| `threshold` (Colour threshold) | number | `0.2` | How different a pixel's colour must be to count, 0 to 1 (0.2 like Playwright; 0 = any change). |
+| `maxDiffRatio` (Allowed difference) | number | `0` | Share of pixels that may differ, 0 to 1 (0.01 = 1%). 0 = none. |
+| `mask` (Ignore regions) | list of rows {region} | `[]` | Parts that change on their own (a clock, an ad): an element locator, or "x, y, width, height" in CSS pixels from the picture's top-left. |
+| `updateBaseline` (Update the baseline) | boolean | `false` | Save this run's picture as the new baseline and pass (like Playwright's --update-snapshots). Switch it off again after. |
 | `tab` (Tab) | text | `"main"` | The name an Open Tab block gave the tab earlier in this run. Usually "main". |
 
-Adds to the data: `screenshotId` (Id of the stored picture (shown on the step and in the report).); `screenshot` ({id, width, height, area}: the size in pixels.)
+Adds to the data: `screenshotId` (Id of the stored picture (shown on the step and in the report).); `screenshot` ({id, width, height, area}: the size in pixels.); `visual` (With compare: {status (baseline-saved, baseline-updated, match), diffRatio, diffPixels, comparisonId}. A mismatch fails the step with visual.mismatch.)
 
 ## ✅ Assert — `assert`
 
@@ -668,12 +673,12 @@ Check that something is true. Fails the run (or just records it, if soft) when i
 
 | Setting (`config` key) | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `subject` (Check) | one of `text`, `input`, `attribute`, `count`, `visible`, `hidden`, `checked`, `unchecked`, `enabled`, `disabled`, `focused`, `editable`, `in-viewport`, `class`, `css`, `accessible-name`, `accessible-description`, `url`, `title`, `console-errors`, `value` | `"text"` |  |
-| `locator` (Element) | locator | `""` | supports `{{…}}`. For element checks. |
+| `subject` (Check) | one of `text`, `input`, `attribute`, `count`, `visible`, `hidden`, `checked`, `unchecked`, `enabled`, `disabled`, `focused`, `editable`, `in-viewport`, `class`, `css`, `accessible-name`, `accessible-description`, `aria-snapshot`, `url`, `title`, `console-errors`, `value` | `"text"` |  |
+| `locator` (Element) | locator | `""` | supports `{{…}}`. For element checks. For "ARIA snapshot": the part of the page (empty = the whole page). |
 | `name` (Attribute or CSS property) | text | `""` | The attribute name for "attribute of an element", the CSS property (color, display…) for "CSS value". |
 | `value` (Value) | text | `""` | supports `{{…}}`. Only for "a value from the data". |
 | `operator` (Must) | one of `equals`, `not-equals`, `contains`, `not-contains`, `starts-with`, `ends-with`, `matches`, `greater`, `greater-equal`, `less`, `less-equal`, `empty`, `not-empty`, `true`, `false` | `"contains"` | Not used by the yes/no checks (visible, checked…). |
-| `expected` (Expected) | text | `""` | supports `{{…}}` |
+| `expected` (Expected) | text | `""` | supports `{{…}}`. For "ARIA snapshot": a template, one line per element, nested by indenting: - heading "Welcome" [level=1], - button /Sign (in\|up)/, - listitem: Apples. |
 | `message` (Message when it fails) | text | `""` | supports `{{…}}` |
 | `soft` (Soft: record the failure but keep going) | boolean | `false` |  |
 | `tab` (Tab) | text | `"main"` | The name an Open Tab block gave the tab earlier in this run. Usually "main". |

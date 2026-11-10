@@ -52,6 +52,34 @@ export interface StepRecord {
   childRunId?: string;
   /** Bounded page console/exception diagnostics, with secret values masked by the engine. */
   console?: ConsoleEntry[];
+  /** M5.1 trace of this step (when the run or the step was traced). */
+  trace?: StepTrace;
+}
+
+/** M5.1: what the page looked like around one step. Screenshot ids are blobStore keys, like `screenshot`. */
+export interface StepTrace {
+  /** Screenshot before the block ran. */
+  before?: string;
+  /** Screenshot after it finished (passed or failed). */
+  after?: string;
+  /** The element the step acted on, in CSS pixels of the screenshot (page steps with a locator). */
+  box?: { x: number; y: number; width: number; height: number };
+  /** The tab's viewport in CSS pixels when `box` was measured (to scale the box onto the image). */
+  viewport?: { width: number; height: number };
+  /** Page URL after the step. */
+  url?: string;
+  /** Requests seen during the step when CDP was on: count, failed count and the slowest few (metadata only). */
+  network?: { requests: number; failed: number; slowest?: { url: string; method: string; status?: number; ms: number }[] };
+}
+
+/** M5: how a run was started (Run, Debug, Run from here, traced). */
+export interface RunOptions {
+  /** Record a trace for every step (`StepSettings.trace` traces single steps). */
+  trace?: boolean;
+  /** Debug run: pause at breakpoints (`StepSettings.pause`); `pauseOnError` also pauses before a failure is handled. */
+  debug?: { pauseOnError?: boolean };
+  /** M5.5 "Run from here": start at this node with this input (the step's input from an earlier run) instead of the start blocks. */
+  startAt?: { nodeId: string; input: Payload };
 }
 
 /** One run, as stored in `bf:runs` and shown in the editor. */
@@ -72,6 +100,8 @@ export interface RunRecord {
   parentRunId?: string;
   /** This run successfully acquired a Chromium debugger session (CDP). */
   usedDebugger?: boolean;
+  /** M5: traced / debug run, or "Run from here" (the node it started at). */
+  mode?: { trace?: boolean; debug?: boolean; startedAt?: string };
 }
 
 /** Receives a fresh copy of a run after every change. The background stores it; tests collect it. */

@@ -35,9 +35,14 @@ rest. Every listener calls it first.
 | `bf:pick-cancelled` | `PickCancelledMessage` | Picker content script (`onCancel`, Esc) | Background → `cancelPicking()` | none | none (the editor is not told) |
 | `bf:pick-result` | `PickResultMessage` | Background (`finishPicking`) | Editor (`ConfigPanel` listener) | `selector`, `candidates?` (best first), `url`, `sample`, `fields?: FormFieldRow[]` (form mode) | n/a |
 | `bf:pick-error` | `PickErrorMessage` | Background (`startPicking`, `finishPicking`) | Editor (`ConfigPanel`) | `message` | n/a |
-| `bf:run-workflow` | `RunWorkflowMessage` | Editor Run button | Background → `newRunner(workflow).runOnce()` | `workflow: Workflow` (the canvas as is, saved or not) | none; progress via `bf:runs` |
-| `bf:stop-run` | `StopRunMessage` | Editor Stop button | Background → `cancelRequests.add`, `answerPrompt(runId, false)` | `runId` | none |
+| `bf:run-workflow` | `RunWorkflowMessage` | Editor `RunControls` (Run, Run with trace, Debug), ConfigPanel "Run from here" | Background → `newRunner(workflow).runOnce(options)` | `workflow: Workflow` (the canvas as is, saved or not), `options?: RunOptions` (`trace`, `debug: {pauseOnError?}`, `startAt: {nodeId, input}`) | none; progress via `bf:runs` |
+| `bf:stop-run` | `StopRunMessage` | Editor Stop button | Background → `cancelRun`: `cancelRequests.add`, `answerPrompt(runId, false)`, `answerDebug(runId, 'stop')` | `runId` | none |
 | `bf:answer-prompt` | `AnswerPromptMessage` | Editor `PromptBanner` | Background → `answerPrompt(runId, ok)` | `runId`, `ok` (true = Continue) | none |
+| `bf:debug-answer` | `DebugAnswerMessage` | Editor `DebugBanner` | Background → `answerDebug(runId, action)`; `stop` → `cancelRun(runId)` | `runId`, `action: 'continue' \| 'step' \| 'stop'` | none; the pause leaves storage.session `bf:debug-pause` |
+| `bf:accept-baseline` | `AcceptBaselineMessage` | Editor `VisualComparePanel` (Accept new baseline) | Background → `acceptBaseline(comparisonId)` (src/browser/visual.ts) | `comparisonId` | broadcast `bf:baseline-accepted` |
+| `bf:baseline-accepted` | `BaselineAcceptedMessage` | Background (broadcast) | Editor `VisualComparePanel` | `comparisonId`, `error?` | n/a |
+| `bf:run-suite` | `RunSuiteMessage` | Editor `SuitesPage` (▶ Run suite, ↻ Re-run failed) | Background → `runSuite({suite, only: workflowIds})` | `suiteId`, `workflowIds?: string[]` (M5.5: only these workflows of the suite) | none; `bf:suite-progress` per workflow, then `bf:suite-result` |
+| `bf:suite-progress` / `bf:suite-result` | `SuiteProgressMessage` / `SuiteResultMessage` | Background (broadcast) | Editor `SuitesPage` | `suiteId` + `index, total, workflowName, status` / `result?` or `error?` | n/a |
 | `bf:start-recording` | `StartRecordingMessage` | Editor Record button | Background → `startRecording(workflowId, url)` | `workflowId`, `url` | none; state via `bf:recording` |
 | `bf:stop-recording` | `StopRecordingMessage` | Editor (Stop in the recording bar) **or** recorder toolbar in the page (`onStop`) | Background → `stopRecording()` | none | none |
 | `bf:recorded` | `RecordedMessage` | Recorder content script (`onStep`, any frame; locators already `frame=…`-prefixed) | Background → `recordStep(step, sender.tab.id)` | `step: RecordedStep` | none |
@@ -74,6 +79,8 @@ Snapshot: editor ──bf:snapshot-page──▶ bg ──agent snapshot op─�
 Run:     editor ──bf:run-workflow──▶ bg          bg ──storage bf:runs, bf:logs──▶ editor
 Stop:    editor ──bf:stop-run──▶ bg
 Prompt:  bg ──storage bf:prompts + notification──▶ user/editor ──bf:answer-prompt / notification click──▶ bg
+Debug:   bg ──storage.session bf:debug-pause──▶ editor (DebugBanner) ──bf:debug-answer / bf:stop-run──▶ bg
+Visual:  editor (VisualComparePanel) ──bf:accept-baseline──▶ bg (IndexedDB blockflow-visual) ──bf:baseline-accepted──▶ editor
 Record:  editor ──bf:start-recording──▶ bg ──executeScript(recorder.js)──▶ page
          page ──bf:recorded / bf:stop-recording──▶ bg ──storage bf:recording──▶ editor
 Parse:   bg ──bf:parse-html──▶ offscreen ──sendResponse──▶ bg

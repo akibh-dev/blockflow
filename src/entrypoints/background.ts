@@ -5,6 +5,8 @@ import { createExtensionHost } from '../browser/host';
 import { createBrowserScheduler } from '../browser/scheduler';
 import { cancelPicking, finishPicking, relayPickerSync, snapshotForEditor, startPicking } from '../browser/picking';
 import { answerPrompt, clearStalePrompts, promptRunId } from '../browser/prompts';
+import { answerDebug, clearStaleDebugPauses } from '../browser/debugChannel';
+import { acceptBaseline, deleteBaselines } from '../browser/visual';
 import { migrateWorkflow, migrateWorkflows } from '../core/migrate';
 import { appendLog, clearWorkflowState, loadRuns, loadWorkflows, migrateStoredWorkflows, saveRun, saveWorkflows, updateRuns } from '../browser/stores';
 import { createDefaultRegistry } from '../core/blocks';
@@ -113,10 +115,11 @@ export default defineBackground(() => {
     }).runOnce();
   }
 
-  /** The Stop button's path: also declines a Manual Step the run waits on. */
+  /** The Stop button's path: also declines a Manual Step the run waits on and ends a debug pause. */
   function cancelRun(runId: string): void {
     cancelRequests.add(runId);
     answerPrompt(runId, false);
+    answerDebug(runId, 'stop');
   }
 
   // M4 bridge: while "Allow outside control" is on, a native port to the BlockFlow host stays open.
@@ -163,6 +166,7 @@ export default defineBackground(() => {
   // A run still marked "running" from a previous worker can never finish: say so.
   void updateRuns((runs) => markInterrupted(runs, new Set(liveRuns.keys()), new Date().toISOString()));
   void clearStalePrompts().catch(() => {});
+  void clearStaleDebugPauses().catch(() => {});
   void forgetLegacyWatchTabs().catch(() => {});
 
   /**
@@ -346,6 +350,8 @@ export default defineBackground(() => {
       for (const id of removed) {
         await host.scheduler.clearPrefix(workflowTimerPrefix(id));
         await clearWorkflowState(id);
+        // M5.3: its visual baselines go with it.
+        await deleteBaselines(id).catch(report('delete baselines'));
       }
       for (const id of start) await startWorkflow(id, true);
       for (const id of restart) await startWorkflow(id, false);
@@ -381,6 +387,11 @@ export default defineBackground(() => {
       void onMenuClicked(menuItemId, info, tabId).catch(report('e2e menu click'));
       return;
     }
+    // e2e builds only: Firefox content scripts cannot read storage.session, so the Firefox runner's bridge
+    // content script asks here (the answer is the listener's promise, which Firefox supports).
+    if (import.meta.env.BF_E2E && (message as { type?: unknown })?.type === 'bf:e2e-session-get') {
+      return browser.storage.session.get((message as { key: string }).key);
+    }
     if (!isExtensionMessage(message)) return;
     switch (message.type) {
       case 'bf:start-pick':
@@ -406,20 +417,20 @@ export default defineBackground(() => {
         void relayRecorderSync(message, sender.tab?.id).catch(report('recording'));
         break;
       case 'bf:run-workflow':
-        void newRunner(migrateWorkflow(message.workflow)).runOnce().catch(report('run'));
+        void newRunner(migrateWorkflow(message.workflow)).runOnce(message.options).catch(report('run'));
         break;
       case 'bf:stop-run':
         cancelRun(message.runId);
         break;
       case 'bf:run-suite': {
         // Editor Suites page: run a saved suite; progress and the result go back as broadcasts.
-        const { suiteId } = message;
+        const { suiteId, workflowIds } = message;
         const send = (reply: SuiteProgressMessage | SuiteResultMessage) => void browser.runtime.sendMessage(reply).catch(() => {});
         void (async () => {
           try {
             const suite = (await loadSuites()).find((item) => item.id === suiteId);
             if (!suite) throw new Error('That suite no longer exists.');
-            const { result } = await runSuite({ suite }, {
+            const { result } = await runSuite({ suite, ...(workflowIds ? { only: workflowIds } : {}) }, {
               loadWorkflows,
               runWorkflow: (workflow, options) => runWorkflow(workflow, options),
               onProgress: (progress) => send({ type: 'bf:suite-progress', suiteId, ...progress }),
@@ -436,6 +447,20 @@ export default defineBackground(() => {
       case 'bf:answer-prompt':
         answerPrompt(message.runId, message.ok);
         break;
+      case 'bf:debug-answer':
+        // M5.2 DebugBanner: Continue / Step / Stop. Stop goes the Stop button's way (also cancels the run).
+        if (message.action === 'stop') cancelRun(message.runId);
+        else answerDebug(message.runId, message.action);
+        break;
+      case 'bf:accept-baseline': {
+        // M5.3 Visual compare panel: this comparison's screenshot becomes the block's baseline.
+        const { comparisonId } = message;
+        void acceptBaseline(comparisonId)
+          .then(() => ({ type: 'bf:baseline-accepted' as const, comparisonId }))
+          .catch((error: unknown) => ({ type: 'bf:baseline-accepted' as const, comparisonId, error: error instanceof Error ? error.message : String(error) }))
+          .then((reply) => browser.runtime.sendMessage(reply).catch(() => {}));
+        break;
+      }
       case 'bf:start-recording':
         void startRecording(message.workflowId, message.url).catch(report('start recording'));
         break;

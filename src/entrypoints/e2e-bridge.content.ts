@@ -26,7 +26,8 @@ export default defineContentScript({
             // e.g. `{ 'bf:settings': { outsideControl: true } }` (the M4 bridge scenario).
             return browser.storage.local.set(data.arg as Record<string, unknown>);
           case 'session':
-            return browser.storage.session.get(data.arg as string);
+            // Through the background: Firefox content scripts cannot read storage.session.
+            return browser.runtime.sendMessage({ type: 'bf:e2e-session-get', key: data.arg });
           case 'ping':
             return 'pong';
           default:

@@ -170,6 +170,21 @@
         "usedDebugger": {
           "type": "boolean",
           "description": "This run acquired a Chromium debugger session (CDP)."
+        },
+        "mode": {
+          "type": "object",
+          "description": "M5: how the run was started: traced, debug run, or Run from here (the node it started at).",
+          "properties": {
+            "trace": {
+              "type": "boolean"
+            },
+            "debug": {
+              "type": "boolean"
+            },
+            "startedAt": {
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -283,6 +298,110 @@
               }
             }
           }
+        },
+        "trace": {
+          "$ref": "#/$defs/trace"
+        }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "description": "M5.1 trace of a step (traced run, or the step setting `trace`). Picture ids are like `screenshot` (not embedded in JSON).",
+      "properties": {
+        "before": {
+          "type": "string",
+          "description": "Id of the picture taken before the block ran."
+        },
+        "after": {
+          "type": "string",
+          "description": "Id of the picture taken after it finished."
+        },
+        "box": {
+          "type": "object",
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "description": "The element the step acted on, in CSS pixels of the viewport (the picture shows the viewport).",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number"
+            },
+            "height": {
+              "type": "number"
+            }
+          }
+        },
+        "viewport": {
+          "type": "object",
+          "required": [
+            "width",
+            "height"
+          ],
+          "properties": {
+            "width": {
+              "type": "number"
+            },
+            "height": {
+              "type": "number"
+            }
+          },
+          "description": "Viewport size in CSS pixels when `box` was measured."
+        },
+        "url": {
+          "type": "string",
+          "description": "Page URL after the step."
+        },
+        "network": {
+          "type": "object",
+          "required": [
+            "requests",
+            "failed"
+          ],
+          "description": "Requests during the step, when the run already had a debugger session on the tab (metadata only).",
+          "properties": {
+            "requests": {
+              "type": "integer"
+            },
+            "failed": {
+              "type": "integer",
+              "description": "Failed to load, or HTTP status 400 and up."
+            },
+            "slowest": {
+              "type": "array",
+              "maxItems": 3,
+              "items": {
+                "type": "object",
+                "required": [
+                  "url",
+                  "method",
+                  "ms"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  },
+                  "method": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "integer"
+                  },
+                  "ms": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -336,6 +455,10 @@
         {
           "const": "assert.failed",
           "description": "An Assert did not hold. Fix: The page differs from what the test expects: fix the expectation or the steps before it."
+        },
+        {
+          "const": "visual.mismatch",
+          "description": "A Screenshot with \"compare\" differs from its baseline by more than the allowed share of pixels (or has another size). Fix: Open the step in Reports: if the new look is right, press \"Accept new baseline\"; mask regions that change on their own."
         },
         {
           "const": "http.status",

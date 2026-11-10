@@ -127,6 +127,8 @@ export function scriptSchema(registry: BlockRegistry): Record<string, unknown> {
           note: { type: 'string' },
           screenshot: { enum: ['error', 'always', 'never'] },
           realInput: { type: 'boolean' },
+          pause: { type: 'boolean' },
+          trace: { type: 'boolean' },
         },
         additionalProperties: false,
       },

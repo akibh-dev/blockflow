@@ -49,6 +49,29 @@ export async function capture(tabId: number, runId: string): Promise<string | nu
   return id;
 }
 
+/** Chromium allows two `captureVisibleTab` calls a second; a traced step takes one before and one after. */
+const VISIBLE_CAPTURE_GAP_MS = 550;
+let lastVisibleCapture = 0;
+
+/**
+ * M5.1 trace image (not stored): JPEG data URL of the tab, or null when it cannot be had without side effects.
+ * Firefox: `captureTab`. Chromium: `captureVisibleTab` when the tab is showing (spaced out for the browser's
+ * rate limit), else the debugger only if `useDebugger` (the run already has a session on that tab).
+ */
+export async function captureForTrace(tabId: number, runId: string, useDebugger: boolean): Promise<string | null> {
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  if (!tab) return null;
+  const captureTab = captureTabApi();
+  if (captureTab) return captureTab(tabId, { format: 'jpeg', quality: 60 });
+  if (tab.active && tab.windowId !== undefined) {
+    const wait = lastVisibleCapture + VISIBLE_CAPTURE_GAP_MS - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastVisibleCapture = Date.now();
+    return browser.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 60 });
+  }
+  return useDebugger ? captureWithDebugger(tabId, runId).catch(() => null) : null;
+}
+
 /** The decoded image of a data: URL. */
 async function bitmapOf(dataUrl: string): Promise<ImageBitmap> {
   return createImageBitmap(await (await fetch(dataUrl)).blob());

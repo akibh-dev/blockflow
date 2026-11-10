@@ -34,7 +34,7 @@ Everything here must stay JSON-serialisable: it crosses `scripting.executeScript
 | Type | Definition |
 | --- | --- |
 | `AgentCall` | `{ request: AgentRequest; budgetMs: number }`: how long the agent may retry inside the page before answering. |
-| `AgentResponse` | `{ status: 'done', result }` · `{ status: 'pending', reason, code?, url? }` (not possible yet; the driver asks again) · `{ status: 'error', message, code?, url?, matches? }` (will never work) · `{ status: 'frame', src, rest, offset? }` (locator crosses into a cross-origin iframe; run `rest` in the frame showing `src`; for `locate` and `measure`, `offset` is where that frame's content starts in this frame's viewport). |
+| `AgentResponse` | `{ status: 'done', result }` · `{ status: 'pending', reason, code?, url? }` (not possible yet; the driver asks again) · `{ status: 'error', message, code?, url?, matches? }` (will never work) · `{ status: 'frame', src, rest, offset? }` (locator crosses into a cross-origin iframe; run `rest` in the frame showing `src`; for `locate`, `measure` and `box`, `offset` is where that frame's content starts in this frame's viewport). |
 | `AgentErrorInfo` | `{ code?, url?, matches? }`: the machine-readable part of `pending` / `error` (see [Error codes](#error-codes)). |
 | `SnapshotResult` | `{ snapshot, elements, url, title, lines, truncated }`: the `snapshot` op's result (see [The snapshot op](#the-snapshot-op)). |
 | `SnapshotElement` | `{ ref, role, name, tag, locator?, value?, checked?, disabled?, level?, url?, inFrame?, inShadow? }`: one targetable element of a snapshot. |
@@ -96,10 +96,12 @@ Geometry checks (stable, hit) are skipped where there is no layout (jsdom, `Host
 | `page-info` | none | `pageInfo()` | n/a | `{ url, title, description, canonical, lang, meta, jsonLd, links }` | Page Info |
 | `storage` | `area: local \| session \| cookies`, `key?`, `action?: get \| set \| delete \| clear` (default get), `value?` | `storage()` | n/a | get: `{ value }`, one item (or null) or all of them; set: `{ value }`; delete: `{ deleted: 0 \| 1 }`; clear: `{ cleared: n }`. set/delete need `key` (else `error` `config.invalid`). Cookies are read only here: those visible to the page (no HttpOnly); changing cookies goes through `Host.cookies`. | Page Info (storage mode), Cookies & Storage (local / session) |
 | `measure` | `locator?` | `measure()` | visible, stable; scrolled into view (also the same-origin frames around it) | With `locator`: `{ x, y, width, height }`, the element's box in the tab's viewport (frame offsets added, like `locate`). Without: `{ scrollX, scrollY, viewportWidth, viewportHeight, pageWidth, pageHeight, devicePixelRatio }` | `screenshots.ts` (Screenshot block: element and full page) |
+| `box` | `locator` | `box()` | none: answers at once, first match, no strict mode, no scrolling | `BoxResult`: `{ found: true, x, y, width, height, count, visible }` in the tab's viewport (same-origin frames added; the driver adds cross-origin frame offsets without scrolling the frame) or `{ found: false, count: 0 }` | `trace.ts` (M5.1 `after`) |
+| `highlight` | `locator?`, `clear?`, `ms?`, `label?` | `highlight()` | none: answers at once | `HighlightResult`: `{ highlighted, count }` or, for `clear: true` / no locator, `{ cleared: true }`. Draws one `div[data-blockflow-highlight]` (absolute, document coordinates, `pointer-events: none`, max z-index, `aria-hidden`; label in a closed shadow root so locators and snapshots never see it) in the element's own document, replacing earlier ones; removed after `ms` if given. In a cross-origin frame it is drawn inside the frame; `clear` reaches the top document only | debug pauses (M5.2 `debugChannel.ts`) |
 | `scroll` | `to: bottom \| top \| element`, `locator?` | `scroll()` | n/a | `{ height, y }` | Scroll |
 | `upload` | `locator`, `files: UploadFile[]`, `dropzone?` | `upload()`, `dropFiles()` with `dropzone` | input: enabled (a hidden input is fine); drop zone: visible, stable | `{ files: string[] }` (+ `dropped: true`). Accepts the input, a label, or an element containing the input. With `dropzone`: dragenter, dragover, drop on the element with a DataTransfer carrying the files; `pending` (`element.wrong-type`) while nothing cancels its `dragover` | Upload File |
 | `locate` | `locator`, `purpose: click \| fill \| set-field \| check \| press \| drop`, `position?` | `locate()` | visible, enabled, stable, hit; editable for `fill` (and `set-field` on text); only visible and stable for `drop` (a drag's target) | `{ x, y, kind: select \| check \| text \| other }` (center, or `position` from the padding box's corner, in the tab's viewport: frame offsets added) | `pageDriver.actWithRealInput` only |
-| `snapshot` | `locator?` (only that part, first match), `maxLines?` (default `SNAPSHOT_MAX_LINES` = 1,500) | `snapshot()` → `takeSnapshot()` in `snapshot.ts` | n/a (pending while `locator` matches nothing) | `SnapshotResult` | Page Snapshot, `src/browser/picking.ts` (editor's 📸 Snapshot page) |
+| `snapshot` | `locator?` (only that part, first match), `maxLines?` (default `SNAPSHOT_MAX_LINES` = 1,500) | `snapshot()` → `takeSnapshot()` in `snapshot.ts` | n/a (pending while `locator` matches nothing) | `SnapshotResult` | Page Snapshot, Assert `aria-snapshot` (M5.4), `src/browser/picking.ts` (editor's 📸 Snapshot page) |
 
 ### The snapshot op
 
@@ -153,6 +155,12 @@ Two "Add to cart" buttons share their role and name, so their locators fall back
   elements get generated CSS. About 1.3 s for a 2,000-element page in Chromium.
 
 `snapshotDocument(result)` in `page.ts` adds a title/URL header; it is what the editor copies.
+
+Assert `aria-snapshot` (M5.4) reads this same outline and matches it in the extension, not in the page:
+[ariaSnapshot.ts](../../src/core/ariaSnapshot.ts) (`parseAriaOutline`) drops `[ref=…]` and the `locator=…`
+hint (cut exactly with `elements`), so the line format above is also the template format and a change to it
+(a new flag, a different clip length than 100/120) must be mirrored there. See
+[Core Modules: ariaSnapshot](Core-Modules.md#ariasnapshot).
 
 ## Error codes
 

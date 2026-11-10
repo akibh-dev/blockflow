@@ -1193,3 +1193,192 @@ textarea {
 .bf-suite-result {
   margin-top: 16px;
 }
+
+/* M5.2 debug pauses (DebugBanner.tsx), M5 run controls (RunControls.tsx), Run from here (ConfigPanel.tsx) */
+.bf-debug-pauses {
+  position: fixed;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(760px, calc(100vw - 32px));
+}
+.bf-debug-pause {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 2px solid var(--primary);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+}
+.bf-debug-pause.error {
+  border-color: var(--danger);
+}
+.bf-debug-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bf-debug-head > span {
+  flex: 1 1 260px;
+}
+.bf-debug-input pre {
+  max-height: 220px;
+  overflow: auto;
+}
+.bf-run-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bf-run-from {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+}
+.bf-run-from button {
+  align-self: flex-start;
+}
+
+/* M5.1 trace timeline (Reports: filmstrip + before/after per step) */
+.bf-filmstrip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  margin-bottom: 4px;
+}
+
+.bf-filmstrip-frame {
+  flex: 0 0 auto;
+  width: 120px;
+  padding: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  text-align: left;
+}
+
+.bf-filmstrip-frame img,
+.bf-trace-frame-empty {
+  display: block;
+  width: 100%;
+  height: 68px;
+  object-fit: cover;
+  object-position: top left;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--muted) 15%, var(--panel));
+}
+
+.bf-filmstrip-frame span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bf-filmstrip-frame.failed {
+  border-color: var(--danger);
+}
+
+.bf-filmstrip-frame.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--panel));
+}
+
+.bf-report-steps li.bf-picked {
+  outline: 2px solid color-mix(in srgb, var(--primary) 40%, transparent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.bf-trace-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.bf-trace-shot {
+  margin: 0;
+  min-width: 0;
+}
+
+.bf-trace-shot figcaption {
+  font-size: 11px;
+}
+
+.bf-trace-frame {
+  position: relative;
+  display: block;
+  line-height: 0;
+}
+
+.bf-trace-frame img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.bf-trace-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.18);
+  pointer-events: none;
+}
+
+.bf-trace-url {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bf-trace-network ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+/* M5.3 Visual compare panel (Reports step details) */
+.bf-visual {
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.bf-visual.mismatch {
+  border-color: var(--danger, #dc2626);
+}
+
+.bf-visual-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.bf-visual-images figure {
+  margin: 0;
+  min-width: 0;
+}
+
+.bf-visual-images figcaption {
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+}
+
+.bf-visual-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}

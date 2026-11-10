@@ -46,6 +46,11 @@ export interface RunSuiteInput {
   secrets?: Record<string, string>;
   /** Combined reports to build (none by default). */
   formats?: SuiteFormat[];
+  /**
+   * M5.5 "Re-run failed": run only the suite's workflows with these ids, in suite order (`failedWorkflowIds`).
+   * Ids not in the suite are ignored; when none is left the suite throws `config.invalid`.
+   */
+  only?: string[];
 }
 
 export interface RunSuiteDeps {
@@ -134,7 +139,10 @@ export async function runSuite(
   }
 
   const byId = new Map(saved.map((workflow) => [workflow.id, workflow]));
-  const workflows = [...(suite.workflowIds ?? []).map((id) => byId.get(id) as Workflow), ...compiled.workflows];
+  const all = [...(suite.workflowIds ?? []).map((id) => byId.get(id) as Workflow), ...compiled.workflows];
+  const only = input.only ? new Set(input.only) : undefined;
+  const workflows = only ? all.filter((workflow) => only.has(workflow.id)) : all;
+  if (only && workflows.length === 0) throw new CodedError('config.invalid', `Suite "${suite.name}": none of the workflows to re-run is in the suite any more.`);
   const total = workflows.length;
   const startedAt = new Date().toISOString();
   const runs: RunRecord[] = [];
@@ -162,6 +170,16 @@ export async function runSuite(
   const formats = [...new Set(input.formats ?? [])];
   if (formats.length === 0) return { result };
   return { result, reports: await suiteReports(result, formats, { registry, ...(deps.loadScreenshot ? { loadScreenshot: deps.loadScreenshot } : {}) }) };
+}
+
+/**
+ * M5.5: the workflows of `result` to run again: the ones whose run did not pass, then the ones skipped
+ * after a failure (`stopOnFailure`; matched by name among `suiteWorkflows`), as saved workflow ids in suite order.
+ */
+export function failedWorkflowIds(result: SuiteResult, suiteWorkflows: Pick<Workflow, 'id' | 'name'>[]): string[] {
+  const failed = new Set(result.runs.filter((run) => !runPassed(run)).map((run) => run.workflowId));
+  const skipped = new Set(result.skipped);
+  return suiteWorkflows.filter((workflow) => failed.has(workflow.id) || skipped.has(workflow.name)).map((workflow) => workflow.id);
 }
 
 /** The combined reports of a suite result in `formats` (HTML with the screenshots `loadScreenshot` finds). */

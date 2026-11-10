@@ -359,6 +359,8 @@ with its own copy of the data.
 | `retries` | 0 to 5 extra attempts, waiting 1 s, 2 s, 4 s… |
 | `timeoutSeconds` | the step fails after this long |
 | `screenshot` | `error` (default), `always`, `never`. Of the run's tab, only while that tab is showing in its window (Open Tab with `"where": "window"` is best for tests) |
+| `pause` | `true`: a breakpoint. A **Debug** run pauses before this block (see [Debugging](#debugging)); a normal run ignores it |
+| `trace` | `true`: record a [trace](#9-running-results-reports) of this step (pictures before and after, the element's box, URL) even when the run is not traced |
 | `disabled` | skip the block, pass the data through |
 | `note` | text shown on the block |
 
@@ -392,6 +394,31 @@ A workflow may have several start blocks; each starts its own runs.
   later debugger actions fail clearly. Reports and HTML exports label runs that used CDP; JSON
   includes `usedDebugger: true`. Steps run with the debugger attached also list the page's console
   messages and exceptions (bounded, secrets masked; `console` in the JSON step). Workflows that do not use CDP do not request or acquire a session.
+- **Trace**: **Run with trace** (header; run option `trace`), or the step setting `"trace": true` for single
+  steps, records for each page step a picture of its tab before and after the block, the box of the element
+  it acted on (drawn over the after picture), the page URL afterwards and, when the run already uses the
+  Chromium debugger on that tab, a network summary (request count, failed requests, slowest three; metadata
+  only). Reports shows a **filmstrip** of the traced steps above the step list (click a picture to jump to
+  the step) and before/after in each step; the HTML export embeds them; JSON has `trace` per step and
+  `mode: { "trace": true }` on the run. Pictures need the tab showing in its window in Chromium (Firefox
+  captures any tab); tracing never attaches the debugger itself and never fails a step. Steps without a tab
+  in their input (the Open Tab that makes it) have no trace. Trace pictures are kept apart from failure
+  screenshots: at most 200 per run, and the oldest runs' pictures are removed beyond 1,000 pictures or
+  120 MB in total.
+- <a id="debugging"></a>**Debugging**: **🐞 Debug** (header; run option `debug`) runs once and pauses before
+  every block with the step setting **Pause here (breakpoint)** (`"pause": true`). With **pause on error**
+  ticked next to it (`debug: { "pauseOnError": true }`) it also pauses when a block fails, before the
+  failure is handled (`onError`, retries are already used up). While paused, a banner shows the block, why
+  it paused, the error and the block's input, and the element of a page step is outlined on the page.
+  **Continue** runs on to the next breakpoint, **Step** runs this block and pauses before the next one,
+  **Stop** (or the header's ■ Stop) ends the run (`cancelled`, the paused block `skipped`). The pause lives
+  in the background worker: closing the editor does not end it, and the banner is back when the editor is
+  opened again. A pause nobody answers ends the run after an hour. JSON: `mode: { "debug": true }`.
+- **Run from here** (a block's settings panel) runs that block, and everything after it, with the input it
+  had in the workflow's most recent run that reached it; nothing before it runs. It is disabled, with the
+  reason, when no run reached the block, or when that input was stored shortened (over 3,000 characters of JSON)
+  or with secret values hidden, since running with such an input would not be the same run.
+  JSON: `mode: { "startedAt": "<block id>" }`. The page tab in that input must still be open.
 - The **JSON** export is for programs: `{ "$schema", "schemaVersion": 1, "generatedAt", "summary", "runs" }`
   ([schema](report.schema.json)). Each step of a run has `nodeId`, `sourceId` (the block's `id` in the
   file you imported, when it had one), `blockType`, `status`, `durationMs`, `attempts`, `input`, `output`
@@ -404,6 +431,8 @@ A workflow may have several start blocks; each starts its own runs.
   for a failing one, `<skipped/>` for skipped ones), **HTML** (one section per workflow) and **JSON**
   (`{ "$schema", "schemaVersion": 1, "generatedAt", "suite", "summary", "runs" }`,
   [schema](suite-report.schema.json)). Outside tools run the same suites (or an inline one) with `suite.run`.
+  **↻ Re-run failed** on the last result runs only the workflows that did not pass or were skipped, in
+  suite order; its result replaces the last result.
 
 ### Error codes
 
@@ -423,6 +452,7 @@ Every failed step has a `code`. Fix by the code, then the message:
 | `option.not-found` | The select has no such option (or it is disabled). | Use one of the options the message lists. |
 | `timeout` | Waited too long for something other than an element (text, URL, response, popup). | Raise the step timeout, or wait for the right thing. |
 | `assert.failed` | An Assert did not hold. | Fix the expectation or the steps before it. |
+| `visual.mismatch` | A Screenshot with `compare` differs from its baseline by more than `maxDiffRatio` (or has another size). | Look at baseline / actual / diff in Reports; press **Accept new baseline** if the new look is right, or mask regions that change on their own. |
 | `http.status` | HTTP Request got a non-2xx answer with `failOnError`. | Check the URL, method, headers and body. |
 | `http.network` | HTTP Request could not reach the server. | Check the URL and the host permission. |
 | `navigation.failed` | A page did not finish loading. | Check the URL; raise the timeout for slow pages. |
@@ -526,6 +556,7 @@ profile's extension storage.
 | Read an API response's body | **Wait For** `mode: "response"` with `captureBody: true` → `{{response.body}}` (Chrome, Edge, Brave; debugger permission, Grant button). Only responses that **start after** the Wait For starts can be read, so it suits slow or later requests (polling, a request a timer sends); for a response that comes right after a Click, call the API with HTTP Request instead |
 | "Export" button or link that downloads a file | Click, then **Wait for Download** (`url`: part of the address or file name). `{{download.filename}}`, `.size`, `.mime`, `.url`. `read: "csv"` / `"json"` / `"text"` fetches the file again from its address (extensions cannot open files on disk) → `{{rows}}` / `{{data}}` / `{{content}}`, optionally into a `dataset`. Files the page builds itself (blob: links) are read in the page, while it still has them |
 | A picture of the page or one element | **Screenshot** (`area`: `visible`, `full`, `element` + `locator`; `png` or `jpeg`). Shown on the step and in the report; `{{screenshotId}}`. Chromium: full page, elements of a tab that is not showing, and any tab that is not showing need the debugger permission (Grant button); without it, an element of the showing tab is cut from the visible area. Firefox: all three work without extra permissions |
+| Check the page still looks the same | **Screenshot** with `compare: true` (baseline per block, `threshold`, `maxDiffRatio`, `mask`; fails with `visual.mismatch`, see [Visual comparison](#visual-comparison-screenshots-against-a-baseline)) |
 | Log in by cookie, reset state between tests | **Cookies & Storage**: `action` `get` / `set` / `delete` / `clear` on `area` `cookies` (the browser's cookie jar, HttpOnly ones too; optional "cookies" permission, Grant button; `url` = whose cookies, default the tab's page; set: `domain`, `path`, `maxAgeSeconds`, `httpOnly`, `secure`, `sameSite`) or `local` / `session` (the page's storage, by `name` = key) |
 | Anything no block does | **Run Script**: async JS body, sees `data`, `return` a JSON value. Needs Chrome 135+, the userScripts permission (Grant button) and "Allow User Scripts" / developer mode for BlockFlow |
 | Run the same test in CI | 🎭 **Playwright** export (sidebar row or All workflows): a `.spec.ts` for `npx playwright test`. Templates, expressions and the data blocks (Data Table, Transform, Filter, Set Variable, For Each, Repeat, If) behave as in BlockFlow, because the spec carries BlockFlow's own template/expression/CSV code. Asserts retry (`toHaveText`, `toHaveURL`, `expect.poll` for the other operators; soft → `expect.soft`); Wait For response, Dialogs, Upload File (drop zones and base64 data too), Wait for Popup, Run Script, Timer delays, Click options, Element Action and Drag (`dragTo`) map to Playwright; step timeouts, retries and error handling (`continue`, error output) are kept. Secrets become environment variables (`{{secret.loginPassword}}` → `LOGINPASSWORD`); Run Workflow calls become functions; what has no equivalent (Notify, Save to Dataset, Download) becomes a `// BlockFlow-only:` comment. Details: [wiki](../wiki/Workflows-as-Scripts.md#export-to-playwright) |
@@ -547,6 +578,29 @@ profile's extension storage.
   `in-viewport` (some of it is on screen; scroll first if needed). Playwright export maps them to
   `toHaveClass`/`toContainClass`, `toHaveCSS`, `toHaveAccessibleName`, `toHaveAccessibleDescription`,
   `toBeFocused`, `toBeEditable`, `toBeInViewport`.
+- **ARIA snapshot** (`subject: "aria-snapshot"`): checks the *structure* of the page, or of one part of it
+  (`locator`, optional), against a template in `expected`, like Playwright's `toMatchAriaSnapshot`. One line
+  per element, nested by indenting two spaces, in the [page snapshot](#getting-locators-from-a-page-snapshot)'s
+  form: `- role "name" [state]`, then `: text` for its text or value, or `:` and nested lines. Names are
+  `"exact"` (spaces collapsed) or `/regex/` (no flags); states `[level=N]`, `[checked]` (`=false`, `=mixed`),
+  `[disabled]`, `[expanded]` (`=false`), `[pressed]`, `[selected]`; `- text: …` is a text line; under a link,
+  `- /url: …`. Matching is partial: listed lines must be on the page in this order, anything else may be
+  there too, nested lines are looked for among the element's direct children, states that are not listed
+  are not checked (`- /children: equal` asks for exactly these children). Retried until the step timeout;
+  the failure says which template line found nothing, the closest element and the part of the page it
+  looked in (`assert.failed`). The template is checked on import, with the line and column of a mistake.
+  Lines pasted from a page snapshot work as they are (`[ref=…]` and `locator=…` are ignored; `[required]`,
+  `[type=…]` are checked by BlockFlow but not by Playwright). `operator` is not used.
+
+  ```text
+  - heading "Log in" [level=1]
+  - form "Login":
+    - textbox "Email"
+    - button /Sign (in|up)/
+  ```
+
+  Example: [`aria-login-structure`](examples/aria-login-structure.blockflow.json). Playwright export:
+  ``await expect(locator).toMatchAriaSnapshot(`…`)`` (the page's `body` without a locator).
 - **Keys**: Press Key takes chords (`Control+Shift+K`, `Shift+Tab`, `Meta+B`; `ControlOrMeta+A` is ⌘A on
   a Mac, Ctrl+A elsewhere). The modifier keys go down first, as on a keyboard, in both input modes. With
   `"mode": "text"` it types `text` at the caret in one go, replacing the selection, with no key events
@@ -559,6 +613,31 @@ profile's extension storage.
   notification or the editor banner.
 - **Data-driven tests**: Data Table (CSV/JSON) → For Each (`each` output) → the test steps using
   `{{row.email}}`. Use `step.onError: "continue"` or soft Asserts so one bad row does not stop the rest.
+
+### Visual comparison (screenshots against a baseline)
+
+Screenshot with `"compare": true` checks the picture against a **baseline kept per (workflow, block)** in
+the browser (IndexedDB), like Playwright's `toHaveScreenshot`:
+
+- **First run**: no baseline yet, so this screenshot becomes it and the step passes (logged). Later runs
+  compare pixel by pixel. More than `maxDiffRatio` of the (unmasked) pixels differing, or another picture
+  size, fails the step with `visual.mismatch`.
+- `threshold` (0 to 1, default `0.2`): how different one pixel's colour must be to count. Anti-aliased edge
+  pixels (font smoothing) are not counted. `maxDiffRatio` (0 to 1, default `0`): the share allowed, e.g.
+  `0.01` = 1%.
+- `mask`: rows of `{"region": …}` to ignore, each an element locator (`#clock`; every match is covered) or
+  `"x, y, width, height"` in CSS pixels from the picture's top-left. Use it for clocks, ads, avatars.
+- PNG only. Keep the page still (wait for it first) and the window size the same between runs.
+- **Reports** shows the baseline, the actual picture and a diff (red: differs, yellow: anti-aliasing, blue:
+  masked) with **Accept new baseline** when the new look is right. `"updateBaseline": true` replaces the
+  baseline on every run (switch it off again). The step's output has `visual` (`status`, `diffRatio`,
+  `diffPixels`, `comparisonId`).
+- Playwright export: `await expect(page).toHaveScreenshot("<block id>.png", { threshold, maxDiffPixelRatio,
+  mask })` (or on the element's locator); mask rectangles become a comment.
+
+```json
+{ "id": "home-look", "type": "screenshot", "config": { "area": "full", "compare": true, "maxDiffRatio": 0.001, "mask": [{ "region": "#clock" }] } }
+```
 
 ### Network, device and clean state (Chromium)
 
@@ -631,6 +710,7 @@ Each example is in both formats: `<name>.script.json` (the script, start here) a
 | [`data-driven-login`](examples/data-driven-login.blockflow.json) | Data Table + For Each + soft Assert, a secret chosen by an expression |
 | [`api-to-dataset`](examples/api-to-dataset.blockflow.json) | HTTP Request + Transform + dataset history + If |
 | [`mock-api-mobile`](examples/mock-api-mobile.blockflow.json) | Emulate a phone + dark mode, Route mocks a 503 and blocks analytics, Assert text and console errors |
+| [`aria-login-structure`](examples/aria-login-structure.blockflow.json) | Assert `aria-snapshot`: the page's structure (exact and regex names, states, nesting), then one part of it by locator |
 | [`playground-tour`](examples/playground-tour.blockflow.json) | the "Try it" workflow: Click, Fill, Select Option and Assert on `docs/manual-test/playground.html` (`npm run playground`) |
 
 ## 17. Limits (what a browser extension cannot do, or BlockFlow does not do yet)

@@ -34,7 +34,7 @@ and every wake-up after Chrome stopped the worker), not just once.
 | 4 | `liveRuns`, `cancelRequests` | In-memory: runs going on in *this* worker, and run ids the user asked to stop. |
 | 4b | `runWorkflow`, `cancelRun`, `createBridgeHandlers(…)`, `createBridgeConnection(…)` | The M4 bridge ([below](#the-bridge-outside-control-m4)); nothing connects yet. |
 | 5 | `updateRuns(markInterrupted(…))` | Any run still `running` in `bf:runs` that this worker does not own can never finish: mark it `interrupted`. |
-| 6 | `clearStalePrompts()` | Manual Steps listed in `bf:prompts` by a dead worker can no longer be answered. |
+| 6 | `clearStalePrompts()`, `clearStaleDebugPauses()` | Manual Steps listed in `bf:prompts`, and debug pauses in storage.session `bf:debug-pause`, by a dead worker can no longer be answered. |
 | 7 | Register all listeners (below), synchronously | MV3 rule: listeners added later miss the event that woke the worker. |
 | 8 | `scheduler.restoreAll()` (between the alarm and onStartup listeners) | Recreate alarms the browser dropped, re-arm short in-memory timers. |
 | 9 | `syncBridge()` (after the permissions listeners) | Reopen the native port when outside control is on. It must come after `const report` is defined: called earlier it throws (TDZ) and the whole worker stops at start. |
@@ -109,9 +109,12 @@ Full payloads in [Message Protocol](Message-Protocol.md).
 | `bf:pick-cancelled` | `cancelPicking(sender.tab?.id)` |
 | `bf:pick-error` | from a picker in a page: `cancelPicking(sender.tab.id)` (the editor shows the message itself) |
 | `bf:picker-sync` / `bf:recorder-sync` | `relayPickerSync` / `relayRecorderSync`: passed on to every frame of the sender's tab |
-| `bf:run-workflow` | `newRunner(migrateWorkflow(message.workflow)).runOnce()`: runs the workflow **as sent** (the canvas, possibly unsaved), enabled or not. |
-| `bf:stop-run` | `cancelRun(runId)`: `cancelRequests.add(runId)` and `answerPrompt(runId, false)` (a run waiting on a Manual Step stops right away). The bridge's `stop` and `timeoutSeconds` use the same function. |
+| `bf:run-workflow` | `newRunner(migrateWorkflow(message.workflow)).runOnce(message.options)`: runs the workflow **as sent** (the canvas, possibly unsaved), enabled or not. `options` (M5): `trace`, `debug: { pauseOnError? }`, `startAt: { nodeId, input }` (Run from here). |
+| `bf:stop-run` | `cancelRun(runId)`: `cancelRequests.add(runId)`, `answerPrompt(runId, false)` and `answerDebug(runId, 'stop')` (a run waiting on a Manual Step or paused by the debugger stops right away). The bridge's `stop` and `timeoutSeconds` use the same function. |
 | `bf:answer-prompt` | `answerPrompt(runId, ok)` |
+| `bf:accept-baseline` | M5.3: `acceptBaseline(comparisonId)` (visual.ts), then broadcasts `bf:baseline-accepted` (with `error` when the comparison or its picture is gone). |
+| `bf:debug-answer` | M5.2: `continue` / `step` → `answerDebug(runId, action)`; `stop` → `cancelRun(runId)` (as Stop). |
+| `bf:run-suite` | Runs the saved suite with `runSuite`; `workflowIds` (M5.5 "Re-run failed") becomes `only`. Answers with `bf:suite-progress` / `bf:suite-result` broadcasts. |
 | `bf:start-recording` / `bf:stop-recording` / `bf:recorded` | `startRecording` / `stopRecording` / `recordStep(step, sender.tab?.id)` |
 | anything else | ignored (`bf:pick-result` is for the editor; `bf:parse-html` fails `isExtensionMessage`). |
 
@@ -124,7 +127,8 @@ Full payloads in [Message Protocol](Message-Protocol.md).
 | Worker wakes up (alarm, message, navigation) | Nothing is restarted. Only the event's handler runs, on a fresh runner. |
 | Editor saves a workflow | `diffWorkflows`: newly enabled or behaviour-changed → `start()`; disabled or deleted → `stopWorkflow()`; deleted → its timers and block state are removed too. |
 | Run button | `bf:run-workflow` → `runOnce()` with trigger `manual`; schedules nothing. |
-| Stop button | `bf:stop-run` → run id in `cancelRequests`; the engine checks `isCancelled` between steps. |
+| Stop button | `bf:stop-run` → run id in `cancelRequests`; the engine checks `isCancelled` between steps. A paused debug run is answered `stop`. |
+| Debug pause (M5.2) | `Host.debug.pause` ([debugChannel.ts](Browser-Host.md#debugchannelts-m52)) waits in this worker; the run's `scheduler.hold` and the channel's polling keep the worker awake meanwhile. |
 | Timer due | `onAlarm` → `handleTimer(key)`; disabled/deleted workflow → timer cleared. |
 | Page Visited / Context Menu | `handleEvent(nodeId, payload)` with the tab as `$session.tabs.main`. |
 

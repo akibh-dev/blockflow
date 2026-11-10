@@ -64,6 +64,8 @@ const STEP_RULES: Record<string, (value: unknown) => string | null> = {
   note: (value) => (typeof value === 'string' ? null : 'must be text'),
   screenshot: (value) => (value === 'error' || value === 'always' || value === 'never' ? null : 'must be "error", "always" or "never"'),
   realInput: (value) => (typeof value === 'boolean' ? null : 'must be true or false'),
+  pause: (value) => (typeof value === 'boolean' ? null : 'must be true or false'),
+  trace: (value) => (typeof value === 'boolean' ? null : 'must be true or false'),
 };
 
 /** Blocks that give the run a named tab: type → the tab name from its config. */

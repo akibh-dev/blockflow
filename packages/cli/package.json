@@ -1,6 +1,6 @@
 {
   "name": "blockflow-cli",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Run BlockFlow workflows and suites from the command line or CI, in Chromium with the extension.",
   "type": "module",
   "license": "MIT",
@@ -8,5 +8,5 @@
   "exports": { ".": { "types": "./index.d.mts", "default": "./index.mjs" } },
   "files": ["*.mjs", "index.d.mts"],
   "engines": { "node": ">=20" },
-  "dependencies": { "blockflow-bridge": "0.5.0", "playwright-core": "^1.64.1" }
+  "dependencies": { "blockflow-bridge": "0.6.0", "playwright-core": "^1.64.1" }
 }

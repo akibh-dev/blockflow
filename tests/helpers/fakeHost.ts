@@ -25,6 +25,7 @@ import { WorkflowRunner } from '../../src/core/engine';
 import { urlMatches } from '../../src/core/urlPattern';
 import type { AgentRequest, WaitUntil } from '../../src/core/page';
 import type { RunRecord } from '../../src/core/runs';
+import type { VisualCompareRequest, VisualCompareResult } from '../../src/core/visual';
 import type { ClearSiteDataOptions, ConsoleEntry, EmulateOptions, HarResult, RouteOptions, RouteResult } from '../../src/core/network';
 import { createDefaultRegistry } from '../../src/core/blocks';
 
@@ -260,6 +261,35 @@ export class FakeHost implements Host {
   };
 
   secretValues: Record<string, string> = {};
+  /** M5.2 / M5.1 hooks: unset by default (no debug channel, no tracing), set by tests. */
+  debug?: Host['debug'];
+  trace?: Host['trace'];
+  /**
+   * M5.3 visual comparison, in memory. A screenshot "looks like" `pageLook` when compared; baselines are
+   * looks keyed by "workflowId/nodeId". `visualDiffRatio` decides how different two looks are.
+   */
+  pageLook = 'look-1';
+  readonly baselines = new Map<string, string>();
+  readonly visualRequests: VisualCompareRequest[] = [];
+  visualDiffRatio = (baseline: string, actual: string): number => (baseline === actual ? 0 : 0.25);
+  visual: Host['visual'] = {
+    compare: async (request: VisualCompareRequest): Promise<VisualCompareResult> => {
+      this.visualRequests.push(request);
+      const key = `${request.workflowId}/${request.nodeId}`;
+      const comparisonId = `cmp-${this.visualRequests.length}`;
+      const size = { width: 800, height: request.area === 'full' ? 2400 : 600, diffPixels: 0, diffRatio: 0 };
+      const baseline = this.baselines.get(key);
+      if (baseline === undefined || request.updateBaseline) {
+        this.baselines.set(key, this.pageLook);
+        return { status: baseline === undefined ? 'baseline-saved' : 'baseline-updated', comparisonId, ...size };
+      }
+      const diffRatio = this.visualDiffRatio(baseline, this.pageLook);
+      const diffPixels = Math.round(diffRatio * size.width * size.height);
+      return diffRatio > request.maxDiffRatio
+        ? { status: 'mismatch', comparisonId, ...size, diffPixels, diffRatio, baselineId: `baseline-${comparisonId}`, diffId: `diff-${comparisonId}` }
+        : { status: 'match', comparisonId, ...size, diffPixels, diffRatio };
+    },
+  };
   secrets = {
     all: async () => ({ ...this.secretValues }),
   };

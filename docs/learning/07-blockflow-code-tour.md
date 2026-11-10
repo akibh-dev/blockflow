@@ -75,6 +75,7 @@ exercise: read the tests first and try to implement `render` yourself before rea
 | `cdp.ts`, `popups.ts` | real input through the debugger; popups of a run's tab | 12 below |
 | `cdpSessions.ts`, `m3Host.ts` | one debugger session per run; the run's network/environment features and their cleanup | 9 below |
 | `routes.ts`, `environment.ts`, `telemetry.ts` | Route (CDP `Fetch` + browser rules), Emulate and Clear Site Data, HAR and console capture | 9 below |
+| `debugChannel.ts`, `trace.ts`, `visual.ts` | M5: breakpoints, trace pictures, visual baselines and diffs | 9 below |
 | `bridge.ts`, `bridgeHandlers.ts`, `suites.ts` | outside control: the native port and the JSON-RPC methods the MCP server and CLI call; suites | lesson 9 |
 | `host.ts` | assembles the `Host` | 6 |
 
@@ -205,6 +206,41 @@ then `BF_HEADLESS=1 npm run e2e -- m3-route m3-environment m3-telemetry`. In the
 only `abort` rules asks for `declarativeNetRequest`; add a `fulfill` rule and it asks for `debugger` instead.
 Exercise: in `m3-route.html`'s spec, add a rule with `delayMs: 2000` and assert the page shows a loading
 state first. Then break `finish()` in `routes.ts` (skip `Fetch.disable`) and see which test catches it.
+
+### Debugging and visual checks: a debugger for a program that sleeps
+
+M5 adds what you use every day in DevTools and Playwright's UI mode, but for a run that lives in an MV3
+worker. Start with the engine hooks (`git show 182cecd`): `runOnce(options)` and three optional Host
+methods. The engine only *awaits* them, so `tests/core/engineM5.test.ts` drives every case with fakes.
+
+| You know | In BlockFlow |
+| --- | --- |
+| a `debugger;` statement / breakpoint in DevTools | step setting `pause`; a **Debug** run awaits `Host.debug.pause()` (`src/browser/debugChannel.ts`) |
+| Playwright trace viewer | `Host.trace` before/after each step (`src/browser/trace.ts`), filmstrip in Reports (`TraceTimeline.tsx`) |
+| `toHaveScreenshot` / Percy | Screenshot `compare` (`src/core/pixelDiff.ts`, pure; `src/browser/visual.ts` decodes) |
+| `toMatchAriaSnapshot` | Assert `aria-snapshot` (`src/core/ariaSnapshot.ts`, pure, over the M1.3 outline) |
+
+The extension-specific lessons:
+
+- **A paused run must survive its own process.** A breakpoint is "wait for a human", like Manual Step
+  (`prompts.ts`). The pause lives in `storage.session` (`bf:debug-pause`), not in React state or a variable,
+  so closing and reopening the editor shows it again. The worker stays awake with a cheap extension call every
+  half second, and an unanswered pause ends after an hour, so a forgotten breakpoint cannot pin the worker.
+- **No DOM in a service worker, but pixels still work.** `createImageBitmap()` + `OffscreenCanvas` decode a PNG
+  data URL in the worker (and in Firefox's background page), so the visual diff needs no offscreen document.
+  The diff itself is a plain function over `Uint8ClampedArray`s: test it like any reducer.
+- **Screenshots are rate-limited.** Chrome allows two `captureVisibleTab` calls a second, so tracing spaces them
+  out, and a background tab is only captured through the debugger when the run already holds a session
+  (`trace.ts`): tracing never shows the debugging bar on its own.
+- **Big data goes to IndexedDB with a budget.** Trace pictures share the screenshot store under `~t|…` keys,
+  capped per run and in total; the oldest runs' pictures go first (`blobStore.ts`). Visual baselines get their
+  own database so their upgrades never race the screenshot store.
+
+Checkpoint: `npm test -- tests/core/engineM5.test.ts tests/core/pixelDiff.test.ts tests/core/ariaSnapshot.test.ts`,
+then `BF_HEADLESS=1 npm run e2e -- m5-debug m5-trace m5-visual m5-aria`. In the editor, tick "Pause here" on a
+block, press 🐞 Debug, close the editor tab while it waits, reopen it: the banner is still there.
+Exercise: add a `[focused]` state to the ARIA template matcher. Start with a failing test in
+`tests/core/ariaSnapshot.test.ts`, then find where the outline would have to record it.
 
 ## 10. Data features: an interpreter, an offscreen page, IndexedDB
 

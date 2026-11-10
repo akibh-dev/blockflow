@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { loadScreenshot } from '../../../browser/blobStore';
 import { loadWorkflows } from '../../../browser/stores';
-import { loadSuites, saveSuites, suiteReports } from '../../../browser/suites';
+import { failedWorkflowIds, loadSuites, saveSuites, suiteReports } from '../../../browser/suites';
 import type { SuiteFormat } from '../../../browser/suites';
 import type { Suite, SuiteResult } from '../../../core/bridgeProtocol';
 import { durationOf } from '../../../core/report';
@@ -105,9 +105,10 @@ export function SuitesPage() {
     if (openId === suite.id) setOpenId(next[0]?.id ?? null);
   };
 
-  const run = (suite: Suite) => {
+  /** Runs the suite, or (M5.5 "Re-run failed") only `workflowIds` of it. */
+  const run = (suite: Suite, workflowIds?: string[]) => {
     setRunning((current) => ({ ...current, [suite.id]: [] }));
-    const message: RunSuiteMessage = { type: 'bf:run-suite', suiteId: suite.id };
+    const message: RunSuiteMessage = { type: 'bf:run-suite', suiteId: suite.id, ...(workflowIds ? { workflowIds } : {}) };
     void browser.runtime.sendMessage(message).catch(() => {
       setRunning(({ [suite.id]: _gone, ...rest }) => rest);
       toast('Could not reach the background worker. Try reloading the extension.', 'error');
@@ -252,7 +253,16 @@ export function SuitesPage() {
               </p>
             )}
 
-            {result && <SuiteResultView result={result} onDownload={(format) => void download(result, format)} />}
+            {result && (
+              <SuiteResultView
+                result={result}
+                onDownload={(format) => void download(result, format)}
+                rerun={(() => {
+                  const ids = failedWorkflowIds(result, open.workflowIds.flatMap((id) => (byId.has(id) ? [byId.get(id) as Workflow] : [])));
+                  return ids.length > 0 && !progress ? () => run(open, ids) : undefined;
+                })()}
+              />
+            )}
           </div>
         )}
       </div>
@@ -260,7 +270,7 @@ export function SuitesPage() {
   );
 }
 
-function SuiteResultView({ result, onDownload }: { result: SuiteResult; onDownload(format: SuiteFormat): void }) {
+function SuiteResultView({ result, onDownload, rerun }: { result: SuiteResult; onDownload(format: SuiteFormat): void; rerun?: () => void }) {
   const sum = suiteSummary(result);
   return (
     <div className="bf-suite-result">
@@ -293,6 +303,11 @@ function SuiteResultView({ result, onDownload }: { result: SuiteResult; onDownlo
         ))}
       </ol>
       <div className="bf-suite-downloads">
+        {rerun && (
+          <button type="button" className="bf-run" onClick={rerun} title="Run only the workflows that failed or were skipped in this result">
+            ↻ Re-run failed
+          </button>
+        )}
         {(Object.keys(FILES) as SuiteFormat[]).map((format) => (
           <button key={format} type="button" onClick={() => onDownload(format)}>
             Download {FILES[format].label}

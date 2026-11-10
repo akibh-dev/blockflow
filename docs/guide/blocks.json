@@ -2355,7 +2355,12 @@
         "area": "visible",
         "locator": "",
         "format": "png",
-        "quality": 80
+        "quality": 80,
+        "compare": false,
+        "threshold": 0.2,
+        "maxDiffRatio": 0,
+        "mask": [],
+        "updateBaseline": false
       },
       "fields": [
         {
@@ -2392,6 +2397,46 @@
           "max": 100
         },
         {
+          "key": "compare",
+          "label": "Compare with the baseline",
+          "kind": "boolean",
+          "help": "Visual check: the first run keeps the picture as this block's baseline; later runs fail (visual.mismatch) when it looks different. PNG only."
+        },
+        {
+          "key": "threshold",
+          "label": "Colour threshold",
+          "kind": "number",
+          "min": 0,
+          "max": 1,
+          "help": "How different a pixel's colour must be to count, 0 to 1 (0.2 like Playwright; 0 = any change)."
+        },
+        {
+          "key": "maxDiffRatio",
+          "label": "Allowed difference",
+          "kind": "number",
+          "min": 0,
+          "max": 1,
+          "help": "Share of pixels that may differ, 0 to 1 (0.01 = 1%). 0 = none."
+        },
+        {
+          "key": "mask",
+          "label": "Ignore regions",
+          "kind": "rows",
+          "columns": [
+            {
+              "key": "region",
+              "label": "Element or x, y, width, height"
+            }
+          ],
+          "help": "Parts that change on their own (a clock, an ad): an element locator, or \"x, y, width, height\" in CSS pixels from the picture's top-left."
+        },
+        {
+          "key": "updateBaseline",
+          "label": "Update the baseline",
+          "kind": "boolean",
+          "help": "Save this run's picture as the new baseline and pass (like Playwright's --update-snapshots). Switch it off again after."
+        },
+        {
           "key": "tab",
           "label": "Tab",
           "kind": "text",
@@ -2406,6 +2451,10 @@
         {
           "key": "screenshot",
           "description": "{id, width, height, area}: the size in pixels."
+        },
+        {
+          "key": "visual",
+          "description": "With compare: {status (baseline-saved, baseline-updated, match), diffRatio, diffPixels, comparisonId}. A mismatch fails the step with visual.mismatch."
         }
       ]
     },
@@ -2454,6 +2503,7 @@
             "css",
             "accessible-name",
             "accessible-description",
+            "aria-snapshot",
             "url",
             "title",
             "console-errors",
@@ -2465,7 +2515,7 @@
           "label": "Element",
           "kind": "locator",
           "templated": true,
-          "help": "For element checks."
+          "help": "For element checks. For \"ARIA snapshot\": the part of the page (empty = the whole page)."
         },
         {
           "key": "name",
@@ -2507,7 +2557,8 @@
           "key": "expected",
           "label": "Expected",
           "kind": "text",
-          "templated": true
+          "templated": true,
+          "help": "For \"ARIA snapshot\": a template, one line per element, nested by indenting: - heading \"Welcome\" [level=1], - button /Sign (in|up)/, - listitem: Apples."
         },
         {
           "key": "message",

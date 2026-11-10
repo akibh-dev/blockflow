@@ -15,7 +15,7 @@ vi.mock('wxt/browser', () => ({
   },
 }));
 
-const { loadSuites, runSuite, saveSuites } = await import('../../src/browser/suites');
+const { failedWorkflowIds, loadSuites, runSuite, saveSuites } = await import('../../src/browser/suites');
 
 const workflow = (id: string, name = id): Workflow => ({ schemaVersion: 2, id, name, enabled: false, nodes: [], edges: [] });
 const saved = [workflow('a', 'Login'), workflow('b', 'Cart'), workflow('c', 'Pay')];
@@ -155,5 +155,34 @@ describe('runSuite', () => {
     const html = await runSuite({ suite: { id: 's', name: 'S', workflowIds: ['a'] }, formats: ['html'] }, t.deps);
     expect(Object.keys(html.reports ?? {})).toEqual(['html']);
     expect(html.reports?.html).toContain('<title>Suite: S</title>');
+  });
+});
+
+describe('re-run failed (M5.5)', () => {
+  it('failedWorkflowIds lists failed and skipped workflows in suite order', async () => {
+    const t = deps({ Cart: 'failed' });
+    const { result } = await runSuite({ suite: { id: 's', name: 'S', workflowIds: ['a', 'b', 'c'], stopOnFailure: true } }, t.deps);
+    expect(result.skipped).toEqual(['Pay']);
+    expect(failedWorkflowIds(result, saved)).toEqual(['b', 'c']);
+    const passing = await runSuite({ suite: { id: 's', name: 'S', workflowIds: ['a'] } }, deps().deps);
+    expect(failedWorkflowIds(passing.result, saved)).toEqual([]);
+  });
+
+  it('runs only the given workflows, in suite order, keeping stopOnFailure', async () => {
+    const t = deps({ Login: 'failed' });
+    const { result } = await runSuite({ suite: { id: 's', name: 'S', workflowIds: ['a', 'b', 'c'], stopOnFailure: true }, only: ['c', 'a'] }, t.deps);
+    expect(t.ran.map((r) => r.name)).toEqual(['Login']);
+    expect(result).toMatchObject({ suiteId: 's', status: 'failed', skipped: ['Pay'] });
+    expect(t.progress.map((p) => [p.workflowName, p.total])).toEqual([
+      ['Login', 2],
+      ['Pay', 2],
+    ]);
+  });
+
+  it('ignores ids that are not in the suite; none left is config.invalid', async () => {
+    const t = deps();
+    await runSuite({ suite: { id: 's', name: 'S', workflowIds: ['a', 'b'] }, only: ['b', 'zzz'] }, t.deps);
+    expect(t.ran.map((r) => r.name)).toEqual(['Cart']);
+    await expect(runSuite({ suite: { id: 's', name: 'S', workflowIds: ['a'] }, only: ['zzz'] }, deps().deps)).rejects.toMatchObject({ code: 'config.invalid' });
   });
 });

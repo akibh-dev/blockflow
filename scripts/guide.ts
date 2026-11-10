@@ -204,6 +204,8 @@ function schema() {
           note: { type: 'string' },
           screenshot: { enum: ['error', 'always', 'never'] },
           realInput: { type: 'boolean' },
+          pause: { type: 'boolean' },
+          trace: { type: 'boolean' },
         },
       },
     },

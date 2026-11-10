@@ -5,7 +5,8 @@
 
 M3 is done on `m3-network` (2026-11-10): Route, HAR Record, Emulate, Clear Site Data and console capture,
 on run-scoped debugger sessions. M4 is done on `m4-outside-access` (2026-11-10): the native bridge, the MCP
-server, the CLI runner and Suites. Together they are v0.5.0; see IMPLEMENTATION.md.
+server, the CLI runner and Suites. Together they are v0.5.0. M5 is done on `m5-debugging` (2026-11-10, v0.6.0):
+trace timeline, breakpoints, visual comparison, ARIA snapshot assert, Run from here; see IMPLEMENTATION.md.
 
 ## 1. Goal
 
@@ -91,8 +92,8 @@ Nothing is proposed for removal at the feature level.
 | Popups / new pages | ✅ | ✅ | — |
 | `expect`: text, value, visible/hidden, enabled, checked, count, attribute, URL, title | ✅ | ✅ | — |
 | `expect`: `toHaveClass`, `toHaveCSS`, `toBeFocused`, `toBeEditable`, `toBeInViewport`, `toHaveAccessibleName` | ✅ | ✅ Assert `class`, `css`, `focused`, `editable`, `in-viewport`, `accessible-name`, `accessible-description` | **M2** ✅ |
-| Visual comparison | `toHaveScreenshot` | ❌ | **M5**: baseline per step, pixel diff in the offscreen document |
-| ARIA snapshot | `toMatchAriaSnapshot` | ❌ | **M1** as an authoring tool for LLMs (§5), **M5** as an assertion |
+| Visual comparison | `toHaveScreenshot` | ✅ Screenshot `compare` (baseline per block, masks, Accept new baseline) | **M5** ✅ |
+| ARIA snapshot | `toMatchAriaSnapshot` | ✅ page snapshot (M1) and Assert `aria-snapshot` | **M5** ✅ |
 | Screenshots: page, full page, element, on demand | ✅ | ✅ Screenshot block (Chromium: full page / background tabs via CDP; Firefox: `captureTab`) | **M2** ✅ |
 | Network: wait for response / request | `waitForResponse`, `waitForRequest` | ✅ Wait For `response` (method, body via CDP on Chromium) and `request` | **M2** ✅ |
 | Network: mock, block, modify (`route`) | ✅ | ✅ Route block: fulfill/abort/continue/modify/redirect via CDP `Fetch` (Chromium); abort/redirect via `declarativeNetRequest` on every browser | **M3** ✅ |
@@ -103,8 +104,8 @@ Nothing is proposed for removal at the feature level.
 | API testing | `request` fixture | ✅ HTTP Request | Make `failOnError` actually fail (§6) |
 | `evaluate` | ✅ | ✅ Run Script | — |
 | Test runner: suites, tags, retries, parallel workers | ✅ | 🟡 per-step retries, Run Workflow, Suites (in order, one combined JUnit/HTML/JSON report) | **M4** ✅ suites; tags and parallel workers later |
-| Tracing / trace viewer | ✅ | 🟡 run records with step input/output + screenshots | **M5**: timeline with before/after snapshots per step |
-| Debugging: pause, step through, inspector | `page.pause()`, `--debug` | ❌ | **M5**: breakpoints (step setting `pause`), step-over in the editor |
+| Tracing / trace viewer | ✅ | ✅ traced runs: before/after pictures, element box, network summary, filmstrip in Reports | **M5** ✅ |
+| Debugging: pause, step through, inspector | `page.pause()`, `--debug` | ✅ breakpoints, Step / Continue / Stop, pause on error, Run from here | **M5** ✅ |
 | Codegen | ✅ | ✅ recorder | Fix the recorder gaps (§6) |
 | Headless / CI | ✅ | ✅ `blockflow run` CLI (headless Chromium, JUnit, exit codes), Playwright export | **M4** ✅ |
 | Branching beyond true/false; loop until | (code) | ✅ If, Switch (one output per case + default), For Each, Repeat (`times`, `until`, `while`) | **M2** ✅ |
