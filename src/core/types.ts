@@ -9,6 +9,7 @@
 import type { AgentRequest, ReadKind, WaitUntil } from './page';
 import type { Routed } from './ports';
 import type { ClearSiteDataOptions, ConsoleEntry, EmulateOptions, HarResult, RouteOptions, RouteResult } from './network';
+import type { StepTrace } from './runs';
 
 export type { ReadKind } from './page';
 
@@ -48,6 +49,10 @@ export interface StepSettings {
    * shows a "started debugging this browser" bar). For sites that ignore synthetic events.
    */
   realInput?: boolean;
+  /** M5.2 breakpoint: in a debug run, pause before this step (Continue / Step / Stop in the editor). */
+  pause?: boolean;
+  /** M5.1: record a trace for this step (before/after screenshots, element box) even when the run is not traced. */
+  trace?: boolean;
 }
 
 /** One block placed in a workflow (a React Flow node when edited). */
@@ -567,6 +572,33 @@ export interface NotifyOptions {
  * Everything the engine and blocks may do outside pure computation. Implemented by
  * `src/browser/host.ts` with extension APIs and by `tests/helpers/fakeHost.ts` in memory.
  */
+/** M5.2: where a debug run paused. `input` is the step's input, masked like a run record. */
+export interface DebugPause {
+  runId: string;
+  workflowId: string;
+  nodeId: string;
+  blockType: string;
+  reason: 'breakpoint' | 'step' | 'error';
+  input: Payload;
+  /** For `error`: the failure about to be handled. */
+  error?: string;
+  /** The step's tab, when its input has one (for highlighting the element). */
+  tabId?: number;
+  /** The step's locator setting, if it has one. */
+  locator?: string;
+}
+
+/** M5.1: the traced step. */
+export interface TraceStepInfo {
+  runId: string;
+  nodeId: string;
+  blockType: string;
+  /** The step's tab, when its input has one. */
+  tabId?: number;
+  /** The step's resolved locator setting, if any. */
+  locator?: string;
+}
+
 export interface Host {
   /** Optional run-scoped resources. The engine gives this Host to that run's block contexts. */
   forRun?(runId: string): Host;
@@ -575,6 +607,22 @@ export interface Host {
   diagnostics?: {
     beginStep(nodeId: string): void;
     finishStep(nodeId: string): ConsoleEntry[];
+  };
+  /**
+   * M5.2 debug channel. In a debug run the engine awaits it before a step with `pause` (reason
+   * `breakpoint`), before every step after the user chose Step (`step`), and before a failure is handled
+   * when `pauseOnError` is on (`error`). The browser shows Continue / Step / Stop in the editor.
+   */
+  debug?: {
+    pause(info: DebugPause): Promise<'continue' | 'step' | 'stop'>;
+  };
+  /**
+   * M5.1 trace hooks, awaited around a traced step (failures are logged, never fail the step). `before`
+   * returns a screenshot id; `after` returns the rest of the step's trace.
+   */
+  trace?: {
+    before(info: TraceStepInfo): Promise<{ before?: string } | undefined>;
+    after(info: TraceStepInfo & { status: string; before?: string }): Promise<Omit<StepTrace, 'before'> | undefined>;
   };
   network: {
     route(tabId: number, options: RouteOptions): Promise<RouteResult>;

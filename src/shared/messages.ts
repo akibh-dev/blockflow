@@ -4,6 +4,7 @@ import type { PickerMode, PickerSync } from '../dom/picker';
 import type { RecorderMode } from '../dom/recorder';
 import type { Workflow } from '../core/types';
 import type { SuiteResult } from '../core/bridgeProtocol';
+import type { RunOptions } from '../core/runs';
 
 /**
  * Messages between the editor page, the background worker and the element picker.
@@ -98,6 +99,8 @@ export interface SnapshotResultMessage {
 export interface RunWorkflowMessage {
   type: 'bf:run-workflow';
   workflow: Workflow;
+  /** M5: traced run, debug run (breakpoints), or Run from here (`startAt`). */
+  options?: RunOptions;
 }
 
 /** Editor → background: the Stop button. */

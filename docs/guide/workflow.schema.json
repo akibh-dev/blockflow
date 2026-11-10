@@ -3555,6 +3555,12 @@
         },
         "realInput": {
           "type": "boolean"
+        },
+        "pause": {
+          "type": "boolean"
+        },
+        "trace": {
+          "type": "boolean"
         }
       }
     }

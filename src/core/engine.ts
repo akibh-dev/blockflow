@@ -5,7 +5,7 @@ import type { EvalEnv } from './expression';
 import { uid } from './id';
 import { DEFAULT_PORT, ERROR_PORT, Routed, edgePort, nodePorts } from './ports';
 import { MAX_STEPS_KEPT, compactPayload, maskPayload, maskText } from './runs';
-import type { RunObserver, RunRecord, RunTrigger, StepRecord } from './runs';
+import type { RunObserver, RunOptions, RunRecord, RunTrigger, StepRecord, StepTrace } from './runs';
 import { sessionTab } from './session';
 import { makeTimerKey, parseTimerKey, stateKey, workflowTimerPrefix } from './timerKey';
 import type { BlockRegistry } from './registry';
@@ -59,6 +59,10 @@ interface ActiveRun {
   secrets: Record<string, string>;
   /** What the last block of the run produced (a called workflow's result). */
   lastOutput?: Payload;
+  /** M5: trace / debug / run-from-here options of this run. */
+  options?: RunOptions;
+  /** M5.2: the user chose Step at the last pause, so the next step pauses too. */
+  stepping?: boolean;
 }
 
 type Invoke = (ctx: BlockContext<never>, input: Payload) => Promise<RunOutput>;
@@ -148,9 +152,10 @@ export class WorkflowRunner {
    * Runs the workflow once, now (the Run button). Works whether or not the workflow is on, and
    * schedules nothing: a Timer start block fires once immediately instead of starting its schedule.
    */
-  async runOnce(): Promise<RunRecord> {
+  async runOnce(options: RunOptions = {}): Promise<RunRecord> {
     this.stopped = false;
-    return this.inRun('manual', (run) => this.runRoots(run, {}));
+    const { startAt } = options;
+    return this.inRun('manual', (run) => (startAt ? this.runFrom(run, startAt.nodeId, startAt.input) : this.runRoots(run, {})), undefined, options);
   }
 
   /**
@@ -231,6 +236,17 @@ export class WorkflowRunner {
     });
   }
 
+  /** M5.5 "Run from here": one block with a given input (an earlier run's input of that step), then on as usual. */
+  private async runFrom(run: ActiveRun, nodeId: string, input: Payload): Promise<void> {
+    const node = this.nodesById.get(nodeId);
+    if (!node) {
+      run.failed = true;
+      run.record.error = `Run from here: the workflow has no block "${nodeId}" (was it deleted?)`;
+      return;
+    }
+    await this.runStep(node, input, run);
+  }
+
   /** Every start block once, with `input`: `trigger` for blocks that have one (Timer fires now). */
   private async runRoots(run: ActiveRun, input: Payload): Promise<void> {
     const roots = this.rootNodes();
@@ -255,7 +271,10 @@ export class WorkflowRunner {
   // -------------------------------------------------------------------------
   // Runs and steps
 
-  private async inRun(trigger: RunTrigger, body: (run: ActiveRun) => Promise<void>, parentRunId?: string): Promise<RunRecord> {
+  private async inRun(trigger: RunTrigger, body: (run: ActiveRun) => Promise<void>, parentRunId?: string, options?: RunOptions): Promise<RunRecord> {
+    const mode = options && (options.trace || options.debug || options.startAt)
+      ? { ...(options.trace ? { trace: true } : {}), ...(options.debug ? { debug: true } : {}), ...(options.startAt ? { startedAt: options.startAt.nodeId } : {}) }
+      : undefined;
     const run: ActiveRun = {
       record: {
         id: uid(),
@@ -266,7 +285,9 @@ export class WorkflowRunner {
         startedAt: this.host.now().toISOString(),
         steps: [],
         ...(parentRunId ? { parentRunId } : {}),
+        ...(mode ? { mode } : {}),
       },
+      ...(options ? { options } : {}),
       steps: 0,
       host: this.host,
       closed: false,
@@ -348,7 +369,24 @@ export class WorkflowRunner {
       return;
     }
 
+    // M5.2: a debug run pauses at breakpoints, and before every step after the user chose Step.
+    if (run.options?.debug && (run.stepping || settings.pause)) {
+      if (!(await this.debugPause(run, node, input, run.stepping ? 'step' : 'breakpoint'))) {
+        this.endStep(run, step, 'skipped', { error: 'Stopped' });
+        return;
+      }
+    }
+    // M5.1: screenshots around the step, the element's box, network summary.
+    const traced = Boolean(run.options?.trace || settings.trace) && run.host.trace !== undefined;
+    const traceInfo = traced ? this.traceInfo(run, node, input) : undefined;
+    const before = traceInfo ? await this.quietly(node.id, 'Trace', () => run.host.trace!.before(traceInfo)) : undefined;
+
     const outcome = await this.attempt(node, def, input, run, call, step);
+    if (traceInfo) {
+      const after = await this.quietly(node.id, 'Trace', () => run.host.trace!.after({ ...traceInfo, status: outcome.ok ? (outcome.softError ? 'failed' : 'passed') : 'failed', ...(before?.before ? { before: before.before } : {}) }));
+      const trace: StepTrace = { ...(before?.before ? { before: before.before } : {}), ...(after ?? {}) };
+      if (Object.keys(trace).length > 0) step.trace = trace;
+    }
     // Stopped while the block was working (a long wait, say): nothing is passed on.
     if (this.stopped || run.cancelled || this.isCancelled(run.record.id)) {
       run.cancelled = true;
@@ -356,6 +394,11 @@ export class WorkflowRunner {
       return;
     }
     if (!outcome.ok) {
+      // M5.2 "pause on error": look at the page before the failure is handled.
+      if (run.options?.debug?.pauseOnError && !(await this.debugPause(run, node, input, 'error', outcome.error))) {
+        this.endStep(run, step, 'failed', { error: outcome.error, details: outcome.details });
+        return;
+      }
       await this.handleFailure(run, step, node, def, input, outcome.error, ports, outcome.details);
       return;
     }
@@ -378,6 +421,60 @@ export class WorkflowRunner {
     this.endStep(run, step, outcome.softError ? 'failed' : 'passed', { output: payload, port, ...soft });
     await this.afterStep(run, step, node, payload, Boolean(outcome.softError));
     await this.emitFrom(node.id, payload, port, run);
+  }
+
+  /** M5.2: waits for Continue / Step / Stop from the debug channel. False = stop the run. */
+  private async debugPause(run: ActiveRun, node: NodeDef, input: Payload, reason: 'breakpoint' | 'step' | 'error', error?: string): Promise<boolean> {
+    const debug = run.host.debug;
+    if (!debug) return true;
+    const tabId = this.stepTab(node, input);
+    const locator = typeof node.config.locator === 'string' && node.config.locator.trim() ? node.config.locator : undefined;
+    let action: 'continue' | 'step' | 'stop';
+    try {
+      action = await debug.pause({
+        runId: run.record.id,
+        workflowId: this.workflow.id,
+        nodeId: node.id,
+        blockType: node.type,
+        reason,
+        input: compactPayload(maskPayload(input, this.secretValues)) ?? {},
+        ...(error ? { error: this.mask(error) } : {}),
+        ...(tabId !== undefined ? { tabId } : {}),
+        ...(locator ? { locator } : {}),
+      });
+    } catch (failure) {
+      this.log('warn', node.id, `Debugger: ${errorMessage(failure)}; continuing`);
+      action = 'continue';
+    }
+    if (action === 'stop' || this.isCancelled(run.record.id)) {
+      run.cancelled = true;
+      return false;
+    }
+    run.stepping = action === 'step';
+    return true;
+  }
+
+  /** M5.1: what the trace hooks need to know about a step. */
+  private traceInfo(run: ActiveRun, node: NodeDef, input: Payload) {
+    const tabId = this.stepTab(node, input);
+    const locator = typeof node.config.locator === 'string' && node.config.locator.trim() ? node.config.locator : undefined;
+    return { runId: run.record.id, nodeId: node.id, blockType: node.type, ...(tabId !== undefined ? { tabId } : {}), ...(locator ? { locator } : {}) };
+  }
+
+  /** The tab a page step works on: its `tab` setting's session tab (default "main"). */
+  private stepTab(node: NodeDef, input: Payload): number | undefined {
+    const name = typeof node.config.tab === 'string' && node.config.tab.trim() ? node.config.tab : 'main';
+    return sessionTab(input, name);
+  }
+
+  /** Runs an optional diagnostic hook; a failure is logged and never fails the step. */
+  private async quietly<T>(nodeId: string, what: string, fn: () => Promise<T>): Promise<T | undefined> {
+    try {
+      return await fn();
+    } catch (error) {
+      this.log('warn', nodeId, `${what}: ${errorMessage(error)}`);
+      return undefined;
+    }
   }
 
   /** Resolves settings and calls the block, with timeout and retries. */

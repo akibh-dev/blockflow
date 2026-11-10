@@ -406,7 +406,7 @@ export default defineBackground(() => {
         void relayRecorderSync(message, sender.tab?.id).catch(report('recording'));
         break;
       case 'bf:run-workflow':
-        void newRunner(migrateWorkflow(message.workflow)).runOnce().catch(report('run'));
+        void newRunner(migrateWorkflow(message.workflow)).runOnce(message.options).catch(report('run'));
         break;
       case 'bf:stop-run':
         cancelRun(message.runId);
