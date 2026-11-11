@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <body style="font-family: sans-serif">
+    <h1>CDP click target</h1>
+    <button id="target" style="padding: 12px 24px; font-size: 18px">Click me</button>
+    <p id="result">not clicked yet</p>
+    <script>
+      // The page's own report: who sent this event?
+      document.getElementById('target').addEventListener('click', (event) => {
+        document.getElementById('result').textContent = `isTrusted: ${event.isTrusted}`;
+      });
+    </script>
+  </body>
+</html>

@@ -37,7 +37,7 @@ short:
 
 ## Views (pages / navigation)
 
-There is no router. `Editor` keeps `view: 'canvas' | 'manage' | 'reports' | 'data' | 'secrets'` in state;
+There is no router. `Editor` keeps `view: 'canvas' | 'manage' | 'reports' | 'suites' | 'data' | 'secrets' | 'settings'` in state;
 the header tabs set it. The header, [Sidebar](Editor-Components.md#sidebar) and
 [LogPanel](Editor-Components.md#logpanel) are always shown; the middle of the grid changes:
 
@@ -46,11 +46,14 @@ the header tabs set it. The header, [Sidebar](Editor-Components.md#sidebar) and
 | `canvas` | Canvas | `<ReactFlow>` + [ConfigPanel](Editor-Components.md#configpanel) |
 | `manage` | All workflows (n) | [WorkflowsPage](Editor-Components.md#workflowspage) |
 | `reports` | Reports | [ReportsPage](Editor-Components.md#reportspage) |
+| `suites` | Suites | [SuitesPage](Editor-Components.md#suitespage) |
 | `data` | Data | [DataPage](Editor-Components.md#datapage) |
 | `secrets` | Secrets | [SecretsPage](Editor-Components.md#secretspage) |
+| `settings` | Settings | [SettingsPage](Editor-Components.md#settingspage) (outside control, limits, request log) |
 
 Opening a workflow (sidebar, table, a run in Reports) switches back to `canvas`. Importing switches to
-`manage`. The [PromptBanner](Editor-Components.md#promptbanner) is rendered above the grid on every view.
+`manage`. The [PromptBanner](Editor-Components.md#promptbanner), [DebugBanner](Editor-Components.md#debugbanner) and
+[HostAccessNote](Editor-Components.md#hostaccessnote) are rendered above the grid on every view.
 
 ## State in `Editor`
 
@@ -275,6 +278,15 @@ Vite bundles them at build time. Each becomes a `Template { id, name, text, work
 name, `name` is the **last** workflow's name (a file may hold a reusable sub-workflow plus the one that
 calls it), `text` is the JSON for `parseImport`. Sorted by name. `tests/core/guideExamples.test.ts` checks
 every example imports cleanly. Adding a template = adding an example to `docs/guide/examples`.
+
+## sync.ts
+
+Keeps several editor tabs (and the first-install sample seeding) from overwriting each other. The editor saves
+its whole workflow list, so when storage changes under it (another tab saved), `mergeStoredWorkflows(ours, base,
+theirs)` merges per workflow: one this tab has not touched since the last sync takes the stored version, one it
+edited keeps its own (and is saved again shortly). `base` (`syncBase(list)`) holds the canonical JSON of each
+workflow as last seen in storage; `canonicalJson` / `sameData` compare data regardless of key order, because
+browser storage does not keep it. Pure, tested without a browser (`tests/editor/`).
 
 ## files.ts
 
