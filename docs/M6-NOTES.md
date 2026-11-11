@@ -22,8 +22,8 @@ Written at the end of M6 (see [M6-PLAN.md](M6-PLAN.md) for the plan). Version **
 - [ ] Run [manual-test/M6-permissions.md](manual-test/M6-permissions.md) in Chrome and Firefox (the browser's
       real permission prompt cannot be automated).
 - [ ] Safari: convert and run on a Mac, then fill in [SAFARI.md](SAFARI.md)'s checklist and the README.
-- [ ] Tag `v1.0.0` (the workflow checks the tag equals `package.json`).
-- [ ] `npm login`, then publish `blockflow-bridge` first, then `blockflow-mcp` and `blockflow-runner` (they depend on it).
+- [x] Tag `v1.0.0` (the workflow checks the tag equals `package.json`). Released 2026-11-11; 1.0.1 followed with release fixes.
+- [x] `npm login`, then publish `blockflow-bridge` first, then `blockflow-mcp` and `blockflow-runner` (they depend on it).
 - [ ] Optional: small/marquee promo tiles for Chrome; Firefox-specific screenshots.
 
 ## Open decisions and risks

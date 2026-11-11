@@ -19,7 +19,7 @@ serve both.
 | ✅ **M3: Network and environment** (done, v0.5.0) | Run-scoped CDP sessions; Route (mock, block, modify, redirect), HAR Record, Emulate (device, viewport, locale, timezone, location, media, offline), Clear Site Data, console capture and Assert `console-errors`. Chromium; block/redirect routes on every browser |
 | ✅ **M4: Outside access** (done, v0.5.0) | A native-messaging bridge and an **MCP server**, so an AI agent can validate, run, read reports and fix workflows by itself; the `blockflow` CLI for CI; Suites with one combined report |
 | ✅ **M5: Debugging and visual** (done, v0.6.0) | Trace timeline with before/after pictures, breakpoints with Step / Continue / Stop, visual comparison with baselines, ARIA snapshot assert, Run from here, re-run failed |
-| ✅ **M6: Ship** (code done, v1.0.0) | Encrypted secrets, site access asked per workflow, Safari guards, release workflow and store listings, configurable limits, a faster canvas. Still to do by a person: store accounts and uploads, Safari on a Mac |
+| ✅ **M6: Ship** (code done, v1.0.0; v1.0.1) | Encrypted secrets, site access asked per workflow, Safari guards, release workflow and store listings, configurable limits, a faster canvas. Still to do by a person: store accounts and uploads, Safari on a Mac |
 
 Order: M0 → M1 → M2. M3 and M4 can run in parallel after M1, then M5 and M6.
 
