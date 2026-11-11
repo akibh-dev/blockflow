@@ -4,6 +4,12 @@ BlockFlow versions, newest first. Each entry lists what a user or an integrator 
 before; the task-level history is in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) and `git log`. Versions
 follow the milestones of [docs/PLAN.md](docs/PLAN.md).
 
+## npm: blockflow-bridge 1.0.1, blockflow-mcp 1.0.1
+
+- `bin` paths without `./`, so npm 11 publishes them without a warning (same commands as 1.0.0). The MCP server
+  depends on bridge 1.0.1. First bridge and MCP versions published by the release workflow (trusted publishing,
+  with provenance). The extension and `blockflow-runner` are unchanged (1.0.1).
+
 ## 1.0.1: Release fixes
 
 - **MIT licence** for the whole repository (`LICENSE`); the npm packages were already MIT. The sources zip of a

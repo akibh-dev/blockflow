@@ -1,6 +1,6 @@
 {
   "name": "blockflow-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server (stdio) for the BlockFlow browser extension: validate, run and repair workflows in your real browser.",
   "keywords": [
     "blockflow",
@@ -47,8 +47,8 @@
     "node": ">=20"
   },
   "dependencies": {
-    "blockflow-bridge": "1.0.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "blockflow-bridge": "1.0.1",
     "zod": "^4.0.0"
   }
 }
