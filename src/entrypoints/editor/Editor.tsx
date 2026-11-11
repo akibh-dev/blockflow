@@ -31,7 +31,7 @@ import type { WorkflowActions } from './components/WorkflowActions';
 import { WorkflowsPage } from './components/WorkflowsPage';
 import { downloadText, fileNameFor, readFiles } from './files';
 import { followPortChanges, fromFlow, sameGraph, toFlow } from './flow/convert';
-import { useLogs, usePrompts, useRuns, useStorageValue } from './hooks';
+import { useLogs, usePrompts, useRuns, useSecretNames, useStorageValue } from './hooks';
 import { recordingIntoWorkflow } from '../../core/recording';
 import { workflowToPlaywright } from '../../core/playwright';
 import { layoutWorkflow } from '../../core/layout';
@@ -359,8 +359,9 @@ export function Editor() {
   const [view, setView] = useState<'canvas' | 'manage' | 'reports' | 'suites' | 'data' | 'secrets' | 'settings'>('canvas');
   /** A message for the user, as a toast (errors stay longer). */
   const notice = useCallback((message: string, kind: 'info' | 'error' = 'info') => toast(message, kind), []);
-  /** Secret names, so import can warn about `{{secret.x}}` that does not exist (values are not used). */
-  const [secrets] = useStorageValue<Record<string, string>>(STORAGE_KEYS.secrets, {});
+  /** Secret names, so import can warn about `{{secret.x}}` that does not exist (values are not used).
+   * Works while encrypted/locked too: `secretNames` reads names from either format. */
+  const secrets = useSecretNames();
 
   const createNew = useCallback(() => {
     const workflow = createWorkflow(uniqueName(`Workflow ${(latest.current?.length ?? 0) + 1}`, (latest.current ?? []).map((w) => w.name)));
