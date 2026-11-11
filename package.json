@@ -33,7 +33,8 @@
     "blockflow": "node packages/cli/cli.mjs",
     "bridge": "node packages/bridge/cli.mjs",
     "mcp": "node packages/mcp/server.mjs",
-    "e2e:cli": "BF_AUTOMATION=1 wxt build && node tests/cli/cli.e2e.mjs"
+    "e2e:cli": "BF_AUTOMATION=1 wxt build && node tests/cli/cli.e2e.mjs",
+    "lint:firefox": "web-ext lint --source-dir .output/firefox-mv3"
   },
   "dependencies": {
     "@xyflow/react": "^12.0.0",
@@ -50,6 +51,7 @@
     "playwright-core": "^1.64.1",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0",
+    "web-ext": "^10.8.0",
     "wxt": "^0.20.0"
   },
   "workspaces": [
