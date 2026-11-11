@@ -8,6 +8,8 @@ export const STORAGE_KEYS = {
   runs: 'bf:runs',
   /** `Record<string, string>`: named secrets for `{{secret.x}}`. Written by the editor's Secrets page. */
   secrets: 'bf:secrets',
+  /** Base64 of the 32-byte key that decrypts `bf:secrets` when it is encrypted (v2). Kept in `storage.session` only: gone when the browser closes. */
+  secretsKey: 'bf:secrets-key',
   /** `PendingPrompt[]`: Manual Steps waiting for an answer (prompts.ts), shown as the editor's banner. */
   prompts: 'bf:prompts',
   /** `RecordingState`: the one recording in progress or just stopped (recording.ts); the editor removes it after converting. */
