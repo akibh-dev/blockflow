@@ -8,7 +8,8 @@ Everything needed to publish BlockFlow, except what needs a person and an accoun
 | [firefox.md](firefox.md) | Firefox Add-ons (AMO) listing text, reviewer notes, known linter warnings |
 | `screenshots/` | 1280×800 PNGs made by `npm run store:screenshots` (needs `BF_E2E=1 npx wxt build` first) |
 | [../PRIVACY.md](../PRIVACY.md) | The privacy policy both listings link to, with every permission explained |
-| `.github/workflows/release.yml` | Builds, checks, lints and zips on a `v*.*.*` tag; attaches the zips to a GitHub release; signs (AMO) and uploads a draft (Chrome) when the secrets exist |
+| `.github/workflows/release.yml` | Builds, checks, lints and zips on a `v*.*.*` tag; attaches the zips to a GitHub release; submits the version to AMO (with sources and `amo-metadata.json`) and uploads a Chrome draft when the secrets exist; publishes new npm package versions |
+| `amo-metadata.json` | Licence and reviewer notes sent with every AMO submission |
 
 ## Release steps
 

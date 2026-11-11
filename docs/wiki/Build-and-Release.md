@@ -134,11 +134,24 @@ v0.3; see `src/core/migrate.ts`), independent of both.
    (most likely the mirror removing refs Forgejo does not have).
 3. [`release.yml`](../../.github/workflows/release.yml) runs on GitHub:
    - job `release`: checks the tag against `package.json`, `npm run check`, builds, lints Firefox, zips, attaches
-     `blockflow-<version>-{chrome,firefox,sources}.zip` to the GitHub release; with the store secrets, signs
-     (AMO) and uploads a draft (Chrome). Pre-release tags: release marked pre-release, no store steps.
+     `blockflow-<version>-{chrome,firefox,sources}.zip` to the GitHub release. With the AMO secrets it submits the
+     version to addons.mozilla.org (listed, with the sources zip and the reviewer notes and licence of
+     [docs/store/amo-metadata.json](../../docs/store/amo-metadata.json); it does not wait for the review); with
+     the Chrome secrets it uploads a draft. Pre-release tags: release marked pre-release, no store steps.
    - job `npm` (not for pre-release tags): `npm run build:automation`, then publishes each package whose version
      is not on npmjs.com yet, `blockflow-bridge` first. Nothing new → nothing published.
 4. Stores: submit in the dashboards ([docs/store/README.md](../../docs/store/README.md)); Safari: `build:safari` + Xcode.
+
+### Firefox Add-ons (one-time setup)
+
+1. The first version is submitted by hand (done for 1.0.0); later versions go through `release.yml`. The add-on
+   is matched by its id `blockflow@akibh-dev` (manifest `browser_specific_settings.gecko.id`).
+2. Create API credentials at <https://addons.mozilla.org/developers/addon/api/key/> (a JWT issuer and secret).
+3. Add them as GitHub repository secrets (Settings → Secrets and variables → Actions, or
+   `gh secret set AMO_JWT_ISSUER -R akibh-dev/blockflow` and the same for `AMO_JWT_SECRET`).
+4. The step runs `web-ext sign --channel listed --upload-source-code … --amo-metadata docs/store/amo-metadata.json
+   --approval-timeout 0`. A failed review or a validation error shows in the run log and in the AMO dashboard.
+   Keep `amo-metadata.json`'s notes current when permissions or build steps change.
 
 ### npm trusted publishing (one-time setup)
 

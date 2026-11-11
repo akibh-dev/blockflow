@@ -56,10 +56,25 @@ jobs:
           files: .output/*.zip
           generate_release_notes: true
           prerelease: ${{ steps.tag.outputs.prerelease == 'true' }}
-      - name: Sign the Firefox build (needs AMO_JWT_ISSUER and AMO_JWT_SECRET)
+      - name: Submit the Firefox version to AMO (needs AMO_JWT_ISSUER and AMO_JWT_SECRET)
+        # A store error (e.g. this version was already submitted, on a re-run) shows in the log but does not stop
+        # the npm job.
+        continue-on-error: true
         if: ${{ steps.tag.outputs.prerelease == 'false' && env.AMO_JWT_ISSUER != '' && env.AMO_JWT_SECRET != '' }}
-        run: npx web-ext sign --source-dir .output/firefox-mv3 --channel listed --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET" --artifacts-dir .output/signed
+        # Submits a new version of the listed add-on with the sources zip (the code is bundled) and the reviewer
+        # notes + licence from docs/store/amo-metadata.json. Does not wait for Mozilla's review (it can take days):
+        # AMO publishes the version when a reviewer approves it.
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          npx web-ext sign --source-dir .output/firefox-mv3 --channel listed \
+            --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET" \
+            --upload-source-code ".output/blockflow-$version-sources.zip" \
+            --amo-metadata docs/store/amo-metadata.json \
+            --approval-timeout 0 --artifacts-dir .output/signed
       - name: Upload the Chrome package as a draft (needs the CWS_* secrets)
+        # A store error (e.g. this version was already submitted, on a re-run) shows in the log but does not stop
+        # the npm job.
+        continue-on-error: true
         if: ${{ steps.tag.outputs.prerelease == 'false' && env.CWS_CLIENT_ID != '' && env.CWS_CLIENT_SECRET != '' && env.CWS_REFRESH_TOKEN != '' && env.CWS_EXTENSION_ID != '' }}
         run: |
           zip="$(ls .output/*-chrome.zip | head -1)"
