@@ -13,8 +13,11 @@ Everything needed to publish BlockFlow, except what needs a person and an accoun
 ## Release steps
 
 1. On `main`: version in `package.json` (and `packages/*`) set, `CHANGELOG.md` updated, `npm run check` green.
-2. `git tag v1.0.0 && git push origin v1.0.0` → the release workflow runs. The tag must equal the
-   `package.json` version (the workflow checks).
+2. `git tag v1.0.0 && git push origin v1.0.0` (or publish a release with a new tag in the GitHub UI) → the
+   release workflow runs. The tag must equal the `package.json` version (the workflow checks). A pre-release tag
+   such as `v1.0.0-alpha` or `v1.0.0-rc.1` passes when the part before `-` matches; its GitHub release is marked
+   pre-release and nothing is uploaded to the stores (extension versions are numbers only, so `1.0.0` stays in
+   `package.json`).
 3. Download `blockflow-<version>-chrome.zip` and `…-firefox.zip` (+ `…-sources.zip`, which AMO asks for because the
    code is bundled) from the GitHub release.
 4. Chrome: with the `CWS_*` secrets the workflow already uploaded a draft; otherwise upload the zip in the

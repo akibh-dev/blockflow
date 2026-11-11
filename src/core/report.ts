@@ -77,7 +77,7 @@ function stepLine(step: StepRecord, options: ReportOptions): string {
 /** The JSON report of `runs` (see {@link JsonReport}). `now` is the report time. */
 export function toJsonReport(runs: RunRecord[], now: Date = new Date()): JsonReport {
   return {
-    $schema: `https://github.com/akib35/blockflow/${REPORT_SCHEMA_PATH}`,
+    $schema: `https://raw.githubusercontent.com/akibh-dev/blockflow/main/${REPORT_SCHEMA_PATH}`,
     schemaVersion: REPORT_SCHEMA_VERSION,
     generatedAt: now.toISOString(),
     summary: summarize(runs),
@@ -191,7 +191,7 @@ export function toSuiteJson(result: SuiteResult, now: Date = new Date()): JsonSu
   const suite: JsonSuiteReport['suite'] = { name: result.name, status: result.status, startedAt: result.startedAt, finishedAt: result.finishedAt, skipped: result.skipped };
   if (result.suiteId) suite.id = result.suiteId;
   return {
-    $schema: `https://github.com/akib35/blockflow/${SUITE_REPORT_SCHEMA_PATH}`,
+    $schema: `https://raw.githubusercontent.com/akibh-dev/blockflow/main/${SUITE_REPORT_SCHEMA_PATH}`,
     schemaVersion: SUITE_REPORT_SCHEMA_VERSION,
     generatedAt: now.toISOString(),
     suite,
