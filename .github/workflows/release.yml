@@ -5,6 +5,8 @@ name: Release
 # signs the Firefox build and uploads the Chrome package as a draft. A person publishes in the store dashboards.
 # Pre-release tags (v1.0.0-alpha, v1.0.0-rc.1): the part before "-" must equal package.json (extension manifests
 # allow only numeric versions), the GitHub release is marked pre-release, and nothing goes to the stores.
+# After that, the `npm` job publishes the npm packages whose version is not on npmjs.com yet (trusted publishing,
+# no token: each package names this workflow file as its trusted publisher on npmjs.com).
 # See docs/store/README.md.
 on:
   push:
@@ -17,6 +19,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      prerelease: ${{ steps.tag.outputs.prerelease }}
     # Job-level, because a step's `if` cannot see its own step-level `env`. Empty when the secret is not set.
     env:
       AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
@@ -60,3 +64,37 @@ jobs:
         run: |
           zip="$(ls .output/*-chrome.zip | head -1)"
           npx --yes chrome-webstore-upload-cli@3 upload --source "$zip" --extension-id "$CWS_EXTENSION_ID" --client-id "$CWS_CLIENT_ID" --client-secret "$CWS_CLIENT_SECRET" --refresh-token "$CWS_REFRESH_TOKEN"
+
+  # npm trusted publishing (OIDC): npmjs.com accepts a publish from this workflow file in akibh-dev/blockflow
+  # without a token, and adds provenance. Each package publishes only when its version is not on npm yet, so a
+  # tag that only changes the extension publishes nothing. Pre-release tags skip npm. Setup: docs/wiki/Build-and-Release.md.
+  npm:
+    needs: release
+    if: ${{ needs.release.outputs.prerelease == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      # blockflow-runner bundles this build (packages/cli/scripts/pack.mjs runs at prepack).
+      - run: npm run build:automation
+      - name: Publish new package versions (bridge first; mcp and runner depend on it)
+        run: |
+          for dir in bridge mcp cli; do
+            name="$(node -p "require('./packages/$dir/package.json').name")"
+            version="$(node -p "require('./packages/$dir/package.json').version")"
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already on npm, skipped"
+            else
+              echo "publishing $name@$version"
+              (cd "packages/$dir" && npm publish --access public)
+            fi
+          done

@@ -13,8 +13,9 @@ Everything needed to publish BlockFlow, except what needs a person and an accoun
 ## Release steps
 
 1. On `main`: version in `package.json` (and `packages/*`) set, `CHANGELOG.md` updated, `npm run check` green.
-2. `git tag v1.0.0 && git push origin v1.0.0` (or publish a release with a new tag in the GitHub UI) → the
-   release workflow runs. The tag must equal the `package.json` version (the workflow checks). A pre-release tag
+2. `git tag -a v1.0.0 -m "BlockFlow 1.0.0" && git push origin v1.0.0` on Forgejo (not in the GitHub UI: tags made only
+   on GitHub were removed by the mirror) → after the sync the release workflow runs on GitHub, and its `npm` job
+   publishes any new npm package versions ([Build and Release](../wiki/Build-and-Release.md#release-steps)). The tag must equal the `package.json` version (the workflow checks). A pre-release tag
    such as `v1.0.0-alpha` or `v1.0.0-rc.1` passes when the part before `-` matches; its GitHub release is marked
    pre-release and nothing is uploaded to the stores (extension versions are numbers only, so `1.0.0` stays in
    `package.json`).

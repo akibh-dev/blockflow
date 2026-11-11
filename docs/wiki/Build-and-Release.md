@@ -112,17 +112,52 @@ Load an unpacked build:
 
 ## Versioning
 
-The single version is `version` in [package.json](../../package.json) (currently `0.1.0`); WXT copies it into
-the manifest and the zip names. Every store upload needs a higher version. There is no changelog file or
-release automation yet; workflow files carry their own `schemaVersion` (2 since v0.3; see `src/core/migrate.ts`), independent of the app version.
+Two kinds of version, each bumped on its own:
+
+- **The extension**: `version` in [package.json](../../package.json). WXT copies it into the manifest and the zip
+  names; every store upload needs a higher one. Numbers only (stores reject `1.0.1-rc.1`); a release tag is `v` +
+  this version, optionally with a pre-release suffix (`v1.0.1-rc.1`).
+- **The npm packages**: `version` in `packages/bridge`, `packages/mcp`, `packages/cli` (`blockflow-bridge`,
+  `blockflow-mcp`, `blockflow-runner`). Bump one only when its code changed. `blockflow-runner` bundles the
+  extension's automation build, so bump it too when a new extension version should reach CLI users; `mcp` and
+  `cli` pin `blockflow-bridge` exactly, so a new bridge version needs their dependency updated.
+
+Changes per version: [CHANGELOG.md](../../CHANGELOG.md). Workflow files carry their own `schemaVersion` (2 since
+v0.3; see `src/core/migrate.ts`), independent of both.
 
 ## Release steps
 
-1. `npm run check` (and `npm run e2e` on a desktop machine).
-2. Bump `version` in `package.json`.
-3. `npm run zip` and `npm run zip:firefox` (Safari: `build:safari` + Xcode archive).
-4. Upload: Chrome Web Store dashboard, addons.mozilla.org (with the sources zip), App Store Connect.
-5. Review notes: explain `<all_urls>`, `debugger` and `userScripts`; BlockFlow sends no data off the device.
+1. On `main`: bump the version(s), update `CHANGELOG.md`, `npm run check` green (and `npm run e2e` on a desktop
+   machine).
+2. Tag on Forgejo: `git tag -a v1.0.1 -m "BlockFlow 1.0.1" && git push origin v1.0.1`. The sync copies the tag
+   to GitHub. Do not tag in the GitHub UI: on 2026-11-11 tags made only on GitHub disappeared, with their releases
+   (most likely the mirror removing refs Forgejo does not have).
+3. [`release.yml`](../../.github/workflows/release.yml) runs on GitHub:
+   - job `release`: checks the tag against `package.json`, `npm run check`, builds, lints Firefox, zips, attaches
+     `blockflow-<version>-{chrome,firefox,sources}.zip` to the GitHub release; with the store secrets, signs
+     (AMO) and uploads a draft (Chrome). Pre-release tags: release marked pre-release, no store steps.
+   - job `npm` (not for pre-release tags): `npm run build:automation`, then publishes each package whose version
+     is not on npmjs.com yet, `blockflow-bridge` first. Nothing new → nothing published.
+4. Stores: submit in the dashboards ([docs/store/README.md](../../docs/store/README.md)); Safari: `build:safari` + Xcode.
+
+### npm trusted publishing (one-time setup)
+
+The `npm` job publishes without a token: npmjs.com trusts this workflow through OIDC (`id-token: write`) and adds
+[provenance](https://docs.npmjs.com/generating-provenance-statements) (the repository is public). For **each** of
+the three packages, on npmjs.com → the package → **Settings** → **Trusted Publisher** → **GitHub Actions**:
+
+| Field | Value |
+| --- | --- |
+| Organization or user | `akibh-dev` |
+| Repository | `blockflow` |
+| Workflow filename | `release.yml` |
+| Environment name | (empty) |
+
+The fields are case-sensitive and must match exactly, and each package's `repository.url` must be
+`git+https://github.com/akibh-dev/blockflow.git` (it is). npm checks the settings only at the first publish, and a
+new trusted publisher that has not published within 2 days expires. Afterwards, **Settings → Publishing access →
+"Require two-factor authentication and disallow tokens"** blocks token publishing without affecting the
+workflow. Needs npm 11.5.1+ (Node 26 ships 11.20) and a GitHub-hosted runner.
 
 Store accounts, fees, privacy policy and review tips: [Lesson 8, Publishing](../learning/08-testing-debugging-publishing.md#publishing).
 
