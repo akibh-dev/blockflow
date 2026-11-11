@@ -13,7 +13,8 @@ follow the milestones of [docs/PLAN.md](docs/PLAN.md).
 - Releases: pre-release tags (`v1.0.1-rc.1`) are accepted, marked pre-release and kept out of the stores.
 - CI and releases on Node 26 (LTS) with the current GitHub Actions; the lock file matches the renamed
   `blockflow-runner` package.
-- The npm packages are unchanged (still 1.0.0).
+- npm: **`blockflow-runner` 1.0.1** bundles the 1.0.1 extension and is the first version published by the release
+  workflow (trusted publishing); `blockflow-bridge` and `blockflow-mcp` are unchanged (1.0.0).
 
 ## 1.0.0: Ship
 
