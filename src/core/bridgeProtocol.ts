@@ -31,10 +31,21 @@ export const BRIDGE_STORAGE_KEYS = {
 } as const;
 export const MAX_BRIDGE_LOG = 200;
 
-export interface BridgeSettings {
+/** `bf:settings`: "Allow outside control" (M4) and the limits of Settings → Limits (M6.5, see src/core/limits.ts). */
+export interface Settings {
   /** "Allow outside control": off by default. While on, the worker keeps the native port open. */
   outsideControl: boolean;
+  /** Run history kept (10–500, default 40). */
+  runHistory?: number;
+  /** Run log lines kept (100–5000, default 300). */
+  logEntries?: number;
+  /** Screenshots kept (20–1000, default 150). */
+  screenshots?: number;
+  /** Blocks one run may go through before it stops as a probable loop (100–100000, default 1000). */
+  maxStepsPerRun?: number;
 }
+/** The M4 name of `Settings`. */
+export type BridgeSettings = Settings;
 
 export interface BridgeLogEntry {
   at: string;

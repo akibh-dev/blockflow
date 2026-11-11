@@ -4,13 +4,14 @@
  * background worker share the same IndexedDB (same chrome-extension:// origin).
  */
 
+import { getLimits } from './limits';
+
 const DB_NAME = 'blockflow';
 const DB_VERSION = 2;
-/** Object store of `Screenshot`, keyPath `id`. Pruned to the newest MAX_SCREENSHOTS. */
+/** Object store of `Screenshot`, keyPath `id`. Pruned to the newest `screenshots` of Settings → Limits (default 150). */
 export const SCREENSHOTS = 'screenshots';
 /** Object store of `Dataset`, keyPath `name` (added in DB version 2). */
 export const DATASETS = 'datasets';
-const MAX_SCREENSHOTS = 150;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -54,13 +55,14 @@ export interface Screenshot {
   dataUrl: string;
 }
 
-/** Stores a screenshot and deletes the oldest beyond MAX_SCREENSHOTS (trace images have their own limits). */
+/** Stores a screenshot and deletes the oldest beyond the screenshot limit of Settings → Limits (trace images have their own limits). */
 export async function saveScreenshot(shot: Screenshot): Promise<void> {
   await done((await store(SCREENSHOTS, 'readwrite')).put(shot));
-  // Keep the newest MAX_SCREENSHOTS. Trace image keys start with "~", after every UUID: not loaded here.
+  // Keep the newest `screenshots`. Trace image keys start with "~", after every UUID: not loaded here.
+  const { screenshots: keep } = await getLimits();
   const all = (await done((await store(SCREENSHOTS)).getAll(IDBKeyRange.upperBound(TRACE_PREFIX, true)))) as Screenshot[];
-  if (all.length > MAX_SCREENSHOTS) {
-    const old = all.sort((a, b) => a.ts - b.ts).slice(0, all.length - MAX_SCREENSHOTS);
+  if (all.length > keep) {
+    const old = all.sort((a, b) => a.ts - b.ts).slice(0, all.length - keep);
     const writable = await store(SCREENSHOTS, 'readwrite');
     for (const item of old) writable.delete(item.id);
   }

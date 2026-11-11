@@ -738,7 +738,9 @@ Each example is in both formats: `<name>.script.json` (the script, start here) a
 - CAPTCHAs and 2FA are not bypassed: use Manual Step.
 - Background tabs are throttled by the browser; use `"where": "window"` for tests that need
   animations, lazy loading or screenshots.
-- Runs stop after 1000 blocks (loop guard). Run history keeps 40 runs; payloads over 3 KB are stored
+- Runs stop after 1000 blocks (loop guard). Run history keeps 40 runs, the run log 300 lines and 150 screenshots;
+  all four are changeable in **Settings → Limits** (10–500 runs, 100–5000 log lines, 20–1000 screenshots,
+  100–100000 blocks per run; raise the last one for For Each over big lists). Payloads over 3 KB are stored
   as a preview.
 - Firefox: grant site access in `about:addons` → BlockFlow → Permissions.
 

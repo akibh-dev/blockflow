@@ -19,6 +19,10 @@ state, and which messages, storage keys or browser APIs it touches. Read [Editor
 [SuitesPage.tsx](../../src/entrypoints/editor/components/SuitesPage.tsx),
 [DataPage.tsx](../../src/entrypoints/editor/components/DataPage.tsx),
 [SecretsPage.tsx](../../src/entrypoints/editor/components/SecretsPage.tsx),
+[SettingsPage.tsx](../../src/entrypoints/editor/components/SettingsPage.tsx),
+[LimitsSection.tsx](../../src/entrypoints/editor/components/LimitsSection.tsx),
+[HostAccessNote.tsx](../../src/entrypoints/editor/components/HostAccessNote.tsx),
+[hostAccess.ts](../../src/entrypoints/editor/hostAccess.ts),
 [PromptBanner.tsx](../../src/entrypoints/editor/components/PromptBanner.tsx),
 [DebugBanner.tsx](../../src/entrypoints/editor/components/DebugBanner.tsx),
 [RunControls.tsx](../../src/entrypoints/editor/components/RunControls.tsx),
@@ -47,7 +51,9 @@ state, and which messages, storage keys or browser APIs it touches. Read [Editor
 | [VisualComparePanel](#visualcomparepanel) | ReportsPage step details (M5.3) | IndexedDB read (`blockflow-visual`, screenshots), sends `bf:accept-baseline`, listens for `bf:baseline-accepted` |
 | [SuitesPage](#suitespage) | Suites view (no props) | reads/writes `bf:suites`, reads `bf:workflows`, sends `bf:run-suite`, listens for `bf:suite-progress` / `bf:suite-result`, IndexedDB read, downloads |
 | [DataPage](#datapage) | `data` view | IndexedDB read/delete (polls), downloads |
-| [SecretsPage](#secretspage) | `secrets` view | reads/writes `bf:secrets` |
+| [SecretsPage](#secretspage) | `secrets` view | reads/writes `bf:secrets` (plain or encrypted), session key `bf:secrets-key` |
+| [SettingsPage](#settingspage) | `settings` view (no props) | reads/writes `bf:settings`, reads `bf:bridge-log`, session `bf:bridge-status`, asks for `nativeMessaging` |
+| [HostAccessNote](#hostaccessnote) | top of the page, for the open workflow | `permissions.contains/request` for the sites the workflow uses |
 | [PromptBanner](#promptbanner) | top of the page, all views | sends `bf:answer-prompt` |
 | [DebugBanner](#debugbanner) | top of the page, all views (no props) | reads storage.session `bf:debug-pause`, sends `bf:debug-answer` |
 | [RunControls](#runcontrols) | header | none (callback); `localStorage` for the "pause on error" box |
@@ -396,18 +402,48 @@ Browser for datasets written by Save to Dataset blocks (IndexedDB, `src/browser/
 
 ## SecretsPage
 
-Editor for named secrets in `bf:secrets` (`Record<string, string>`), through
-`useStorageValue` ([hooks](Editor.md#hooksts)).
+Editor for named secrets in `bf:secrets`, through `useStorageValue` ([hooks](Editor.md#hooksts)) and the vault
+(`src/browser/secretVault.ts`, [Browser Host](Browser-Host.md)). Four states:
 
-**State:** `name`, `value` (the new-secret row), `shown` (names whose value is visible).
+| State | The page shows |
+| --- | --- |
+| plain, none or some secrets | the editable table, a warning that they are stored **unencrypted**, and **Protect with a passphrase** (two inputs, at least 8 characters, must match) |
+| encrypted, locked (no `bf:secrets-key` in `storage.session`) | names only, a passphrase input and **Unlock**; a wrong passphrase shows an error inline |
+| encrypted, unlocked | the editable table (`setSecret` / `removeSecret`), **Lock now**, **Change passphrase**, **Remove passphrase** (asks first) |
 
 - Names must match `/^[A-Za-z_][A-Za-z0-9_]*$/` (so `{{secret.name}}` parses). Adding an existing name
   overwrites it.
-- Existing values are edited in place; every keystroke saves the whole map.
 - Delete asks for confirmation in a `confirmDialog` (workflows using it will fail).
-- Values are plain text in `storage.local`; the page says so. Masking in logs and reports is done by the
-  engine (see [ARCHITECTURE.md, Engine model](../ARCHITECTURE.md#engine-model-srccoreenginets)), and
-  secrets are never part of a workflow export because they are never in a workflow.
+- Locked and a workflow uses `{{secret.…}}`: the run fails with `secrets.locked` and runs no steps (the engine
+  checks `usesSecrets`, `src/core/secrets.ts`).
+- Masking in logs and reports is done by the engine (see
+  [ARCHITECTURE.md, Engine model](../ARCHITECTURE.md#engine-model-srccoreenginets)); secrets are never part of
+  a workflow export because they are never in a workflow. Values never appear in messages or logs.
+
+## SettingsPage
+
+`settings` view, no props. Sections: **Outside control** (the "Allow outside control" switch: asks for
+`nativeMessaging` first, only when it is not granted; status from `storage.session` `bf:bridge-status`; the
+install command with this browser's extension id; Safari shows "not available"), **Limits**
+([LimitsSection](#limitssection)) and **Recent requests** (the last 50 of `bf:bridge-log`, Clear log). Everything
+is stored in `bf:settings`; see [Bridge](Bridge.md).
+
+### LimitsSection
+
+Four number inputs (runs kept, log lines, screenshots, blocks per run) with the ranges and defaults of
+`src/core/limits.ts`. Saved into `bf:settings` on blur (`onSave({...settings, [key]: n})`); out-of-range input is
+clamped and the clamped number is shown; an empty field resets to the default. The worker applies a change within
+about two seconds (`src/browser/limits.ts` caches for 2 s; the blocks-per-run limit is read when a runner is
+created).
+
+## HostAccessNote
+
+`{ need, onGranted }`. Shown under the banners when the open workflow uses sites the browser has not granted
+(the store build has no site access at install): "This workflow needs access to **shop.example.com**" with
+**Grant access**. `Editor.tsx` computes `need` with `missingAccess(workflow)` (`hostAccess.ts`, which uses
+`workflowOrigins` from `src/core/origins.ts`), refreshes it on `permissions.onAdded/onRemoved`, and asks in the
+same click for **Run** and the **On** switch (browsers only prompt for a user gesture). Background runs (timers,
+Watch Element) cannot prompt: they fail with `permission.missing` naming the site until it is granted.
 
 ## PromptBanner
 

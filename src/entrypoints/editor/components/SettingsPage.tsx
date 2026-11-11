@@ -5,6 +5,7 @@ import type { BridgeStatus } from '../../../browser/bridgeStatus';
 import { BRIDGE_STORAGE_KEYS } from '../../../core/bridgeProtocol';
 import type { BridgeLogEntry, BridgeSettings } from '../../../core/bridgeProtocol';
 import { useStorageValue } from '../hooks';
+import { LimitsSection } from './LimitsSection';
 import { requestPermission } from './PermissionNote';
 
 const OFF: BridgeSettings = { outsideControl: false };
@@ -110,6 +111,8 @@ export function SettingsPage() {
       <button type="button" onClick={() => void navigator.clipboard.writeText(command).catch(() => {})}>
         Copy command
       </button>
+
+      <LimitsSection settings={settings} onSave={saveSettings} />
 
       <h3>Recent requests</h3>
       {log.length === 0 ? (
