@@ -1,8 +1,11 @@
 name: Release
 
-# Push a tag like v1.0.0. Builds, checks and zips both stores' packages, lints Firefox, attaches the zips to a
-# GitHub release, and (only when the secrets exist) signs the Firefox build and uploads the Chrome package as a
-# draft. A person publishes in the store dashboards. See docs/store/README.md.
+# Push a tag like v1.0.0 (or publish a release in the GitHub UI, which creates the tag). Builds, checks and zips
+# both stores' packages, lints Firefox, attaches the zips to the GitHub release, and (only when the secrets exist)
+# signs the Firefox build and uploads the Chrome package as a draft. A person publishes in the store dashboards.
+# Pre-release tags (v1.0.0-alpha, v1.0.0-rc.1): the part before "-" must equal package.json (extension manifests
+# allow only numeric versions), the GitHub release is marked pre-release, and nothing goes to the stores.
+# See docs/store/README.md.
 on:
   push:
     tags: ['v*.*.*']
@@ -23,17 +26,20 @@ jobs:
       CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
       CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
       - run: npm ci
       - name: The tag must match package.json
+        id: tag
         run: |
           tag="${GITHUB_REF_NAME#v}"
+          base="${tag%%-*}"
           version="$(node -p "require('./package.json').version")"
-          if [ "$tag" != "$version" ]; then echo "tag $GITHUB_REF_NAME does not match package.json version $version"; exit 1; fi
+          if [ "$base" != "$version" ]; then echo "tag $GITHUB_REF_NAME does not match package.json version $version"; exit 1; fi
+          if [ "$base" != "$tag" ]; then echo "prerelease=true" >> "$GITHUB_OUTPUT"; else echo "prerelease=false" >> "$GITHUB_OUTPUT"; fi
       - run: npm run check
       - run: npm run build
       - run: npm run build:firefox
@@ -41,15 +47,16 @@ jobs:
       - run: npm run zip
       - run: npm run zip:firefox
       - run: ls -l .output/*.zip
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: .output/*.zip
           generate_release_notes: true
+          prerelease: ${{ steps.tag.outputs.prerelease == 'true' }}
       - name: Sign the Firefox build (needs AMO_JWT_ISSUER and AMO_JWT_SECRET)
-        if: ${{ env.AMO_JWT_ISSUER != '' && env.AMO_JWT_SECRET != '' }}
+        if: ${{ steps.tag.outputs.prerelease == 'false' && env.AMO_JWT_ISSUER != '' && env.AMO_JWT_SECRET != '' }}
         run: npx web-ext sign --source-dir .output/firefox-mv3 --channel listed --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET" --artifacts-dir .output/signed
       - name: Upload the Chrome package as a draft (needs the CWS_* secrets)
-        if: ${{ env.CWS_CLIENT_ID != '' && env.CWS_CLIENT_SECRET != '' && env.CWS_REFRESH_TOKEN != '' && env.CWS_EXTENSION_ID != '' }}
+        if: ${{ steps.tag.outputs.prerelease == 'false' && env.CWS_CLIENT_ID != '' && env.CWS_CLIENT_SECRET != '' && env.CWS_REFRESH_TOKEN != '' && env.CWS_EXTENSION_ID != '' }}
         run: |
           zip="$(ls .output/*-chrome.zip | head -1)"
           npx --yes chrome-webstore-upload-cli@3 upload --source "$zip" --extension-id "$CWS_EXTENSION_ID" --client-id "$CWS_CLIENT_ID" --client-secret "$CWS_CLIENT_SECRET" --refresh-token "$CWS_REFRESH_TOKEN"
