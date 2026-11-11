@@ -302,6 +302,10 @@ Scenarios by spec:
 | HAR, console | `m3-telemetry.html`, `/export.csv?token=…` | HAR start/stop with request metadata, auth header/body/cookies left out and `token` redacted, entries saved as a dataset; `console.error` and an uncaught exception on the step; Assert `console-errors` `equals 0` fails |
 | **m5-visual** | | |
 | M5.3 | `visual.html` (`?v=2` moves/recolours `#hero`, `?clock=…`, `?badge=…`) | Screenshot `compare` on the visible area, an element and the full page: first run stores the baselines, the same page matches with 0 pixels, changes under masks (locator, rectangle, locator inside an element shot) pass, the changed page fails with `visual.mismatch` and stores baseline / actual / diff PNGs, `bf:accept-baseline` answers `bf:baseline-accepted`, then the new look passes that block (others keep their own baseline) and the old look fails |
+| **m6-secrets** | | |
+| M6.1 | `login.html`, editor Secrets page | Protect with a passphrase: `bf:secrets` holds no plaintext; a workflow with `{{secret.loginPassword}}` passes; dropping the session key (a browser restart) makes the run fail as locked with no steps; unlocking in the editor makes it pass again |
+| **m6-hosts** | | |
+| M6.2 | `login.html` | **Needs `BF_E2E_NO_HOSTS=1 npx wxt build` and `BF_EXTENSION_DIR=.output-e2e-nohosts/chrome-mv3`** (skips itself on the normal e2e build): no `host_permissions` in the manifest, the editor offers "Grant access" for 127.0.0.1, a page step fails with `permission.missing` naming the site, Open Tab still works. The browser's permission prompt is a manual step: `docs/manual-test/M6-permissions.md` |
 | **scripts** | | |
 | M1.2 | `table.html` + editor UI | Importing a `.script.json` through the Import button: blocks laid out (If rejoin), the run passes; Export as script enabled; Tidy up after a drag puts the blocks back on the grid, and Undo reverts it |
 | **blocks-coverage** | | |
