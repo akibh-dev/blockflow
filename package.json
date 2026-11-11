@@ -34,7 +34,8 @@
     "bridge": "node packages/bridge/cli.mjs",
     "mcp": "node packages/mcp/server.mjs",
     "e2e:cli": "BF_AUTOMATION=1 wxt build && node tests/cli/cli.e2e.mjs",
-    "lint:firefox": "web-ext lint --source-dir .output/firefox-mv3"
+    "lint:firefox": "web-ext lint --source-dir .output/firefox-mv3",
+    "store:screenshots": "node scripts/store-screenshots.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.0.0",
