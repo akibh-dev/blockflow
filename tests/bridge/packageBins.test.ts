@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * npm 11 drops a `bin` entry written as "./cli.mjs" when it publishes ("script name cli.mjs was invalid and
- * removed"); npm 10 only rewrote it. blockflow-runner 1.0.1 was published from CI without its `blockflow`
- * command that way. Bin paths are therefore plain relative paths, and each must exist and be in `files`.
+ * npm 11 warns that it removes a `bin` entry written as "./cli.mjs" when it publishes ("script name cli.mjs
+ * was invalid and removed"); npm 10 only rewrote it. Bin paths are therefore plain relative paths, and each
+ * must exist and start with a node shebang.
  */
 const PACKAGES = ['bridge', 'mcp', 'cli'];
 

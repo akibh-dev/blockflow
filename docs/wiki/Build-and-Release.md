@@ -173,8 +173,9 @@ The fields are case-sensitive and must match exactly, and each package's `reposi
 new trusted publisher that has not published within 2 days expires. Afterwards, **Settings → Publishing access →
 "Require two-factor authentication and disallow tokens"** blocks token publishing without affecting the
 workflow. Needs npm 11.5.1+ (Node 26 ships 11.20) and a GitHub-hosted runner. Write `bin` paths without `./`
-(`"blockflow": "cli.mjs"`): npm 11 drops `./cli.mjs` from the published package (it did for `blockflow-runner`
-1.0.1); `tests/bridge/packageBins.test.ts` checks it.
+(`"blockflow": "cli.mjs"`): npm 11 warns "script name cli.mjs was invalid and removed" for `./cli.mjs` (the
+installed command still worked for `blockflow-runner` 1.0.1, but do not rely on it);
+`tests/bridge/packageBins.test.ts` checks it.
 
 Store accounts, fees, privacy policy and review tips: [Lesson 8, Publishing](../learning/08-testing-debugging-publishing.md#publishing).
 

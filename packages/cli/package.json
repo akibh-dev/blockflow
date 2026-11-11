@@ -1,6 +1,6 @@
 {
   "name": "blockflow-runner",
-  "version": "1.0.2",
+  "version": "1.0.1",
   "description": "Run BlockFlow workflows and suites from the command line or CI, in Chromium with the extension.",
   "keywords": [
     "blockflow",
