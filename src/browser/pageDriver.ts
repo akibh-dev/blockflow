@@ -83,13 +83,41 @@ export function restrictedError(message: string, tabUrl: string | undefined, loc
   if (code === 'permission.missing') {
     let site = '';
     try {
-      site = tabUrl ? new URL(tabUrl).origin : '';
+      // about:blank, data: and similar have the origin "null": name no site then.
+      const origin = tabUrl ? new URL(tabUrl).origin : '';
+      site = origin === 'null' ? '' : origin;
     } catch {
       site = '';
     }
     return new CodedError(code, `BlockFlow has no access to ${site || 'this site'}. Run the workflow from the editor to grant it (or open the workflow and press Grant access).`, { locator });
   }
   return new CodedError(code, `The browser does not let extensions work on this page: ${message}`, { locator });
+}
+
+/**
+ * A tab that has not reached its page yet: a new tab is `about:blank` (or has no URL) until the first
+ * navigation commits. Firefox refuses to script it with "Missing host permission", which is not the page's
+ * answer; such a tab is waited for like a loading page.
+ */
+export function notArrivedYet(tabUrl: string | undefined): boolean {
+  return !tabUrl || tabUrl === 'about:blank';
+}
+
+/**
+ * Whether a refusal ("Missing host permission", "Cannot access…") is only timing: the tab has not reached its
+ * page, or it has and BlockFlow does have access to that site (the refusal came while it was still about:blank).
+ * Then the call is retried like a loading page; otherwise it is a real refusal.
+ */
+async function transientRefusal(message: string, tabUrl: string | undefined): Promise<boolean> {
+  if (notArrivedYet(tabUrl)) return true;
+  if (restrictedCode(message) !== 'permission.missing') return false;
+  try {
+    const origin = new URL(tabUrl as string).origin;
+    if (origin === 'null' || !/^https?:/.test(origin)) return false;
+    return await browser.permissions.contains({ origins: [`${origin}/*`] });
+  } catch {
+    return false;
+  }
 }
 
 /** The tab's URL (needs the `tabs` permission), or undefined when it cannot be read. */
@@ -198,8 +226,9 @@ export async function actInTab(tabId: number, original: AgentRequest, timeoutMs:
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!(await tabExists(tabId))) throw new CodedError('tab.closed', 'The tab was closed', { locator });
-      if (restricted(message)) throw restrictedError(message, await tabUrlOf(tabId), locator);
-      reason = `the page was busy loading (${message})`;
+      const tabUrl = restricted(message) ? await tabUrlOf(tabId) : undefined;
+      if (restricted(message) && !(await transientRefusal(message, tabUrl))) throw restrictedError(message, tabUrl, locator);
+      reason = restricted(message) ? `the tab has not loaded its page yet (${message})` : `the page was busy loading (${message})`;
       last = { code: 'navigation.failed' };
     }
     if (outcome?.status === 'frame') {
