@@ -22,7 +22,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "blockflow-mcp": "./server.mjs"
+    "blockflow-mcp": "server.mjs"
   },
   "main": "./index.mjs",
   "exports": {

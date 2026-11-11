@@ -4,6 +4,12 @@ BlockFlow versions, newest first. Each entry lists what a user or an integrator 
 before; the task-level history is in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) and `git log`. Versions
 follow the milestones of [docs/PLAN.md](docs/PLAN.md).
 
+## blockflow-runner 1.0.2 (npm only)
+
+- Restores the `blockflow` command: 1.0.1 was published from CI with npm 11, which drops a `bin` path written as
+  `./cli.mjs`. Every package now uses plain paths (`cli.mjs`), checked by `tests/bridge/packageBins.test.ts`.
+  Same extension as 1.0.1. Do not use `blockflow-runner@1.0.1`.
+
 ## 1.0.1: Release fixes
 
 - **MIT licence** for the whole repository (`LICENSE`); the npm packages were already MIT. The sources zip of a

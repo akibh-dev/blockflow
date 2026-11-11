@@ -1,6 +1,6 @@
 {
   "name": "blockflow-runner",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Run BlockFlow workflows and suites from the command line or CI, in Chromium with the extension.",
   "keywords": [
     "blockflow",
@@ -23,7 +23,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "blockflow": "./cli.mjs"
+    "blockflow": "cli.mjs"
   },
   "exports": {
     ".": {
