@@ -168,7 +168,8 @@ npm run build:all
   `about:addons` → BlockFlow → Permissions and allow access to all sites, or Watch Element and the picker
   will fail with a permissions error.
 - **Safari** needs Xcode: `xcrun safari-web-extension-converter .output/safari-mv3`, then build and run the
-  generated app, and enable the extension in Safari → Settings → Extensions.
+  generated app, and enable the extension in Safari → Settings → Extensions. What the Safari build leaves out
+  and the manual checklist: [docs/SAFARI.md](docs/SAFARI.md).
 
 ## Project layout
 

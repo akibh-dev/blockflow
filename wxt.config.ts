@@ -34,45 +34,60 @@ export default defineConfig({
       manifest.host_permissions = [];
     },
   },
-  manifest: ({ browser }) => ({
-    name: 'BlockFlow',
-    description: 'Browser automation from connected blocks: fill forms, test sites, watch pages, scrape data.',
-    permissions: [
-      'alarms',
-      'storage',
-      'unlimitedStorage',
-      'tabs',
-      'scripting',
-      'notifications',
-      'webRequest',
-      'downloads',
-      'webNavigation',
-      'contextMenus',
-      // Chrome parses fetched HTML in an offscreen document; Firefox's background page can do it itself.
-      ...(browser === 'firefox' ? [] : ['offscreen']),
-      ...(granted && browser !== 'firefox' ? ['debugger', 'userScripts'] : []),
-      ...(granted ? ['cookies', 'declarativeNetRequest', 'nativeMessaging'] : []),
-      // Clear Site Data needs exact-origin filtering, which Firefox's browsingData does not offer.
-      ...(granted && browser !== 'firefox' ? ['browsingData'] : []),
-    ],
-    // Asked for only when a block needs them: real mouse/keyboard input, Run Script, Cookies & Storage,
-    // Route (browser rules), Clear Site Data and "Allow outside control" (native messaging, M4).
-    ...(granted ? {} : { optional_permissions: browser === 'firefox' ? ['cookies', 'declarativeNetRequest', 'nativeMessaging'] : ['debugger', 'userScripts', 'cookies', 'declarativeNetRequest', 'browsingData', 'nativeMessaging'] }),
-    // Store build: no site access at install. The editor asks for the sites a workflow needs when it is run or
-    // switched on (src/core/origins.ts, src/entrypoints/editor/hostAccess.ts). The e2e, automation (CLI) builds
-    // have every site granted up front, because nobody can click the browser's prompt there.
-    ...(granted && !noHosts ? { host_permissions: ['<all_urls>'] } : { host_permissions: [], optional_host_permissions: ['<all_urls>'] }),
-    action: { default_title: 'Open BlockFlow editor' },
-    ...(browser === 'firefox'
-      ? {
-          browser_specific_settings: {
-            gecko: {
-              id: 'blockflow@akibh-dev',
-              // Required for new AMO listings. BlockFlow sends nothing off the device.
-              data_collection_permissions: { required: ['none'] },
+  manifest: ({ browser }) => {
+    /** Chrome, Edge, Brave: the browsers with the `debugger` and `userScripts` APIs. */
+    const chromium = browser !== 'firefox' && browser !== 'safari';
+    return {
+      name: 'BlockFlow',
+      description: 'Browser automation from connected blocks: fill forms, test sites, watch pages, scrape data.',
+      permissions: [
+        'alarms',
+        'storage',
+        'unlimitedStorage',
+        'tabs',
+        'scripting',
+        'notifications',
+        'webRequest',
+        'downloads',
+        'webNavigation',
+        'contextMenus',
+        // Chrome parses fetched HTML in an offscreen document; Firefox's background page can do it itself.
+        // Safari has neither the offscreen API nor (reliably) a DOM in the background: the code refuses clearly.
+        ...(browser === 'firefox' || browser === 'safari' ? [] : ['offscreen']),
+        // Chromium-only features (CDP, user scripts, exact-origin site data): not declared for Firefox or Safari.
+        ...(granted && chromium ? ['debugger', 'userScripts'] : []),
+        ...(granted ? ['cookies', 'declarativeNetRequest', 'nativeMessaging'] : []),
+        ...(granted && browser !== 'firefox' && browser !== 'safari' ? ['browsingData'] : []),
+      ],
+      // Asked for only when a block needs them: real mouse/keyboard input, Run Script, Cookies & Storage,
+      // Route (browser rules), Clear Site Data and "Allow outside control" (native messaging, M4).
+      // Safari: only what its WebExtensions support (no debugger, userScripts, browsingData by origin); not verified on a Mac.
+      ...(granted
+        ? {}
+        : {
+            optional_permissions:
+              browser === 'firefox'
+                ? ['cookies', 'declarativeNetRequest', 'nativeMessaging']
+                : browser === 'safari'
+                  ? ['cookies', 'declarativeNetRequest', 'nativeMessaging']
+                  : ['debugger', 'userScripts', 'cookies', 'declarativeNetRequest', 'browsingData', 'nativeMessaging'],
+          }),
+      // Store build: no site access at install. The editor asks for the sites a workflow needs when it is run or
+      // switched on (src/core/origins.ts, src/entrypoints/editor/hostAccess.ts). The e2e, automation (CLI) builds
+      // have every site granted up front, because nobody can click the browser's prompt there.
+      ...(granted && !noHosts ? { host_permissions: ['<all_urls>'] } : { host_permissions: [], optional_host_permissions: ['<all_urls>'] }),
+      action: { default_title: 'Open BlockFlow editor' },
+      ...(browser === 'firefox'
+        ? {
+            browser_specific_settings: {
+              gecko: {
+                id: 'blockflow@akibh-dev',
+                // Required for new AMO listings. BlockFlow sends nothing off the device.
+                data_collection_permissions: { required: ['none'] },
+              },
             },
-          },
-        }
-      : {}),
-  }),
+          }
+        : {}),
+    };
+  },
 });

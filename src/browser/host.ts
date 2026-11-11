@@ -222,7 +222,7 @@ async function dialogs(tabId: number, options: { mode: 'accept' | 'dismiss'; tex
  * `Host.page.runScript`: runs user code with `chrome.userScripts.execute` (Chrome 135+, optional permission).
  * `data` is available as a constant; the code's return value is the result.
  */
-async function runScript(tabId: number, code: string, data: Record<string, unknown>): Promise<unknown> {
+export async function runScript(tabId: number, code: string, data: Record<string, unknown>): Promise<unknown> {
   const needs =
     'Run Script needs Chrome 135 or newer, the "userScripts" permission (press Grant on the block), and "Allow User Scripts" (or developer mode) switched on for BlockFlow in chrome://extensions.';
   let api: { execute?: (options: unknown) => Promise<{ result?: unknown; error?: string }[]> } | undefined;

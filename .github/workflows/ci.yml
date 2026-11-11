@@ -29,6 +29,8 @@ jobs:
       - run: npm run wiki:check
       - run: npm run build
       - run: npm run build:firefox
+      # Safari: builds without the APIs Safari lacks (docs/SAFARI.md); the Mac check is manual.
+      - run: npm run build:safari
 
   # The extension in a real Chromium (tests/e2e). New headless supports extensions; xvfb-run is the
   # fallback display. The GitHub mirror only receives main, so there this runs after a merge.
