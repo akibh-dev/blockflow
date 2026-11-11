@@ -5,7 +5,7 @@ connecting **blocks** in a visual editor or by writing the same workflow as a **
 **Playwright-compatible automation in your browser**, usable by people through the editor and by LLMs
 through well-defined scripts.
 
-> **Status:** v1.0.0 (M3 network and environment, M4 outside access, M5 debugging and visual, M6 encrypted secrets, per-workflow site access, store packaging). 53 blocks, editor, recorder and reports; verified in Chromium, Brave and Firefox, with e2e tests for every block. See the [Roadmap](Roadmap.md).
+> **Status:** v1.0.1 (M3 network and environment, M4 outside access, M5 debugging and visual, M6 encrypted secrets, per-workflow site access, store packaging). 53 blocks, editor, recorder and reports; verified in Chromium, Brave and Firefox, with e2e tests for every block. See the [Roadmap](Roadmap.md).
 
 ## Using BlockFlow
 

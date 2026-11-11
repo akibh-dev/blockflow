@@ -2,7 +2,7 @@
   "name": "blockflow",
   "description": "Playwright-compatible automation in your browser: build automations from connected blocks, or write them as scripts.",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "wxt",

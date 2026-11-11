@@ -4,6 +4,18 @@ BlockFlow versions, newest first. Each entry lists what a user or an integrator 
 before; the task-level history is in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) and `git log`. Versions
 follow the milestones of [docs/PLAN.md](docs/PLAN.md).
 
+## 1.0.1: Release fixes
+
+- **MIT licence** for the whole repository (`LICENSE`); the npm packages were already MIT. The sources zip of a
+  release now contains it.
+- Exported reports' `$schema` and the JSON schemas' `$id` point at the real files
+  (`raw.githubusercontent.com/akibh-dev/blockflow/main/docs/guide/…`) instead of an old repository owner.
+- Releases: pre-release tags (`v1.0.1-rc.1`) are accepted, marked pre-release and kept out of the stores.
+- CI and releases on Node 26 (LTS) with the current GitHub Actions; the lock file matches the renamed
+  `blockflow-runner` package.
+- npm: **`blockflow-runner` 1.0.1** bundles the 1.0.1 extension and is the first version published by the release
+  workflow (trusted publishing); `blockflow-bridge` and `blockflow-mcp` are unchanged (1.0.0).
+
 ## 1.0.0: Ship
 
 - **Encrypted secrets.** Protect `{{secret.name}}` values with a passphrase (AES-GCM, key from PBKDF2 with
