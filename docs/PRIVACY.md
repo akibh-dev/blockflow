@@ -56,7 +56,7 @@ extension settings.
 | `debugger` | Real mouse/keyboard input, full-page and background-tab screenshots, response bodies, request mocking, device emulation, HAR and console capture. The browser shows its "debugging" bar while it is attached. Chromium only. | `src/browser/cdp.ts`, `cdpSessions.ts`, `routes.ts`, `environment.ts`, `telemetry.ts` |
 | `cookies` | The Cookies & Storage block (reading and setting cookies, including HttpOnly) | `src/browser/cookies.ts` |
 | `userScripts` | The Run Script block (your own JavaScript). Chrome 135+ and "Allow User Scripts". | `src/browser/host.ts` |
-| `declarativeNetRequest` | The Route block's block/redirect rules, scoped to one tab | `src/browser/routes.ts` |
+| `declarativeNetRequest` | The Route block's block/redirect rules: session rules scoped to the workflow's tab, removed when the run ends. Optional on Chrome; **asked at install on Firefox**, because Firefox does not let extensions request it later (it shows as "Block content on any page"). It gives no access to page content. | `src/browser/routes.ts` |
 | `browsingData` | The Clear Site Data block (only the origins you list). Chromium only. | `src/browser/environment.ts` |
 | `nativeMessaging` | "Allow outside control": the local bridge for the MCP server and CLI | `src/browser/bridge.ts` |
 

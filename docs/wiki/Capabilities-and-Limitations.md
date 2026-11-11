@@ -70,7 +70,7 @@ and Brave, using the optional `debugger` permission.
 | Headless | ⛔ | an extension lives in a visible browser (the CLI runner will start one for you) |
 | Fresh browser profile per test | ⛔ / 🟡 | profiles are shared; Clear Site Data (Chromium, optional `browsingData`) wipes cookies, storage, IndexedDB, caches and service workers of listed origins (cookies: the whole registrable domain) |
 | Test suites with parallel workers | ❌ | planned: a Suite view runs several workflows in sequence with one report |
-| Mock, block, redirect or modify network requests | 🟡 | Route: mocking, modifying and delays Chromium only (CDP); block and redirect also on Firefox (optional `declarativeNetRequest`). Per tab, until cleared or the run ends |
+| Mock, block, redirect or modify network requests | 🟡 | Route: mocking, modifying and delays Chromium only (CDP); block and redirect also on Firefox (`declarativeNetRequest`: optional on Chrome, granted at install on Firefox). Per tab, until cleared or the run ends |
 | Record network traffic (HAR) | 🟡 | HAR Record, Chromium only; metadata only (no headers, cookies or bodies), up to 500 requests |
 | Emulate device, viewport, location, timezone, locale, color scheme, reduced motion, offline | 🟡 | Emulate, Chromium only; reset at run end. Location still needs the site's geolocation permission. One run at a time may own a tab's route/emulation overrides |
 | Step-through debugging, trace viewer | ❌ | planned; today, click a block after a run to see its input and output |

@@ -72,7 +72,7 @@ are the same everywhere. `version` comes from `package.json`. Icons are picked u
 | `cookies` (optional, Chrome and Firefox) | Cookies & Storage block on cookies (`src/browser/cookies.ts`). Regular in e2e builds |
 | `userScripts` (optional) | Run Script block (Chrome 135+, also needs "Allow User Scripts" in `chrome://extensions`) |
 | `debugger` (optional, again) | Route mocking (`Fetch`), Emulate (`Emulation.*`), HAR Record and console capture (`Network.*`, `Runtime.*`) (`src/browser/routes.ts`, `environment.ts`, `telemetry.ts`) |
-| `declarativeNetRequest` (optional, Chrome and Firefox) | Route with browser rules: tab-scoped session rules that block or redirect (`src/browser/routes.ts`) |
+| `declarativeNetRequest` (optional on Chrome; required on Firefox, which rejects it as optional) | Route with browser rules: tab-scoped session rules that block or redirect (`src/browser/routes.ts`) |
 | `browsingData` (optional, Chrome/Safari only) | Clear Site Data by exact origin (`src/browser/environment.ts`). Left out on Firefox, whose `browsingData` cannot filter every data type by origin |
 | `optional_host_permissions` `<all_urls>` | Site access, asked **per workflow** (`src/core/origins.ts` works out the sites; `src/entrypoints/editor/hostAccess.ts` asks when you Run or switch on). The store build has **no** `host_permissions`: a `build:manifestGenerated` hook in `wxt.config.ts` removes the ones WXT copies from the runtime content scripts. e2e and automation builds keep `<all_urls>` granted; `BF_E2E_NO_HOSTS=1` builds the e2e build without it (`.output-e2e-nohosts`). See [PRIVACY](../PRIVACY.md) |
 
@@ -85,7 +85,7 @@ for them with `permissions.request` only when a block needs them, and `cdp.ts` c
 | | Chrome (`chrome-mv3`) | Firefox (`firefox-mv3`) | Safari (`safari-mv3`) |
 | --- | --- | --- | --- |
 | `offscreen` permission | yes | no | yes (same branch as Chrome) |
-| `optional_permissions` | `debugger`, `userScripts`, `cookies`, `declarativeNetRequest`, `browsingData` | `cookies`, `declarativeNetRequest`: real input, Run Script and the CDP features are unavailable | same as Chrome (untested whether Safari honours them) |
+| `optional_permissions` | `debugger`, `userScripts`, `cookies`, `declarativeNetRequest`, `browsingData` | `cookies`, `nativeMessaging`; `declarativeNetRequest` is in `permissions` (Firefox does not accept it as optional). Real input, Run Script and the CDP features are unavailable | same as Chrome (untested whether Safari honours them) |
 | `browser_specific_settings` | none | `gecko.id: blockflow@akibh-dev`, `data_collection_permissions: { required: ['none'] }` (required for new AMO listings) | none |
 | Background | service worker | event page (WXT) | per WXT |
 | Host access | granted at install | user must grant site access after install (see README) | per Safari settings |
