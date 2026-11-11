@@ -4,7 +4,7 @@ Everything needed to publish BlockFlow, except what needs a person and an accoun
 
 | File | What |
 | --- | --- |
-| [chrome.md](chrome.md) | Chrome Web Store listing text, single purpose, permission justifications, data-usage answers |
+| [chrome.md](chrome.md) | Listing text written for the Chrome Web Store (**not published there**, see below); the long description and permission justifications are reused for AMO and the README |
 | [firefox.md](firefox.md) | Firefox Add-ons (AMO) listing text, reviewer notes, known linter warnings |
 | `screenshots/` | 1280×800 PNGs made by `npm run store:screenshots` (needs `BF_E2E=1 npx wxt build` first) |
 | [../PRIVACY.md](../PRIVACY.md) | The privacy policy both listings link to, with every permission explained |
@@ -22,17 +22,19 @@ Everything needed to publish BlockFlow, except what needs a person and an accoun
    `package.json`).
 3. Download `blockflow-<version>-chrome.zip` and `…-firefox.zip` (+ `…-sources.zip`, which AMO asks for because the
    code is bundled) from the GitHub release.
-4. Chrome: with the `CWS_*` secrets the workflow already uploaded a draft; otherwise upload the zip in the
-   dashboard. Fill the listing from [chrome.md](chrome.md), add the screenshots, submit for review.
-5. Firefox: upload the Firefox zip and the sources zip in the AMO developer hub, listing from
-   [firefox.md](firefox.md). With `AMO_JWT_*` the workflow also runs `web-ext sign` (listed channel).
+4. Chrome, Edge, Brave: nothing to do. People download `blockflow-<version>-chrome.zip` from the GitHub release
+   and load it unpacked (README "Install").
+5. Firefox: with `AMO_JWT_*` the workflow submits the version (listed channel, sources zip, `amo-metadata.json`);
+   Mozilla reviews it and publishes it on addons.mozilla.org. Listing text: [firefox.md](firefox.md).
+
+**Chrome Web Store: not used** (decision 2026-11-11). Registering costs a fee, and BlockFlow is free; the Chrome
+build ships as a zip on each GitHub release instead. Consequences: no automatic updates in Chrome (download the new
+zip and press the reload button in `chrome://extensions`), and Developer mode must be on.
 
 ## One-time setup [HUMAN]
 
-- Chrome Web Store developer account (one-time fee), create the item once by hand (the API can only update an
-  existing item), note the extension id.
 - Firefox Add-ons account; API credentials (JWT issuer and secret) under Tools → Manage API Keys.
-- Repository secrets: `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, `CWS_REFRESH_TOKEN`, `CWS_EXTENSION_ID`,
-  `AMO_JWT_ISSUER`, `AMO_JWT_SECRET`. Without them the workflow still builds and creates the GitHub release.
-- Fill both stores' data-usage forms from [../PRIVACY.md](../PRIVACY.md) (no data collected; everything local).
+- Repository secrets `AMO_JWT_ISSUER`, `AMO_JWT_SECRET` (set). Without them the workflow still builds and creates
+  the GitHub release.
+- Fill the AMO data-usage form from [../PRIVACY.md](../PRIVACY.md) (no data collected; everything local).
 - Safari: needs a Mac and an Apple developer account, see [../SAFARI.md](../SAFARI.md).

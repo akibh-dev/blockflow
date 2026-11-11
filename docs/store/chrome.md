@@ -1,5 +1,9 @@
 # Chrome Web Store listing
 
+> **Not published on the Chrome Web Store** (decision 2026-11-11: the developer registration costs a fee and
+> BlockFlow is free). Chrome users install the release zip unpacked. This text stays as the source of the long
+> description and the permission justifications.
+
 **Name:** BlockFlow
 
 **Category:** Developer Tools

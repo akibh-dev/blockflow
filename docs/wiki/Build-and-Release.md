@@ -18,7 +18,7 @@ or preparing a store upload.
 | `build:firefox` | `wxt build -b firefox` | `.output/firefox-mv3/` |
 | `build:safari` | `wxt build -b safari` | `.output/safari-mv3/`, then convert with Xcode (below) |
 | `build:all` | the three builds in sequence | |
-| `zip` | `wxt zip` | Builds and zips the Chrome build into `.output/` for store upload |
+| `zip` | `wxt zip` | Builds and zips the Chrome build into `.output/` (attached to GitHub releases) |
 | `zip:firefox` | `wxt zip -b firefox` | Firefox zip, plus a sources zip WXT makes for AMO review |
 | `typecheck` | `tsc --noEmit` | |
 | `test` / `test:watch` | `vitest run` / `vitest` | See [Testing](Testing.md) |
@@ -136,8 +136,9 @@ v0.3; see `src/core/migrate.ts`), independent of both.
    - job `release`: checks the tag against `package.json`, `npm run check`, builds, lints Firefox, zips, attaches
      `blockflow-<version>-{chrome,firefox,sources}.zip` to the GitHub release. With the AMO secrets it submits the
      version to addons.mozilla.org (listed, with the sources zip and the reviewer notes and licence of
-     [docs/store/amo-metadata.json](../../docs/store/amo-metadata.json); it does not wait for the review); with
-     the Chrome secrets it uploads a draft. Pre-release tags: release marked pre-release, no store steps.
+     [docs/store/amo-metadata.json](../../docs/store/amo-metadata.json); it does not wait for the review).
+     BlockFlow is not on the Chrome Web Store: the Chrome zip on the release is what Chrome users install.
+     Pre-release tags: release marked pre-release, no AMO step.
    - job `npm` (not for pre-release tags): `npm run build:automation`, then publishes each package whose version
      is not on npmjs.com yet, `blockflow-bridge` first. Nothing new → nothing published.
    - **npm without a new extension version** (a package fix): bump that package's version on `main`, then on GitHub

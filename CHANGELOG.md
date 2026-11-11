@@ -4,6 +4,11 @@ BlockFlow versions, newest first. Each entry lists what a user or an integrator 
 before; the task-level history is in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) and `git log`. Versions
 follow the milestones of [docs/PLAN.md](docs/PLAN.md).
 
+## Unreleased
+
+- **No Chrome Web Store.** Chrome, Edge and Brave install the release's Chrome zip unpacked (README "Install");
+  the release workflow no longer has a Chrome Web Store step. Firefox stays on addons.mozilla.org.
+
 ## npm: blockflow-bridge 1.0.1, blockflow-mcp 1.0.1
 
 - `bin` paths without `./`, so npm 11 publishes them without a warning (same commands as 1.0.0). The MCP server

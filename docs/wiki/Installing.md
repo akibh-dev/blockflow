@@ -36,7 +36,17 @@ npm run build:safari   # Safari                       ->  .output/safari-mv3
 with the extension loaded and reloads it on every save (see [Build and Release](Build-and-Release.md)).
 That browser uses a temporary profile, so your normal logins are not there.
 
-## Load it
+## From a release (no build)
+
+- **Firefox:** install from [addons.mozilla.org](https://addons.mozilla.org/firefox/addon/blockflow/) (signed,
+  updates automatically). The store build asks for site access per workflow ("Grant access" in the editor).
+- **Chrome, Edge, Brave:** BlockFlow is not on the Chrome Web Store. Download `blockflow-<version>-chrome.zip`
+  from the [GitHub releases](https://github.com/akibh-dev/blockflow/releases), unzip it into a folder you keep,
+  then follow "Chrome, Brave, Edge, Chromium" below with that folder instead of `.output/chrome-mv3`. To update,
+  unzip the new zip over the same folder and press the reload arrow on BlockFlow's card in `chrome://extensions`;
+  the same folder keeps the same extension id, so workflows and settings stay.
+
+## Load it (from a build)
 
 ### Chrome, Brave, Edge, Chromium
 
@@ -56,8 +66,8 @@ On first install BlockFlow creates two example workflows, both **Off**:
    Open `about:addons` → BlockFlow → **Permissions** and allow access to all websites. Without it,
    Watch Element, Read Element, the picker and every page block fail with a permission error.
 
-A temporary add-on is removed when Firefox closes, so you load it again after every restart. Installing it
-permanently needs a signed build from addons.mozilla.org, which does not exist yet.
+A temporary add-on is removed when Firefox closes, so you load it again after every restart. For a permanent
+install use the signed version from addons.mozilla.org (above).
 
 ### Safari (untested)
 
