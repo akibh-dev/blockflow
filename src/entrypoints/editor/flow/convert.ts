@@ -39,6 +39,10 @@ export interface FlowEdge {
  * `portOf` says which output an edge leaves from (edges saved before ports existed have none);
  * React Flow needs it to attach the edge to the right dot.
  */
+/** About the size of a block on the canvas, used until React Flow has measured it. */
+export const INITIAL_NODE_WIDTH = 220;
+export const INITIAL_NODE_HEIGHT = 64;
+
 export function toFlow(
   workflow: Workflow,
   portOf: (edge: EdgeDef) => string = (edge) => edge.sourcePort ?? DEFAULT_PORT,
@@ -48,6 +52,10 @@ export function toFlow(
       id: node.id,
       type: 'block',
       position: { ...node.position },
+      // Size before the first measurement: with `onlyRenderVisibleElements` unmeasured blocks are not drawn, and
+      // fit-view needs bounds for all of them (a block is about this big, see style.css .bf-node).
+      initialWidth: INITIAL_NODE_WIDTH,
+      initialHeight: INITIAL_NODE_HEIGHT,
       data: {
         blockType: node.type,
         config: { ...node.config },
