@@ -77,7 +77,7 @@ block calls whatever URL *you* give it.)
 
 | Permission | What BlockFlow uses it for |
 | --- | --- |
-| Access to all sites (`<all_urls>`) | Reading and acting on the pages your workflows name. A prototype choice; asking per workflow is planned (see [Roadmap](Roadmap.md)) |
+| Site access (optional, per workflow) | Reading and acting on the pages your workflows name. Nothing is granted at install: when you run or switch on a workflow, BlockFlow asks for the sites it uses (or **Grant access** on the workflow). Background runs (timers, Watch Element) cannot show a prompt, so they fail with `permission.missing` until you granted the site. Full list with reasons: [PRIVACY](../PRIVACY.md) |
 | `tabs` | Opening, switching and closing tabs; reading their URL and title; screenshots |
 | `scripting` | Putting the page agent, the element picker and the recorder into a page when needed. Nothing is injected into pages otherwise |
 | `storage`, `unlimitedStorage` | Workflows, run history, logs, secrets; screenshots and datasets can grow past the default quota |

@@ -5,7 +5,7 @@ visual editor, or write them as JSON scripts, by hand or with an LLM.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
 
 **Status: v0.6.0** (M3 network and environment, M4 outside access: MCP server, CLI, suites; M5 debugging and visual: trace, breakpoints, visual comparison, ARIA snapshot assert). 53 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
-[What has been verified](#what-has-been-verified) before you rely on it.
+[What has been verified](#what-has-been-verified) before you rely on it. Privacy and permissions: [docs/PRIVACY.md](docs/PRIVACY.md).
 
 **Using BlockFlow, or asking an AI to build workflows for you?** Read the
 [usage guide](docs/guide/README.md) and the generated [block reference](docs/guide/blocks.md)

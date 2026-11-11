@@ -74,7 +74,7 @@ are the same everywhere. `version` comes from `package.json`. Icons are picked u
 | `debugger` (optional, again) | Route mocking (`Fetch`), Emulate (`Emulation.*`), HAR Record and console capture (`Network.*`, `Runtime.*`) (`src/browser/routes.ts`, `environment.ts`, `telemetry.ts`) |
 | `declarativeNetRequest` (optional, Chrome and Firefox) | Route with browser rules: tab-scoped session rules that block or redirect (`src/browser/routes.ts`) |
 | `browsingData` (optional, Chrome/Safari only) | Clear Site Data by exact origin (`src/browser/environment.ts`). Left out on Firefox, whose `browsingData` cannot filter every data type by origin |
-| host `<all_urls>` | Watch/act on any site. Prototype choice; the comment in the config notes the plan to move to `optional_host_permissions` per workflow |
+| `optional_host_permissions` `<all_urls>` | Site access, asked **per workflow** (`src/core/origins.ts` works out the sites; `src/entrypoints/editor/hostAccess.ts` asks when you Run or switch on). The store build has **no** `host_permissions`: a `build:manifestGenerated` hook in `wxt.config.ts` removes the ones WXT copies from the runtime content scripts. e2e and automation builds keep `<all_urls>` granted; `BF_E2E_NO_HOSTS=1` builds the e2e build without it (`.output-e2e-nohosts`). See [PRIVACY](../PRIVACY.md) |
 
 `debugger` and `userScripts` are **optional** on Chrome/Safari: the editor's `PermissionNote` component asks
 for them with `permissions.request` only when a block needs them, and `cdp.ts` checks
