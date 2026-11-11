@@ -462,6 +462,7 @@ Every failed step has a `code`. Fix by the code, then the message:
 | `page.restricted` | The browser does not let extensions script this page. | Use a normal web page. |
 | `permission.missing` | An optional permission is not granted. | Grant it on the block or in the extension settings. |
 | `script.error` | Run Script code threw. | Fix the script. |
+| `secrets.locked` | The secrets are encrypted and the passphrase has not been entered this session. | Open the editor, go to the Secrets page and enter your passphrase. |
 | `download.failed` | A download was interrupted, or its content cannot be read (Wait for Download). | Check the link works in a normal tab; to read the file its address must still be reachable. |
 | `config.invalid` | A setting is missing or invalid. | Fix the setting the message names. |
 | `workflow.failed` | A workflow called by Run Workflow failed. | Fix the failing step of the called run (`childRunId`). |

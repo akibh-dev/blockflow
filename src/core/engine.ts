@@ -8,6 +8,7 @@ import { MAX_STEPS_KEPT, compactPayload, maskPayload, maskText } from './runs';
 import type { RunObserver, RunOptions, RunRecord, RunTrigger, StepRecord, StepTrace } from './runs';
 import { sessionTab } from './session';
 import { makeTimerKey, parseTimerKey, stateKey, workflowTimerPrefix } from './timerKey';
+import { usesSecrets } from './secrets';
 import type { BlockRegistry } from './registry';
 import type {
   AnyBlockDefinition,
@@ -303,6 +304,14 @@ export class WorkflowRunner {
       run.host = this.host.forRun?.(run.record.id) ?? this.host;
       run.secrets = await this.host.secrets.all();
       this.secretValues = Object.values(run.secrets).filter((value) => value.length >= 3);
+      if ((await this.host.secrets.state?.()) === 'locked' && usesSecrets(this.workflow)) {
+        run.failed = true;
+        run.record.error = 'Secrets are locked: open the BlockFlow editor and enter your passphrase on the Secrets page.';
+        run.record.status = 'failed';
+        run.record.endedAt = this.host.now().toISOString();
+        this.publish(run);
+        return snapshot(run.record);
+      }
       await body(run);
     } catch (error) {
       run.failed = true;

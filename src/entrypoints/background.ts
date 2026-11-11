@@ -2,6 +2,7 @@ import { browser } from 'wxt/browser';
 import { initialiseDebuggerSessions } from '../browser/cdp';
 import { initialiseRoutes } from '../browser/routes';
 import { createExtensionHost } from '../browser/host';
+import { secretNames, type StoredSecrets } from '../browser/secretVault';
 import { createBrowserScheduler } from '../browser/scheduler';
 import { cancelPicking, finishPicking, relayPickerSync, snapshotForEditor, startPicking } from '../browser/picking';
 import { answerPrompt, clearStalePrompts, promptRunId } from '../browser/prompts';
@@ -129,7 +130,10 @@ export default defineBackground(() => {
     info: () => ({ extensionVersion: browser.runtime.getManifest().version, browser: import.meta.env.BROWSER, extensionId: browser.runtime.id }),
     loadWorkflows,
     saveWorkflows,
-    secretNames: async () => Object.keys(await host.secrets.all()),
+    secretNames: async () => {
+      const stored = await browser.storage.local.get(STORAGE_KEYS.secrets);
+      return secretNames(stored[STORAGE_KEYS.secrets] as StoredSecrets | undefined);
+    },
     loadRuns,
     runWorkflow,
     cancelRun,

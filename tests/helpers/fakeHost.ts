@@ -261,6 +261,8 @@ export class FakeHost implements Host {
   };
 
   secretValues: Record<string, string> = {};
+  /** 'plain' | 'unlocked' | 'locked' — defaults to plain so existing tests keep today's behaviour. */
+  secretsState: 'plain' | 'unlocked' | 'locked' = 'plain';
   /** M5.2 / M5.1 hooks: unset by default (no debug channel, no tracing), set by tests. */
   debug?: Host['debug'];
   trace?: Host['trace'];
@@ -292,6 +294,7 @@ export class FakeHost implements Host {
   };
   secrets = {
     all: async () => ({ ...this.secretValues }),
+    state: async () => this.secretsState,
   };
 
   /** Screenshots taken: tab ids, in order. Return null from `screenshotResult` to simulate failure. */
