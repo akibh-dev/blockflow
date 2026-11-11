@@ -140,6 +140,8 @@ v0.3; see `src/core/migrate.ts`), independent of both.
      the Chrome secrets it uploads a draft. Pre-release tags: release marked pre-release, no store steps.
    - job `npm` (not for pre-release tags): `npm run build:automation`, then publishes each package whose version
      is not on npmjs.com yet, `blockflow-bridge` first. Nothing new → nothing published.
+   - **npm without a new extension version** (a package fix): bump that package's version on `main`, then on GitHub
+     **Actions → Release → Run workflow** (branch `main`). Only the `npm` job runs, with `npm run check` first.
 4. Stores: submit in the dashboards ([docs/store/README.md](../../docs/store/README.md)); Safari: `build:safari` + Xcode.
 
 ### Firefox Add-ons (one-time setup)
@@ -170,7 +172,10 @@ The fields are case-sensitive and must match exactly, and each package's `reposi
 `git+https://github.com/akibh-dev/blockflow.git` (it is). npm checks the settings only at the first publish, and a
 new trusted publisher that has not published within 2 days expires. Afterwards, **Settings → Publishing access →
 "Require two-factor authentication and disallow tokens"** blocks token publishing without affecting the
-workflow. Needs npm 11.5.1+ (Node 26 ships 11.20) and a GitHub-hosted runner.
+workflow. Needs npm 11.5.1+ (Node 26 ships 11.20) and a GitHub-hosted runner. Write `bin` paths without `./`
+(`"blockflow": "cli.mjs"`): npm 11 warns "script name cli.mjs was invalid and removed" for `./cli.mjs` (the
+installed command still worked for `blockflow-runner` 1.0.1, but do not rely on it);
+`tests/bridge/packageBins.test.ts` checks it.
 
 Store accounts, fees, privacy policy and review tips: [Lesson 8, Publishing](../learning/08-testing-debugging-publishing.md#publishing).
 

@@ -20,7 +20,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "blockflow-bridge": "./cli.mjs"
+    "blockflow-bridge": "cli.mjs"
   },
   "exports": {
     ".": "./index.mjs",

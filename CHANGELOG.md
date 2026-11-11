@@ -13,6 +13,9 @@ follow the milestones of [docs/PLAN.md](docs/PLAN.md).
 - Releases: pre-release tags (`v1.0.1-rc.1`) are accepted, marked pre-release and kept out of the stores.
 - CI and releases on Node 26 (LTS) with the current GitHub Actions; the lock file matches the renamed
   `blockflow-runner` package.
+- npm `bin` paths are written without `./` (`cli.mjs`): npm 11 warns that it removes `./cli.mjs`. The published
+  `blockflow-runner` 1.0.1 still installs its `blockflow` command, but the plain form avoids the warning.
+  `tests/bridge/packageBins.test.ts` checks it.
 - npm: **`blockflow-runner` 1.0.1** bundles the 1.0.1 extension and is the first version published by the release
   workflow (trusted publishing); `blockflow-bridge` and `blockflow-mcp` are unchanged (1.0.0).
 
