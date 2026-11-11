@@ -27,6 +27,7 @@ parts are *where* code runs and *what it is allowed to touch*.
 | 7 | [BlockFlow code tour](07-blockflow-code-tour.md) | Read and extend the real project |
 | 8 | [Testing, debugging, publishing](08-testing-debugging-publishing.md) | Ship it |
 | 9 | [Native messaging](09-native-messaging.md) | Let programs on your computer (CLI, MCP server) talk to your extension |
+| 10 | [The DevTools Protocol](10-cdp-debugger.md) | Real (trusted) clicks and page control through `chrome.debugger` |
 | | [Glossary](glossary.md) · [Web dev → extension cheat sheet](#cheat-sheet) | |
 
 ## What you need

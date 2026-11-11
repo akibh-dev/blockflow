@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { CodedError } from '../core/errors';
+import { decryptAll, fromBase64, isEncrypted, secretNames, type StoredSecrets } from './secretVault';
 import { STORAGE_KEYS } from '../shared/keys';
 import { readDataset, saveTraceImage, writeDataset } from './blobStore';
 import { uid } from '../core/id';
@@ -127,10 +128,25 @@ async function notify({ title, message }: NotifyOptions): Promise<void> {
   });
 }
 
-/** `Host.secrets.all`: the `bf:secrets` map. */
+/** `Host.secrets.all`: the `bf:secrets` map, decrypted when the session key is present. */
 async function allSecrets(): Promise<Record<string, string>> {
   const stored = await browser.storage.local.get(STORAGE_KEYS.secrets);
-  return (stored[STORAGE_KEYS.secrets] as Record<string, string> | undefined) ?? {};
+  const value = stored[STORAGE_KEYS.secrets] as StoredSecrets | undefined;
+  if (!value) return {};
+  if (!isEncrypted(value)) return value;
+  const key = await browser.storage.session.get(STORAGE_KEYS.secretsKey);
+  const base64 = key[STORAGE_KEYS.secretsKey] as string | undefined;
+  if (!base64) return {};
+  return await decryptAll(value, fromBase64(base64));
+}
+
+/** `Host.secrets.state`: 'plain', 'unlocked' or 'locked'. */
+async function secretsState(): Promise<'plain' | 'unlocked' | 'locked'> {
+  const stored = await browser.storage.local.get(STORAGE_KEYS.secrets);
+  const value = stored[STORAGE_KEYS.secrets] as StoredSecrets | undefined;
+  if (!value || !isEncrypted(value)) return 'plain';
+  const key = await browser.storage.session.get(STORAGE_KEYS.secretsKey);
+  return key[STORAGE_KEYS.secretsKey] ? 'unlocked' : 'locked';
 }
 
 /** `Host.downloads.save`: saves text as a file in the Downloads folder (unsafe filename characters replaced). */
@@ -206,7 +222,7 @@ async function dialogs(tabId: number, options: { mode: 'accept' | 'dismiss'; tex
  * `Host.page.runScript`: runs user code with `chrome.userScripts.execute` (Chrome 135+, optional permission).
  * `data` is available as a constant; the code's return value is the result.
  */
-async function runScript(tabId: number, code: string, data: Record<string, unknown>): Promise<unknown> {
+export async function runScript(tabId: number, code: string, data: Record<string, unknown>): Promise<unknown> {
   const needs =
     'Run Script needs Chrome 135 or newer, the "userScripts" permission (press Grant on the block), and "Allow User Scripts" (or developer mode) switched on for BlockFlow in chrome://extensions.';
   let api: { execute?: (options: unknown) => Promise<{ result?: unknown; error?: string }[]> } | undefined;
@@ -276,7 +292,7 @@ export function createExtensionHost(scheduler: Scheduler): Host {
     scheduler,
     state: new StorageState(),
     workflows: { get: async (id) => (await loadWorkflows()).find((workflow) => workflow.id === id) },
-    secrets: { all: allSecrets },
+    secrets: { all: allSecrets, state: secretsState },
     screenshots: { capture, take },
     cookies: { get: getCookies, set: setCookie, remove: removeCookies },
     prompt: { ask: askUser },

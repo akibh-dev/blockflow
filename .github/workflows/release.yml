@@ -1,0 +1,55 @@
+name: Release
+
+# Push a tag like v1.0.0. Builds, checks and zips both stores' packages, lints Firefox, attaches the zips to a
+# GitHub release, and (only when the secrets exist) signs the Firefox build and uploads the Chrome package as a
+# draft. A person publishes in the store dashboards. See docs/store/README.md.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Job-level, because a step's `if` cannot see its own step-level `env`. Empty when the secret is not set.
+    env:
+      AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+      AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+      CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+      CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+      CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+      CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: The tag must match package.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then echo "tag $GITHUB_REF_NAME does not match package.json version $version"; exit 1; fi
+      - run: npm run check
+      - run: npm run build
+      - run: npm run build:firefox
+      - run: npm run lint:firefox
+      - run: npm run zip
+      - run: npm run zip:firefox
+      - run: ls -l .output/*.zip
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: .output/*.zip
+          generate_release_notes: true
+      - name: Sign the Firefox build (needs AMO_JWT_ISSUER and AMO_JWT_SECRET)
+        if: ${{ env.AMO_JWT_ISSUER != '' && env.AMO_JWT_SECRET != '' }}
+        run: npx web-ext sign --source-dir .output/firefox-mv3 --channel listed --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET" --artifacts-dir .output/signed
+      - name: Upload the Chrome package as a draft (needs the CWS_* secrets)
+        if: ${{ env.CWS_CLIENT_ID != '' && env.CWS_CLIENT_SECRET != '' && env.CWS_REFRESH_TOKEN != '' && env.CWS_EXTENSION_ID != '' }}
+        run: |
+          zip="$(ls .output/*-chrome.zip | head -1)"
+          npx --yes chrome-webstore-upload-cli@3 upload --source "$zip" --extension-id "$CWS_EXTENSION_ID" --client-id "$CWS_CLIENT_ID" --client-secret "$CWS_CLIENT_SECRET" --refresh-token "$CWS_REFRESH_TOKEN"

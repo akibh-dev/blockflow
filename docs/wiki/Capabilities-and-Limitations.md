@@ -91,7 +91,7 @@ and Brave, using the optional `debugger` permission.
 | --- | --- |
 | Chrome, Brave, Edge | ✅ main target. End-to-end tests run in Chromium 131 and Brave; Chrome and Edge use the same build |
 | Firefox | ✅ verified with `npm run e2e:firefox` (Firefox 159): page actions, forms, scraping, datasets, uploads, popups, dialogs, screenshots (all three areas, `tabs.captureTab`), Wait for Download, Cookies & Storage, Wait For request, Route block/redirect. No `realInput`, no Run Script, no response bodies, no Route mocking, Emulate, HAR Record, console capture or Clear Site Data (Chromium only) |
-| Safari | 🟡 builds; never converted or run |
+| Safari | 🟡 builds without `debugger`, `userScripts`, `browsingData`, `offscreen`; those features fail with `permission.missing`; outside control is unavailable; never converted or run on a Mac ([SAFARI](../SAFARI.md)) |
 
 ## Things no extension can do
 

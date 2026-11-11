@@ -27,6 +27,10 @@ let creating: Promise<void> | null = null;
 /** Opens the offscreen parser document if none exists. Concurrent callers share one `createDocument`. */
 async function ensureOffscreen(): Promise<void> {
   const offscreen = browser.offscreen;
+  // A worker without a DOM and without the offscreen API (Safari today): say so instead of a TypeError.
+  if (!offscreen) {
+    throw new CodedError('permission.missing', 'This browser cannot parse HTML in the background: it has no offscreen document and the background has no DOM. Use Extract List / Table on a page in a tab instead.');
+  }
   if (await offscreen.hasDocument?.()) return;
   creating ??= offscreen
     .createDocument({ url: OFFSCREEN_URL, reasons: ['DOM_PARSER'], justification: 'Parse fetched HTML for Extract blocks' })

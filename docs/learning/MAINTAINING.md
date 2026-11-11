@@ -35,6 +35,7 @@ new to extensions, and wants to **hand-code their own extension**. Lessons must 
 | Test approach, new test layer | 08, 07 |
 | New block type | 07 exercises (remove an exercise if you built it) |
 | Bridge, native host, MCP server, CLI | 09, 07 table, glossary |
+| CDP features (`cdp.ts`, `cdpSessions.ts`, Route, Emulate, trace) | 10, 07 section 12 |
 
 ## Template for a new lesson
 

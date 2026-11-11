@@ -462,6 +462,7 @@ Every failed step has a `code`. Fix by the code, then the message:
 | `page.restricted` | The browser does not let extensions script this page. | Use a normal web page. |
 | `permission.missing` | An optional permission is not granted. | Grant it on the block or in the extension settings. |
 | `script.error` | Run Script code threw. | Fix the script. |
+| `secrets.locked` | The secrets are encrypted and the passphrase has not been entered this session. | Open the editor, go to the Secrets page and enter your passphrase. |
 | `download.failed` | A download was interrupted, or its content cannot be read (Wait for Download). | Check the link works in a normal tab; to read the file its address must still be reachable. |
 | `config.invalid` | A setting is missing or invalid. | Fix the setting the message names. |
 | `workflow.failed` | A workflow called by Run Workflow failed. | Fix the failing step of the called run (`childRunId`). |
@@ -480,7 +481,7 @@ browser starts:
    locators), `validate_workflow` (issues with code, path and hint), `run_workflow` (inline script or saved
    id; failing step, code, locator, URL and a screenshot), `get_report`, `import_workflow`, `list_workflows`,
    `stop_run`, `list_suites`, `run_suite`. The loop: snapshot → write a script → validate → run → repair.
-3. **CLI and CI**: `npm run build:automation`, then `blockflow run <files or folders> --report junit --out
+3. **CLI and CI**: `npx blockflow-runner run <files or folders> --report junit --out
    report/` starts its own Chromium with the extension in a throwaway profile (no install needed), runs
    everything as one suite, writes `junit.xml` / `report.json` / `report.html`, and exits 0 (all passed),
    1 (a failure) or 2 (setup or usage error). `blockflow validate <files>` checks without running.
@@ -737,7 +738,9 @@ Each example is in both formats: `<name>.script.json` (the script, start here) a
 - CAPTCHAs and 2FA are not bypassed: use Manual Step.
 - Background tabs are throttled by the browser; use `"where": "window"` for tests that need
   animations, lazy loading or screenshots.
-- Runs stop after 1000 blocks (loop guard). Run history keeps 40 runs; payloads over 3 KB are stored
+- Runs stop after 1000 blocks (loop guard). Run history keeps 40 runs, the run log 300 lines and 150 screenshots;
+  all four are changeable in **Settings → Limits** (10–500 runs, 100–5000 log lines, 20–1000 screenshots,
+  100–100000 blocks per run; raise the last one for For Each over big lists). Payloads over 3 KB are stored
   as a preview.
 - Firefox: grant site access in `about:addons` → BlockFlow → Permissions.
 

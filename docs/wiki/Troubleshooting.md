@@ -49,6 +49,7 @@ The code says what kind of failure it was; the message says the details. Defined
 | `page.restricted` | Use a normal web page (not chrome://, the web store, about:) | [Permissions](#permissions) |
 | `permission.missing` | Grant the permission on the block or in the extension settings | [Permissions](#permissions) |
 | `script.error` | Fix the Run Script code | [Other messages](#other-messages) |
+| `secrets.locked` | The secrets are encrypted and locked this session: open the editor, go to the Secrets page and enter your passphrase | [Secrets](#secrets) |
 | `download.failed` | The download was interrupted, or its content cannot be read: check the link in a normal tab | [Downloads](#downloads) |
 | `config.invalid` | Fix the setting the message names | [Importing a file fails](#importing-a-file-fails) |
 | `workflow.failed` | Open the called run and fix its failing step | [Other messages](#other-messages) |
@@ -237,7 +238,9 @@ them either.
   the password field, check the secret's name (case matters).
 - Values are shown as `•••` in logs, the step inspector, run records and reports. Values shorter than
   3 characters are not masked.
-- Secrets are **not encrypted**: they live in the browser profile's extension storage. They are never
+- Secrets are stored unencrypted by default. Protect them with a passphrase on the Secrets page: then values
+  are encrypted in `storage.local` and the key lives only in `storage.session` (gone when the browser closes).
+  While locked, workflows that use `{{secret.name}}` fail with `secrets.locked`. They are never
   included in exported workflows.
 - In a Playwright export, `{{secret.loginPassword}}` becomes the environment variable `LOGINPASSWORD`.
 - A recording names one secret per password field after its label or name (`{{secret.password}}`,

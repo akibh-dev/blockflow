@@ -31,7 +31,7 @@ import type { WorkflowActions } from './components/WorkflowActions';
 import { WorkflowsPage } from './components/WorkflowsPage';
 import { downloadText, fileNameFor, readFiles } from './files';
 import { followPortChanges, fromFlow, sameGraph, toFlow } from './flow/convert';
-import { useLogs, usePrompts, useRuns, useStorageValue } from './hooks';
+import { useLogs, usePrompts, useRuns, useSecretNames, useStorageValue } from './hooks';
 import { recordingIntoWorkflow } from '../../core/recording';
 import { workflowToPlaywright } from '../../core/playwright';
 import { layoutWorkflow } from '../../core/layout';
@@ -43,6 +43,9 @@ import { ReportsPage } from './components/ReportsPage';
 import { SecretsPage } from './components/SecretsPage';
 import { SettingsPage } from './components/SettingsPage';
 import { DebugBanner } from './components/DebugBanner';
+import { HostAccessNote } from './components/HostAccessNote';
+import { NO_NEED, describeNeed, missingAccess, needsAccess, requestAccess } from './hostAccess';
+import type { HostNeed } from './hostAccess';
 import { RunControls } from './components/RunControls';
 import type { RunOptions } from '../../core/runs';
 import { SuitesPage } from './components/SuitesPage';
@@ -54,6 +57,8 @@ import type { SyncBase } from './sync';
 
 /** React Flow node renderers by node `type`; every BlockFlow node is `'block'`. Module-level so it is stable. */
 const nodeTypes = { block: BlockNode };
+/** Above this many blocks the canvas draws only the ones in view (`onlyRenderVisibleElements`). */
+const VIRTUALISE_ABOVE = 150;
 const defaultEdgeOptions = { type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } };
 /** Debounce between the last change and the write of `bf:workflows`. */
 const SAVE_DELAY_MS = 400;
@@ -359,8 +364,9 @@ export function Editor() {
   const [view, setView] = useState<'canvas' | 'manage' | 'reports' | 'suites' | 'data' | 'secrets' | 'settings'>('canvas');
   /** A message for the user, as a toast (errors stay longer). */
   const notice = useCallback((message: string, kind: 'info' | 'error' = 'info') => toast(message, kind), []);
-  /** Secret names, so import can warn about `{{secret.x}}` that does not exist (values are not used). */
-  const [secrets] = useStorageValue<Record<string, string>>(STORAGE_KEYS.secrets, {});
+  /** Secret names, so import can warn about `{{secret.x}}` that does not exist (values are not used).
+   * Works while encrypted/locked too: `secretNames` reads names from either format. */
+  const secrets = useSecretNames();
 
   const createNew = useCallback(() => {
     const workflow = createWorkflow(uniqueName(`Workflow ${(latest.current?.length ?? 0) + 1}`, (latest.current ?? []).map((w) => w.name)));
@@ -539,7 +545,7 @@ export function Editor() {
     onCreate: createNew,
     onCreateFromTemplate: createFromTemplate,
     onRename: renameWorkflow,
-    onToggle: (id, enabled) => void setEnabledFor(id, enabled),
+    onToggle: (id, enabled) => toggleOn(id, enabled),
     onDuplicate: duplicate,
     onExport: exportWorkflowsById,
     onExportPlaywright: exportPlaywright,
@@ -583,6 +589,33 @@ export function Editor() {
   const inspectedRun = activeRuns.find((run) => run.id === inspectedRunId) ?? activeRuns.at(-1);
   const runningRun = [...activeRuns].reverse().find((run) => run.status === 'running');
 
+  // Sites the open workflow uses that the browser has not granted (the store build asks per workflow).
+  const [hostNeed, setHostNeed] = useState<HostNeed>(NO_NEED);
+  const [hostTick, setHostTick] = useState(0);
+  const refreshHostNeed = useCallback(() => setHostTick((tick) => tick + 1), []);
+  useEffect(() => {
+    let alive = true;
+    if (!active) {
+      setHostNeed(NO_NEED);
+      return;
+    }
+    void missingAccess(active).then((need) => {
+      if (alive) setHostNeed((current) => (JSON.stringify(current) === JSON.stringify(need) ? current : need));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [active, hostTick]);
+  useEffect(() => {
+    const refresh = () => setHostTick((tick) => tick + 1);
+    browser.permissions.onAdded?.addListener(refresh);
+    browser.permissions.onRemoved?.addListener(refresh);
+    return () => {
+      browser.permissions.onAdded?.removeListener(refresh);
+      browser.permissions.onRemoved?.removeListener(refresh);
+    };
+  }, []);
+
   const statusByNode = useMemo(() => {
     const map = new Map<string, StepStatus>();
     for (const step of inspectedRun?.steps ?? []) map.set(step.nodeId, step.status);
@@ -592,9 +625,31 @@ export function Editor() {
   /** Run, Run with trace, Debug (M5) or Run from here (`startAt`). */
   const runNow = (options: RunOptions = {}) => {
     if (!active) return;
-    setInspectedRunId(undefined); // follow the new run
-    void browser.runtime.sendMessage({ type: 'bf:run-workflow', workflow: active, ...(Object.keys(options).length > 0 ? { options } : {}) }).catch(() => {
-      toast('Could not reach the background worker. Try reloading the extension.', 'error');
+    const start = () => {
+      setInspectedRunId(undefined); // follow the new run
+      void browser.runtime.sendMessage({ type: 'bf:run-workflow', workflow: active, ...(Object.keys(options).length > 0 ? { options } : {}) }).catch(() => {
+        toast('Could not reach the background worker. Try reloading the extension.', 'error');
+      });
+    };
+    if (!needsAccess(hostNeed)) return start();
+    // First call in the click handler: browsers only show the permission prompt for a user gesture.
+    void requestAccess(hostNeed).then((granted) => {
+      refreshHostNeed();
+      if (granted) start();
+      else toast(`BlockFlow needs access to ${describeNeed(hostNeed)} to run this workflow.`, 'error');
+    });
+  };
+
+  /** The On switch: asks for the sites first (same click), then turns the workflow on. */
+  const toggleOn = (id: string, enabled: boolean) => {
+    if (!enabled || id !== active?.id || !needsAccess(hostNeed)) {
+      setEnabledFor(id, enabled);
+      return;
+    }
+    void requestAccess(hostNeed).then((granted) => {
+      refreshHostNeed();
+      if (granted) setEnabledFor(id, true);
+      else toast(`BlockFlow needs access to ${describeNeed(hostNeed)} to run this workflow in the background.`, 'error');
     });
   };
 
@@ -826,6 +881,7 @@ export function Editor() {
       <RunStatusContext.Provider value={statusByNode}>
       <PromptBanner prompts={prompts} />
       <DebugBanner />
+      <HostAccessNote need={hostNeed} onGranted={refreshHostNeed} />
       <div className="bf-app">
         <header className="bf-header">
           <strong className="bf-brand">BlockFlow</strong>
@@ -843,7 +899,7 @@ export function Editor() {
               type="checkbox"
               checked={active.enabled}
               disabled={errors.length > 0 && !active.enabled}
-              onChange={(event) => void setEnabledFor(active.id, event.target.checked)}
+              onChange={(event) => toggleOn(active.id, event.target.checked)}
             />
             <span>{active.enabled ? 'On' : 'Off'}</span>
           </label>
@@ -965,6 +1021,9 @@ export function Editor() {
             nodes={nodes}
             edges={shownEdges}
             nodeTypes={nodeTypes}
+            // Big workflows draw only the blocks in view: 500 blocks open in about 2.5 s instead of 4-5 s (m6-perf).
+            // Small ones keep every block in the page, so off-screen blocks can still be found and selected.
+            onlyRenderVisibleElements={nodes.length > VIRTUALISE_ABOVE}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}

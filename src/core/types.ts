@@ -700,6 +700,8 @@ export interface Host {
   /** Named secret values, used as {{secret.name}} and masked in logs and run records. */
   secrets: {
     all(): Promise<Record<string, string>>;
+    /** 'plain' (no passphrase), 'unlocked' (key in memory this session) or 'locked' (encrypted, no key). */
+    state?(): Promise<'plain' | 'unlocked' | 'locked'>;
   };
   /** Screenshot of a tab's visible area; resolves with an id to show it later, or null if not possible. */
   screenshots: {

@@ -5,6 +5,7 @@ import type { BridgeStatus } from '../../../browser/bridgeStatus';
 import { BRIDGE_STORAGE_KEYS } from '../../../core/bridgeProtocol';
 import type { BridgeLogEntry, BridgeSettings } from '../../../core/bridgeProtocol';
 import { useStorageValue } from '../hooks';
+import { LimitsSection } from './LimitsSection';
 import { requestPermission } from './PermissionNote';
 
 const OFF: BridgeSettings = { outsideControl: false };
@@ -54,6 +55,8 @@ export function SettingsPage() {
   const status = useBridgeStatus();
   const [busy, setBusy] = useState(false);
   const firefox = import.meta.env.BROWSER === 'firefox';
+  // Safari starts native helpers only from its containing app, so the Node bridge cannot run there (docs/SAFARI.md).
+  const safari = import.meta.env.BROWSER === 'safari';
   const extensionId = browser.runtime.id;
   const command = `npx blockflow-bridge install --extension-id ${extensionId}${firefox ? ' --browser firefox' : ''}`;
   const on = settings.outsideControl;
@@ -80,7 +83,7 @@ export function SettingsPage() {
 
       <h3>Outside control</h3>
       <label className="bf-settings-switch">
-        <input type="checkbox" checked={on} disabled={busy} aria-label="Allow outside control" onChange={(event) => void toggle(event.target.checked)} />{' '}
+        <input type="checkbox" checked={on} disabled={busy || (safari && !on)} aria-label="Allow outside control" onChange={(event) => void toggle(event.target.checked)} />{' '}
         <strong>Allow outside control</strong>
       </label>
       <p className="bf-muted">
@@ -89,6 +92,7 @@ export function SettingsPage() {
         snapshot pages, while this is on. They can use your secrets in the runs they start, never read them. Off by default;
         switch it off again when you are done.
       </p>
+      {safari && <p className="bf-error">Not available in Safari: it starts native helpers only from BlockFlow's own app, so the bridge (MCP server, CLI) cannot connect. Use Chrome, Edge, Brave or Firefox for outside control.</p>}
       <p>
         Status: <span className={`bf-bridge-state ${state}`}>{STATE_TEXT[state]}</span>
         {on && status?.error && state !== 'connected' && <span className="bf-error"> · {status.error}</span>}
@@ -107,6 +111,8 @@ export function SettingsPage() {
       <button type="button" onClick={() => void navigator.clipboard.writeText(command).catch(() => {})}>
         Copy command
       </button>
+
+      <LimitsSection settings={settings} onSave={saveSettings} />
 
       <h3>Recent requests</h3>
       {log.length === 0 ? (

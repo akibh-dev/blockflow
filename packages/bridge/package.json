@@ -1,10 +1,39 @@
 {
   "name": "blockflow-bridge",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "description": "Native messaging host that lets local programs (MCP server, CLI) drive the BlockFlow browser extension.",
-  "type": "module",
+  "keywords": [
+    "blockflow",
+    "native-messaging",
+    "browser-extension",
+    "bridge"
+  ],
+  "homepage": "https://github.com/akibh-dev/blockflow#readme",
+  "bugs": {
+    "url": "https://github.com/akibh-dev/blockflow/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akibh-dev/blockflow.git",
+    "directory": "packages/bridge"
+  },
   "license": "MIT",
-  "bin": { "blockflow-bridge": "./cli.mjs" },
-  "exports": { ".": "./index.mjs", "./client": "./client.mjs", "./protocol": "./protocol.mjs" },
-  "engines": { "node": ">=20" }
+  "type": "module",
+  "bin": {
+    "blockflow-bridge": "./cli.mjs"
+  },
+  "exports": {
+    ".": "./index.mjs",
+    "./client": "./client.mjs",
+    "./protocol": "./protocol.mjs"
+  },
+  "files": [
+    "*.mjs",
+    "*.d.mts",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  }
 }

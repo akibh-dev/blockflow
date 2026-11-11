@@ -29,6 +29,11 @@ jobs:
       - run: npm run wiki:check
       - run: npm run build
       - run: npm run build:firefox
+      # Safari: builds without the APIs Safari lacks (docs/SAFARI.md); the Mac check is manual.
+      - run: npm run build:safari
+      # AMO's linter on the Firefox build: errors fail the job, warnings (innerHTML in the picker's shadow UI, React)
+      # are listed in docs/store/firefox.md.
+      - run: npm run lint:firefox
 
   # The extension in a real Chromium (tests/e2e). New headless supports extensions; xvfb-run is the
   # fallback display. The GitHub mirror only receives main, so there this runs after a merge.

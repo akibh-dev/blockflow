@@ -32,6 +32,7 @@ export const ERROR_CODES = {
   'permission.missing': { meaning: 'An optional permission (host access, debugger, userScripts, downloads) is not granted.', fix: 'Grant it on the block or in the extension settings.' },
   'download.failed': { meaning: 'A download was interrupted or cancelled, or its content cannot be read (Wait for Download).', fix: 'Check the link works in a normal tab; to read the file, its address must still be reachable.' },
   'script.error': { meaning: 'Run Script code threw.', fix: 'Fix the script; the message has its error.' },
+  'secrets.locked': { meaning: 'The secrets are encrypted and the passphrase has not been entered this session.', fix: 'Open the BlockFlow editor, go to the Secrets page and enter your passphrase.' },
   'config.invalid': { meaning: 'A setting is missing or invalid (a required field, a bad URL, a template that does not render).', fix: 'Fix the block setting the message names.' },
   'workflow.failed': { meaning: 'A workflow called by Run Workflow failed.', fix: 'Open the called run (`childRunId`) and fix its failing step.' },
   'step.failed': { meaning: 'Any other failure.', fix: 'Read the message.' },

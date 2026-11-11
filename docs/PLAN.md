@@ -65,7 +65,7 @@ Everything built in phases A–F is in line with the goal. The question is mostl
 | Recorder, picker, Detect fields, templates, undo/redo, `{{` suggestions | Built | **Keep.** Recorder gaps in §6 |
 | Run Script (userScripts, Chrome 135+) | Built | **Keep** as the escape hatch |
 | Playwright export | Built, partial | **Keep.** It is our CI bridge until the CLI runner exists. Fix the template gaps (§6) |
-| Secrets (unencrypted, masked in logs) | Built | **Keep**, then encrypt (M6) |
+| Secrets (masked in logs) | Built, encrypted with a passphrase (M6) | **Done** |
 | Watch Element vs Read Element + Timer | Overlapping | **Keep both** (§8): Watch is the simple path |
 | `readSelectorInPage` (old reader), `newTab` legacy setting in samples | Dead or legacy | **Remove** dead code; migrate the samples |
 
@@ -205,7 +205,7 @@ These are not bugs, but they get in the way of a first-time user or an LLM:
 | **M3: Network and environment** (Chromium, CDP) | Route/mock/block, HAR record, Emulate, clean-site-data isolation | Mocking and emulation e2e tests pass on Chrome; other browsers say "Chromium only" clearly |
 | **M4: Outside access** | Native bridge, MCP server, CLI runner, Suite view | An agent can validate → run → read report → repair through MCP; CI runs a suite through the CLI |
 | **M5: Debugging and visual** | Trace timeline with snapshots, breakpoints and step-over, visual comparison, ARIA snapshot assert | A failing test can be understood from its report alone |
-| **M6: Ship** | Encrypted secrets, permissions review (drop `activeTab`), store listings, finish the wiki | Published on the Chrome Web Store and Firefox Add-ons |
+| **M6: Ship** ✅ code (v1.0.0) | Encrypted secrets, permissions review (site access per workflow; `activeTab` was already gone), store listings, finish the wiki | Published on the Chrome Web Store and Firefox Add-ons (**a person does this**, see `docs/store/README.md`) |
 
 Order: M0 → M1 → M2. M3 and M4 can run in parallel after M1, then M5 → M6.
 

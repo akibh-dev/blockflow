@@ -2,12 +2,14 @@
 export const STORAGE_KEYS = {
   /** `Workflow[]`: every saved workflow. Written by the editor (autosave), read by the worker (onChanged → diffWorkflows). */
   workflows: 'bf:workflows',
-  /** `LogEntry[]`: run log, newest last, capped at MAX_LOG_ENTRIES (stores.ts `appendLog`). */
+  /** `LogEntry[]`: run log, newest last, capped at `logEntries` of Settings → Limits (stores.ts `appendLog`). */
   logs: 'bf:logs',
-  /** `RunRecord[]`: run history, newest last, capped at MAX_RUNS (stores.ts `saveRun` / `updateRuns`). */
+  /** `RunRecord[]`: run history, newest last, capped at `runHistory` of Settings → Limits (stores.ts `updateRuns`). */
   runs: 'bf:runs',
   /** `Record<string, string>`: named secrets for `{{secret.x}}`. Written by the editor's Secrets page. */
   secrets: 'bf:secrets',
+  /** Base64 of the 32-byte key that decrypts `bf:secrets` when it is encrypted (v2). Kept in `storage.session` only: gone when the browser closes. */
+  secretsKey: 'bf:secrets-key',
   /** `PendingPrompt[]`: Manual Steps waiting for an answer (prompts.ts), shown as the editor's banner. */
   prompts: 'bf:prompts',
   /** `RecordingState`: the one recording in progress or just stopped (recording.ts); the editor removes it after converting. */
@@ -30,7 +32,5 @@ export const STORAGE_KEYS = {
   suites: 'bf:suites',
 } as const;
 
-/** Log lines kept in `bf:logs`; older ones are dropped on append. */
-export const MAX_LOG_ENTRIES = 300;
-/** Run history kept in storage, newest last. */
-export const MAX_RUNS = 40;
+// Log lines kept, run history, screenshots kept and blocks per run are settings now: src/core/limits.ts
+// (defaults and ranges), read through src/browser/limits.ts, changed in Settings → Limits.

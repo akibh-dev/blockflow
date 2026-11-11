@@ -33,6 +33,7 @@
 | **MAIN world** | The page's own JavaScript world, as opposed to the isolated world; `executeScript({ world: 'MAIN' })`. BlockFlow's Dialogs block uses it. |
 | **CDP (Chrome DevTools Protocol)** | What Playwright and Puppeteer speak; extensions reach it through the `debugger` API. Gives trusted (`isTrusted: true`) input. |
 | **`declarativeNetRequest` (DNR)** | Rules the browser applies to requests without running your code per request: block, redirect, change headers. *Session* rules last until the browser restarts. BlockFlow's Route block uses them for abort/redirect, scoped to one tab. |
+| **`isTrusted`** | `true` on events made by the browser from real input, `false` on events a script creates (`dispatchEvent`). Some sites ignore untrusted events; CDP's `Input.dispatchMouseEvent` makes trusted ones (lesson 10). |
 | **CDP `Fetch` domain** | Pauses matching requests so the extension can answer them (mock), fail them or let them continue changed. Needs `debugger`; it is what Playwright's `page.route()` uses. |
 | **Emulation override** | A CDP setting (viewport, timezone, colour scheme, offline) that stays on the tab until reset. BlockFlow resets what a run changed when it ends. |
 | **Page agent (BlockFlow)** | `src/dom/agent.ts`, injected into a tab on demand; finds elements by locator, auto-waits, then acts. |

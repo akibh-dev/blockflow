@@ -501,6 +501,10 @@
           "description": "Run Script code threw. Fix: Fix the script; the message has its error."
         },
         {
+          "const": "secrets.locked",
+          "description": "The secrets are encrypted and the passphrase has not been entered this session. Fix: Open the BlockFlow editor, go to the Secrets page and enter your passphrase."
+        },
+        {
           "const": "config.invalid",
           "description": "A setting is missing or invalid (a required field, a bad URL, a template that does not render). Fix: Fix the block setting the message names."
         },

@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
-import { MAX_LOG_ENTRIES, MAX_RUNS, STORAGE_KEYS } from '../shared/keys';
+import { STORAGE_KEYS } from '../shared/keys';
+import { getLimits } from './limits';
 import type { RunRecord } from '../core/runs';
 import { migrateWorkflows } from '../core/migrate';
 import { workflowStatePrefix } from '../core/timerKey';
@@ -54,13 +55,14 @@ export async function loadLogs(): Promise<LogEntry[]> {
 // Appends are queued so two log lines written back-to-back do not overwrite each other.
 let writeQueue: Promise<void> = Promise.resolve();
 
-/** Appends one log line (serialised, capped at MAX_LOG_ENTRIES). Never rejects. */
+/** Appends one log line (serialised, capped at the log limit of Settings → Limits). Never rejects. */
 export function appendLog(entry: LogEntry): Promise<void> {
   writeQueue = writeQueue
     .then(async () => {
       const entries = await loadLogs();
       entries.push(entry);
-      await browser.storage.local.set({ [STORAGE_KEYS.logs]: entries.slice(-MAX_LOG_ENTRIES) });
+      const { logEntries } = await getLimits();
+      await browser.storage.local.set({ [STORAGE_KEYS.logs]: entries.slice(-logEntries) });
     })
     .catch(() => {
       // Logging must never break a workflow.
@@ -92,7 +94,8 @@ export function updateRuns(change: (runs: RunRecord[]) => RunRecord[]): Promise<
   runQueue = runQueue
     .then(async () => {
       const runs = change(await loadRuns());
-      await browser.storage.local.set({ [STORAGE_KEYS.runs]: runs.slice(-MAX_RUNS) });
+      const { runHistory } = await getLimits();
+      await browser.storage.local.set({ [STORAGE_KEYS.runs]: runs.slice(-runHistory) });
     })
     .catch(() => {
       // Run history must never break a workflow.

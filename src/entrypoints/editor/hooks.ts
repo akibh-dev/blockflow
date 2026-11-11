@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { loadLogs, loadRuns } from '../../browser/stores';
+import { secretNames, type StoredSecrets } from '../../browser/secretVault';
 import type { RunRecord } from '../../core/runs';
 import type { PendingPrompt } from '../../browser/prompts';
 import { STORAGE_KEYS } from '../../shared/keys';
@@ -98,3 +99,30 @@ export function useStorageValue<T>(key: string, fallback: T): [T, (next: T) => P
 export function usePrompts(): PendingPrompt[] {
   return useStorageValue<PendingPrompt[]>(STORAGE_KEYS.prompts, [])[0];
 }
+
+/** Secret names (`{{secret.name}}`) stored in `bf:secrets`, live as the editor writes them.
+ * Works whether the store is a plain map or an encrypted (v2) one; returns names while locked. */
+export function useSecretNames(): string[] {
+  const [names, setNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    void browser.storage.local.get(STORAGE_KEYS.secrets).then((stored) => {
+      if (alive) setNames(secretNames(stored[STORAGE_KEYS.secrets] as StoredSecrets | undefined));
+    });
+    const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
+      if (area === 'local' && changes[STORAGE_KEYS.secrets]) {
+        setNames(secretNames(changes[STORAGE_KEYS.secrets].newValue as StoredSecrets | undefined));
+      }
+    };
+    browser.storage.onChanged.addListener(listener);
+    return () => {
+      alive = false;
+      browser.storage.onChanged.removeListener(listener);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return names;
+}
+

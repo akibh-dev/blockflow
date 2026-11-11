@@ -1,7 +1,10 @@
 import { browser } from 'wxt/browser';
 import { initialiseDebuggerSessions } from '../browser/cdp';
 import { initialiseRoutes } from '../browser/routes';
+import { getLimits, resetLimitsCache } from '../browser/limits';
+import { DEFAULT_LIMITS } from '../core/limits';
 import { createExtensionHost } from '../browser/host';
+import { secretNames, type StoredSecrets } from '../browser/secretVault';
 import { createBrowserScheduler } from '../browser/scheduler';
 import { cancelPicking, finishPicking, relayPickerSync, snapshotForEditor, startPicking } from '../browser/picking';
 import { answerPrompt, clearStalePrompts, promptRunId } from '../browser/prompts';
@@ -85,6 +88,18 @@ export default defineBackground(() => {
     saveRun(run);
   };
 
+  // Settings → Limits: the blocks-per-run limit is read when a runner is created (the others, where they are used).
+  let maxStepsPerRun = DEFAULT_LIMITS.maxStepsPerRun;
+  const refreshLimits = () => {
+    resetLimitsCache();
+    void getLimits()
+      .then((limits) => {
+        maxStepsPerRun = limits.maxStepsPerRun;
+      })
+      .catch(() => {});
+  };
+  refreshLimits();
+
   /** A fresh runner per event: runners are cheap and hold no state worth keeping across events. */
   const newRunner = (workflow: Workflow) =>
     new WorkflowRunner({
@@ -94,6 +109,7 @@ export default defineBackground(() => {
       log: (entry) => void appendLog(entry),
       onRun,
       isCancelled: (runId) => cancelRequests.has(runId),
+      maxSteps: maxStepsPerRun,
     });
 
   /**
@@ -112,6 +128,7 @@ export default defineBackground(() => {
         options.onRun?.(run);
       },
       isCancelled: (runId) => cancelRequests.has(runId),
+      maxSteps: maxStepsPerRun,
     }).runOnce();
   }
 
@@ -129,7 +146,10 @@ export default defineBackground(() => {
     info: () => ({ extensionVersion: browser.runtime.getManifest().version, browser: import.meta.env.BROWSER, extensionId: browser.runtime.id }),
     loadWorkflows,
     saveWorkflows,
-    secretNames: async () => Object.keys(await host.secrets.all()),
+    secretNames: async () => {
+      const stored = await browser.storage.local.get(STORAGE_KEYS.secrets);
+      return secretNames(stored[STORAGE_KEYS.secrets] as StoredSecrets | undefined);
+    },
     loadRuns,
     runWorkflow,
     cancelRun,
@@ -337,6 +357,7 @@ export default defineBackground(() => {
   // The editor saves workflows to storage; reacting to that keeps the editor and the worker decoupled.
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
+    if (changes[BRIDGE_STORAGE_KEYS.settings]) refreshLimits();
     if (changes[BRIDGE_STORAGE_KEYS.settings]) syncBridge();
     const change = changes[STORAGE_KEYS.workflows];
     if (!change) return;
