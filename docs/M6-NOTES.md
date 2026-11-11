@@ -24,16 +24,17 @@ Written at the end of M6 (see [M6-PLAN.md](M6-PLAN.md) for the plan). Version **
 - [ ] Safari: convert and run on a Mac, then fill in [SAFARI.md](SAFARI.md)'s checklist and the README.
 - [ ] Tag `v1.0.0` (the workflow checks the tag equals `package.json`).
 - [ ] `npm login`, then publish `blockflow-bridge` first, then `blockflow-mcp` and `blockflow-runner` (they depend on it).
-- [ ] Decide the Firefox `declarativeNetRequest` question below.
 - [ ] Optional: small/marquee promo tiles for Chrome; Firefox-specific screenshots.
 
 ## Open decisions and risks
 
-- **Firefox `declarativeNetRequest`.** `web-ext lint` says Firefox does not accept it as an *optional*
-  permission, so on the store build the Route block's browser-rule backend probably cannot be granted in
-  Firefox (it fails with `permission.missing`); the e2e build, which grants it up front, works. Not verified in a
-  non-temporary install. Options: make it a required permission for Firefox, or drop the Firefox claim in the
-  docs (several wiki pages and the guide say "also on Firefox").
+- **Firefox `declarativeNetRequest`: decided, required on Firefox.** Firefox does not accept it as an *optional*
+  permission (`web-ext lint`: `MANIFEST_OPTIONAL_PERMISSIONS`), so as an optional one the Route block's
+  browser rules could never be granted in the store build. The Firefox build now declares it in `permissions`
+  (install prompt: "Block content on any page"); Chrome keeps it optional. Why this is acceptable: it is used
+  only while a Route block runs, as session rules limited to the workflow's tab and removed when the run ends,
+  and it reads no page content (redirects still need the granted site access). Lint now has 6 warnings.
+  Explained in [PRIVACY.md](PRIVACY.md) and [store/firefox.md](store/firefox.md).
 - **Sidebar switches.** The On switch asks for site access only for the *open* workflow (a prompt needs a click and
   a precomputed list of sites). Switching another workflow on from the sidebar enables it; its background runs
   fail with `permission.missing` until the sites are granted (open it and press Grant access).

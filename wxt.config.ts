@@ -57,6 +57,13 @@ export default defineConfig({
         // Chromium-only features (CDP, user scripts, exact-origin site data): not declared for Firefox or Safari.
         ...(granted && chromium ? ['debugger', 'userScripts'] : []),
         ...(granted ? ['cookies', 'declarativeNetRequest', 'nativeMessaging'] : []),
+        // Firefox: `declarativeNetRequest` is required, not optional. Firefox does not accept it in
+        // `optional_permissions` (web-ext lint: MANIFEST_OPTIONAL_PERMISSIONS; permissions.request() rejects it), so
+        // as an optional permission the Route block's block/redirect rules could never be granted in the store
+        // build. Declaring it adds one install-time line ("Block content on any page"). It does nothing until a
+        // Route block runs, its rules are session rules scoped to the workflow's tab and removed when the run ends,
+        // and it gives no access to page content (docs/PRIVACY.md).
+        ...(!granted && browser === 'firefox' ? ['declarativeNetRequest'] : []),
         ...(granted && browser !== 'firefox' && browser !== 'safari' ? ['browsingData'] : []),
       ],
       // Asked for only when a block needs them: real mouse/keyboard input, Run Script, Cookies & Storage,
@@ -67,7 +74,7 @@ export default defineConfig({
         : {
             optional_permissions:
               browser === 'firefox'
-                ? ['cookies', 'declarativeNetRequest', 'nativeMessaging']
+                ? ['cookies', 'nativeMessaging']
                 : browser === 'safari'
                   ? ['cookies', 'declarativeNetRequest', 'nativeMessaging']
                   : ['debugger', 'userScripts', 'cookies', 'declarativeNetRequest', 'browsingData', 'nativeMessaging'],

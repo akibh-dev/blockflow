@@ -22,6 +22,8 @@ follow the milestones of [docs/PLAN.md](docs/PLAN.md).
 - **npm packages**: `blockflow-bridge`, `blockflow-mcp` and `blockflow-runner` (the CLI; `blockflow-cli` on npm is an
   unrelated package). The runner bundles the extension's automation build, so `npx blockflow-runner run tests/`
   works without a checkout.
+- **Firefox** asks for `declarativeNetRequest` at install ("Block content on any page"): Firefox does not allow it
+  as an optional permission, and without it the Route block could not block or redirect there.
 - Docs: lesson 10 (the DevTools Protocol), wiki pages for every module added since 0.4.
 
 ## 0.6.0: Debugging and visual

@@ -23,17 +23,20 @@ required: ["none"]`): none.
   to **constant** strings (their own style and toolbar markup) inside a closed shadow root; React (in the
   editor chunk) uses `innerHTML` internally for its own elements. No page or user content is assigned.
 - Site access is **optional** and requested per workflow; no `host_permissions` at install.
+- Request rules (`declarativeNetRequest`, **required on Firefox**): the Route block's block/redirect rules.
+  Firefox does not accept this permission as optional (see the linter note below), so the Firefox build declares
+  it at install; Firefox shows it as "Block content on any page". It is used only while a Route block runs: the
+  rules are session rules limited to the workflow's tab and are removed when the run ends. It gives no access to
+  page content, and redirects still need the site access the workflow was granted. Chrome keeps it optional.
 - Native messaging (`nativeMessaging`, optional): only used when the user switches on "Allow outside control",
   to talk to a local helper (`blockflow-bridge`) the user installs; off by default.
 
-## Known linter output (`npm run lint:firefox`: 0 errors, 7 warnings)
+## Known linter output (`npm run lint:firefox`: 0 errors, 6 warnings)
 
 - 6× `UNSAFE_VAR_ASSIGNMENT` (innerHTML, explained above).
-- 1× `MANIFEST_OPTIONAL_PERMISSIONS`: Firefox does not accept `declarativeNetRequest` as an **optional**
-  permission. Effect: the Route block's browser-rule backend (abort/redirect without the debugger) cannot be
-  granted on the store build in Firefox and fails with `permission.missing`; the e2e build (permission granted
-  up front) works. **Not verified in a non-temporary Firefox install.** Decision pending: make it a required
-  permission on Firefox, or drop the Firefox claim from the docs.
+- (Gone since 1.0.0: `MANIFEST_OPTIONAL_PERMISSIONS` for `declarativeNetRequest`. Firefox does not accept that
+  permission as optional, so as an optional one the Route block's browser rules could never be granted on the
+  store build. It is now a required permission in the Firefox build only; see "Permissions" above.)
 
 ## Images
 

@@ -1,5 +1,9 @@
 # BlockFlow
 
+[![CI](https://github.com/akibh-dev/blockflow/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/akibh-dev/blockflow/actions/workflows/ci.yml)
+
+[![Release](https://github.com/akibh-dev/blockflow/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/akibh-dev/blockflow/actions/workflows/release.yml)
+
 **Playwright-compatible automation in your browser.** Build automations by connecting blocks (n8n style) in a
 visual editor, or write them as JSON scripts, by hand or with an LLM.
 Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + React + TypeScript).
