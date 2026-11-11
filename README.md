@@ -317,3 +317,7 @@ The product plan (Playwright-compatible automation in your browser, for people a
 Folders for workflows, per-workflow permissions, If with several conditions, resuming an interrupted run,
 Web Store packaging. (Done since the first version of this list: If with true/false outputs, reading
 elements, the recorder.)
+
+## License
+
+[MIT](LICENSE). The npm packages in `packages/` are MIT too.
