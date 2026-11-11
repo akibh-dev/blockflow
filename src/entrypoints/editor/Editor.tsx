@@ -57,6 +57,8 @@ import type { SyncBase } from './sync';
 
 /** React Flow node renderers by node `type`; every BlockFlow node is `'block'`. Module-level so it is stable. */
 const nodeTypes = { block: BlockNode };
+/** Above this many blocks the canvas draws only the ones in view (`onlyRenderVisibleElements`). */
+const VIRTUALISE_ABOVE = 150;
 const defaultEdgeOptions = { type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } };
 /** Debounce between the last change and the write of `bf:workflows`. */
 const SAVE_DELAY_MS = 400;
@@ -1019,8 +1021,9 @@ export function Editor() {
             nodes={nodes}
             edges={shownEdges}
             nodeTypes={nodeTypes}
-            // Only the blocks in view are drawn: a 500-block workflow opens in about 2.5 s instead of 4-5 s (m6-perf).
-            onlyRenderVisibleElements
+            // Big workflows draw only the blocks in view: 500 blocks open in about 2.5 s instead of 4-5 s (m6-perf).
+            // Small ones keep every block in the page, so off-screen blocks can still be found and selected.
+            onlyRenderVisibleElements={nodes.length > VIRTUALISE_ABOVE}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}

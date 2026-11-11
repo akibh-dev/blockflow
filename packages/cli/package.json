@@ -1,12 +1,53 @@
 {
-  "name": "blockflow-cli",
-  "version": "0.6.0",
+  "name": "blockflow-runner",
+  "version": "1.0.0",
   "description": "Run BlockFlow workflows and suites from the command line or CI, in Chromium with the extension.",
-  "type": "module",
+  "keywords": [
+    "blockflow",
+    "browser-automation",
+    "testing",
+    "ci",
+    "junit",
+    "playwright",
+    "chromium"
+  ],
+  "homepage": "https://github.com/akibh-dev/blockflow#readme",
+  "bugs": {
+    "url": "https://github.com/akibh-dev/blockflow/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akibh-dev/blockflow.git",
+    "directory": "packages/cli"
+  },
   "license": "MIT",
-  "bin": { "blockflow": "./cli.mjs" },
-  "exports": { ".": { "types": "./index.d.mts", "default": "./index.mjs" } },
-  "files": ["*.mjs", "index.d.mts"],
-  "engines": { "node": ">=20" },
-  "dependencies": { "blockflow-bridge": "0.6.0", "playwright-core": "^1.64.1" }
+  "type": "module",
+  "bin": {
+    "blockflow": "./cli.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.mts",
+      "default": "./index.mjs"
+    }
+  },
+  "files": [
+    "*.mjs",
+    "index.d.mts",
+    "scripts/",
+    "extension/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepack": "node scripts/pack.mjs copy",
+    "postpack": "node scripts/pack.mjs clean"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "blockflow-bridge": "1.0.0",
+    "playwright-core": "^1.64.1"
+  }
 }

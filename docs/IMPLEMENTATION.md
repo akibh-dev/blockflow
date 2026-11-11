@@ -1,7 +1,7 @@
 # Implementation plan
 
 > **Status:** 2026-11-06. **M0 done** (v0.2.0), **M1 done** (v0.3.0), **M2 done** (branch `m2-essentials`,
-> v0.4.0); **M3 and M4 done** (2026-11-10, v0.5.0); **M5 done** (2026-11-10, v0.6.0, branch `m5-debugging` on top of M4). This is the
+> v0.4.0); **M3 and M4 done** (2026-11-10, v0.5.0); **M5 done** (2026-11-10, v0.6.0); **M6 done** (2026-11-11, v1.0.0; the store steps need a person, see below). This is the
 > task-level plan for [PLAN.md](PLAN.md): *what* to build is decided there (goal, gaps, decisions in §8).
 > This file says *how*, in which order, with which files, tests and docs. Tick tasks off here as they
 > land, and update the matching wiki pages in the same change.
@@ -394,7 +394,17 @@ site, the CLI runs the guide examples in CI, and suites produce a combined JUnit
 ## M6: Ship (v1.0)
 
 **Step-by-step coding plan:** [M6-PLAN.md](M6-PLAN.md) (written so a smaller model can implement it task by task;
-`[HUMAN]` steps need accounts, a Mac or a person at a browser prompt).
+`[HUMAN]` steps need accounts, a Mac or a person at a browser prompt). **Status (2026-11-11): code done, v1.0.0.**
+What was built, what differs from the plan and the remaining human steps: [M6-NOTES.md](M6-NOTES.md).
+
+- [x] **M6.1** encrypted secrets (`secretVault.ts`, locked runs fail with `secrets.locked`, Secrets page, e2e `m6-secrets`).
+- [x] **M6.2** no site access at install, asked per workflow (`origins.ts`, `hostAccess.ts`), [PRIVACY.md](PRIVACY.md),
+  e2e `m6-hosts` (special build). The browser's real prompt: manual checklist `docs/manual-test/M6-permissions.md`.
+- [x] **M6.3** Safari build without unsupported APIs, guards tested, [SAFARI.md](SAFARI.md). **Not run on a Mac.**
+- [x] **M6.4** release workflow, Firefox lint in CI, store listing text and screenshots (`docs/store/`).
+  **Not done: accounts, keys, first upload, publishing.**
+- [x] **M6.5** Settings → Limits, virtualised canvas (500 blocks open in about 2.4 s), e2e `m6-perf`.
+- [x] **M6.6** lesson 10, wiki gaps, `CHANGELOG.md`.
 
 | ID | Task | Design | Size |
 | --- | --- | --- | --- |
@@ -415,6 +425,6 @@ site, the CLI runs the guide examples in CI, and suites produce a combined JUnit
 | M1 | `m1-script-first` | ✅ Done: 544 unit tests, 154 Chromium e2e checks in 14 specs (system Chromium), 14 Firefox e2e checks; eval set: 10/10 reference solutions pass |
 | M2 | `m2-essentials` | ✅ Done: 680 unit tests, 207 Chromium e2e checks in 18 specs (system Chromium), 30 Firefox e2e checks; 6 new blocks (Switch, Element Action, Drag, Wait for Download, Screenshot, Cookies & Storage) |
 | M3 | `m3-network` | ✅ Done (2026-11-10, version stays 0.4.0 until M4): 771 unit tests, 234 Chromium e2e checks in 22 specs (system Chromium 156), 34 Firefox e2e checks; 4 new blocks (Route, HAR Record, Emulate, Clear Site Data) and Assert `console-errors` |
-| M4 | `m4-outside-access` | ✅ Done (2026-11-10, v0.5.0 with M3): 956 unit tests, 275 Chromium e2e checks in 24 specs (system Chromium 156, headless and headed), M4 specs also in Brave Origin (headed), 44 Firefox e2e checks (bridge, MCP and suites on Firefox 159), CLI e2e (7 checks) on Chromium and Brave; packages `blockflow-bridge`, `blockflow-mcp`, `blockflow-cli` |
+| M4 | `m4-outside-access` | ✅ Done (2026-11-10, v0.5.0 with M3): 956 unit tests, 275 Chromium e2e checks in 24 specs (system Chromium 156, headless and headed), M4 specs also in Brave Origin (headed), 44 Firefox e2e checks (bridge, MCP and suites on Firefox 159), CLI e2e (7 checks) on Chromium and Brave; packages `blockflow-bridge`, `blockflow-mcp`, `blockflow-cli` (published as `blockflow-runner` in M6: the npm name was taken) |
 | M5 | `m5-debugging` | ✅ Done (2026-11-10, v0.6.0): 1079 unit tests, 343 Chromium e2e checks in 28 specs (system Chromium 156), M5 specs in Brave Origin (headed), 52 Firefox e2e checks (Firefox 159) |
-| M6 | `m6-ship` | Not started |
+| M6 | `m6-ship` | ✅ Code done (2026-11-11, v1.0.0): 1141 unit tests, 357 Chromium e2e checks in 31 specs (system Chromium 156) + `m6-hosts` on the no-hosts build, 52 Firefox e2e checks (Firefox 159), CLI e2e. **Not done:** store accounts/uploads, Safari on a Mac, the browser permission prompt (manual), Chrome/Edge/macOS/Windows for the bridge |

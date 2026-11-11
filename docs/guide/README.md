@@ -481,7 +481,7 @@ browser starts:
    locators), `validate_workflow` (issues with code, path and hint), `run_workflow` (inline script or saved
    id; failing step, code, locator, URL and a screenshot), `get_report`, `import_workflow`, `list_workflows`,
    `stop_run`, `list_suites`, `run_suite`. The loop: snapshot → write a script → validate → run → repair.
-3. **CLI and CI**: `npm run build:automation`, then `blockflow run <files or folders> --report junit --out
+3. **CLI and CI**: `npx blockflow-runner run <files or folders> --report junit --out
    report/` starts its own Chromium with the extension in a throwaway profile (no install needed), runs
    everything as one suite, writes `junit.xml` / `report.json` / `report.html`, and exits 0 (all passed),
    1 (a failure) or 2 (setup or usage error). `blockflow validate <files>` checks without running.

@@ -13,11 +13,16 @@ tests: [tests/cli/](../../tests/cli)
 
 ## Install and build
 
-The CLI is the `blockflow-cli` workspace package (`packages/cli`, bin `blockflow`, Node 20 or newer). It
-depends on `blockflow-bridge` (the native host it installs into the profile) and `playwright-core` (to
-launch the browser). In the repo, `npm install` sets both up.
+The CLI is published on npm as **`blockflow-runner`** (the name `blockflow-cli` belongs to an unrelated package);
+the workspace package is `packages/cli`, its command is `blockflow`, Node 20 or newer. It depends on
+`blockflow-bridge` (the native host it installs into the profile) and `playwright-core` (to launch the browser).
+Outside the repo: `npx blockflow-runner run tests/` (npx runs the package's only command). In the repo,
+`npm install` sets everything up and `npm run blockflow -- run …` runs the local copy.
 
-It loads an unpacked build of the extension. The default is `.output-automation/chrome-mv3`, made by:
+It loads an unpacked build of the extension, in this order: `--extension <dir>` / `BLOCKFLOW_EXTENSION`,
+`.output-automation/chrome-mv3` in the working directory, the copy **bundled into the published package**
+(`extension/`, copied by `scripts/pack.mjs` at `npm pack` / `npm publish`), then the repo's
+`.output-automation/chrome-mv3`, made by:
 
 ```bash
 npm run build:automation      # BF_AUTOMATION=1 wxt build: optional permissions (incl. nativeMessaging) granted

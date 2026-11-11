@@ -9,7 +9,7 @@ import { issueLines, resolveBlob, summaryLines, writeReports } from './reports.m
 import { collectSecrets } from './secrets.mjs';
 
 export const EXIT = Object.freeze({ passed: 0, failed: 1, error: 2 });
-export const VERSION = '0.6.0';
+export const VERSION = '1.0.0';
 
 /**
  * @typedef {import('./browser.mjs').BridgeSession} BridgeSession
@@ -97,7 +97,7 @@ export async function main(argv, deps = {}) {
   try {
     session = await startBridge({ headed: options.headed, browser: options.browser, extension: options.extension, env, cwd, log: err });
     const { client } = session;
-    const hello = await client.call('hello', { protocol: BRIDGE_PROTOCOL_VERSION, client: 'blockflow-cli' });
+    const hello = await client.call('hello', { protocol: BRIDGE_PROTOCOL_VERSION, client: 'blockflow-runner' });
     err(`BlockFlow ${hello?.extensionVersion ?? '?'} in ${hello?.browser ?? path.basename(session.info.browser)}`);
 
     // Validate every file first, so problems point at the file they are in. The checker does not know the

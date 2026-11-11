@@ -1,6 +1,6 @@
 # blockflow-bridge
 
-Native messaging host for the [BlockFlow](../../README.md) browser extension. It lets local programs (the
+Native messaging host for the [BlockFlow](https://github.com/akibh-dev/blockflow) browser extension. It lets local programs (the
 `blockflow-mcp` MCP server, the `blockflow` CLI, your own scripts) validate, import and run workflows in
 your browser.
 
@@ -42,9 +42,9 @@ bridge.close();
 
 Errors are `BridgeError` with `.code` (JSON-RPC code, see `blockflow-bridge/protocol`) and `.data`.
 The methods and their parameters are in the extension's
-[`src/core/bridgeProtocol.ts`](../../src/core/bridgeProtocol.ts).
+[`src/core/bridgeProtocol.ts`](https://github.com/akibh-dev/blockflow/blob/main/src/core/bridgeProtocol.ts).
 
 Environment: `BLOCKFLOW_SOCKET` and `BLOCKFLOW_TOKEN_FILE` override the paths (set them on the browser and on
 the client alike).
 
-Internals: [docs/wiki/Bridge.md](../../docs/wiki/Bridge.md).
+Internals: [Bridge wiki](https://github.com/akibh-dev/blockflow/wiki/Bridge).

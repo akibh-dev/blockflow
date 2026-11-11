@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BUILD_COMMAND, InfraError, bridgePaths, browserCandidates, findBrowser, resolveExtension } from '../../packages/cli/index.mjs';
@@ -33,6 +34,12 @@ describe('resolveExtension', () => {
     const exists = (file: string) => file.endsWith(path.join('ext', 'manifest.json'));
     expect(resolveExtension('ext', {}, '/work', exists)).toBe(path.resolve('/work/ext'));
     expect(resolveExtension(undefined, { BLOCKFLOW_EXTENSION: 'ext' }, '/work', exists)).toBe(path.resolve('/work/ext'));
+  });
+
+  it('uses the extension bundled into the published package when there is no local build', () => {
+    const bundled = path.resolve(path.dirname(fileURLToPath(new URL('../../packages/cli/browser.mjs', import.meta.url))), 'extension');
+    const exists = (file: string) => file === path.join(bundled, 'manifest.json');
+    expect(resolveExtension(undefined, {}, '/work', exists)).toBe(bundled);
   });
 
   it('names the build command when the build is missing', () => {

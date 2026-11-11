@@ -19,6 +19,9 @@ follow the milestones of [docs/PLAN.md](docs/PLAN.md).
   ([docs/SAFARI.md](docs/SAFARI.md); not verified on a Mac).
 - **Releases.** A tag builds, checks, lints (Firefox) and zips both stores' packages, attaches them to a GitHub
   release and, with secrets, signs and uploads. Listing text and screenshots: [docs/store/](docs/store/).
+- **npm packages**: `blockflow-bridge`, `blockflow-mcp` and `blockflow-runner` (the CLI; `blockflow-cli` on npm is an
+  unrelated package). The runner bundles the extension's automation build, so `npx blockflow-runner run tests/`
+  works without a checkout.
 - Docs: lesson 10 (the DevTools Protocol), wiki pages for every module added since 0.4.
 
 ## 0.6.0: Debugging and visual

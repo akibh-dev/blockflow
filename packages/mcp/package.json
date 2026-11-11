@@ -1,9 +1,26 @@
 {
   "name": "blockflow-mcp",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "description": "MCP server (stdio) for the BlockFlow browser extension: validate, run and repair workflows in your real browser.",
-  "type": "module",
+  "keywords": [
+    "blockflow",
+    "mcp",
+    "model-context-protocol",
+    "browser-automation",
+    "testing",
+    "claude"
+  ],
+  "homepage": "https://github.com/akibh-dev/blockflow#readme",
+  "bugs": {
+    "url": "https://github.com/akibh-dev/blockflow/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akibh-dev/blockflow.git",
+    "directory": "packages/mcp"
+  },
   "license": "MIT",
+  "type": "module",
   "bin": {
     "blockflow-mcp": "./server.mjs"
   },
@@ -15,10 +32,12 @@
     }
   },
   "files": [
-    "*.mjs",
     "*.d.mts",
-    "scripts/",
-    "resources/"
+    "*.mjs",
+    "LICENSE",
+    "README.md",
+    "resources/",
+    "scripts/"
   ],
   "scripts": {
     "prepack": "node scripts/pack.mjs copy",
@@ -28,7 +47,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "blockflow-bridge": "0.6.0",
+    "blockflow-bridge": "1.0.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "zod": "^4.0.0"
   }

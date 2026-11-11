@@ -90,7 +90,8 @@ export function findBrowser(flag, env, exists = existsSync) {
 
 /**
  * The unpacked extension folder: `--extension`, `BLOCKFLOW_EXTENSION`, else `.output-automation/chrome-mv3`
- * in the working directory or in the BlockFlow repo this package lives in. It must hold a manifest.json.
+ * in the working directory, the copy bundled into the published package (`extension/`, made by
+ * `scripts/pack.mjs` at `npm pack`), or the BlockFlow repo this package lives in. It must hold a manifest.json.
  * @param {string | undefined} flag
  * @param {Record<string, string | undefined>} env
  * @param {string} cwd
@@ -98,7 +99,7 @@ export function findBrowser(flag, env, exists = existsSync) {
  */
 export function resolveExtension(flag, env, cwd, exists = existsSync) {
   const explicit = flag ?? env.BLOCKFLOW_EXTENSION;
-  const candidates = explicit ? [path.resolve(cwd, explicit)] : [path.resolve(cwd, '.output-automation/chrome-mv3'), path.resolve(here, '../../.output-automation/chrome-mv3')];
+  const candidates = explicit ? [path.resolve(cwd, explicit)] : [path.resolve(cwd, '.output-automation/chrome-mv3'), path.resolve(here, 'extension'), path.resolve(here, '../../.output-automation/chrome-mv3')];
   const found = candidates.find((dir) => exists(path.join(dir, 'manifest.json')));
   if (!found) {
     throw new InfraError(`BlockFlow extension build not found (looked for manifest.json in ${candidates.join(', ')}). Build it first: ${BUILD_COMMAND}${explicit ? '' : ' (or pass --extension <dir>)'}`);
@@ -239,7 +240,7 @@ export async function startBridge(options) {
     while (Date.now() < deadline) {
       if (process.platform === 'win32' || existsSync(paths.socket)) {
         try {
-          client = await bridge.connectBridge({ socketPath: paths.socket, tokenFile: paths.tokenFile, client: 'blockflow-cli', timeoutMs: 5_000 });
+          client = await bridge.connectBridge({ socketPath: paths.socket, tokenFile: paths.tokenFile, client: 'blockflow-runner', timeoutMs: 5_000 });
           break;
         } catch (error) {
           lastError = error;
