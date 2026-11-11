@@ -74,6 +74,33 @@ function restrictedCode(message: string): ErrorCode {
   return /permission/i.test(message) ? 'permission.missing' : 'page.restricted';
 }
 
+/**
+ * The error for a page the browser would not let us script. Without site access (the store build asks per
+ * workflow) it names the site and says how to grant it; otherwise it is a page no extension may script.
+ */
+export function restrictedError(message: string, tabUrl: string | undefined, locator?: string): CodedError {
+  const code = restrictedCode(message);
+  if (code === 'permission.missing') {
+    let site = '';
+    try {
+      site = tabUrl ? new URL(tabUrl).origin : '';
+    } catch {
+      site = '';
+    }
+    return new CodedError(code, `BlockFlow has no access to ${site || 'this site'}. Run the workflow from the editor to grant it (or open the workflow and press Grant access).`, { locator });
+  }
+  return new CodedError(code, `The browser does not let extensions work on this page: ${message}`, { locator });
+}
+
+/** The tab's URL (needs the `tabs` permission), or undefined when it cannot be read. */
+async function tabUrlOf(tabId: number): Promise<string | undefined> {
+  try {
+    return (await browser.tabs.get(tabId)).url;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The locator of a request, for error details. */
 function locatorOf(request: AgentRequest): string | undefined {
   return 'locator' in request && typeof request.locator === 'string' && request.locator ? request.locator : undefined;
@@ -171,7 +198,7 @@ export async function actInTab(tabId: number, original: AgentRequest, timeoutMs:
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!(await tabExists(tabId))) throw new CodedError('tab.closed', 'The tab was closed', { locator });
-      if (restricted(message)) throw new CodedError(restrictedCode(message), `The browser does not let extensions work on this page: ${message}`, { locator });
+      if (restricted(message)) throw restrictedError(message, await tabUrlOf(tabId), locator);
       reason = `the page was busy loading (${message})`;
       last = { code: 'navigation.failed' };
     }
