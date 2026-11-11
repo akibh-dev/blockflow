@@ -1,10 +1,11 @@
 name: Release
 
-# Push a tag like v1.0.0 (or publish a release in the GitHub UI, which creates the tag). Builds, checks and zips
-# both stores' packages, lints Firefox, attaches the zips to the GitHub release, and (only when the secrets exist)
-# signs the Firefox build and uploads the Chrome package as a draft. A person publishes in the store dashboards.
+# Push a tag like v1.0.0 on Forgejo (the mirror brings it here). Builds, checks and zips the Chrome and Firefox
+# packages, lints Firefox, attaches the zips to the GitHub release (Chrome, Edge, Brave install the Chrome zip with
+# "Load unpacked": BlockFlow is not on the Chrome Web Store), and with the AMO secrets submits the Firefox version
+# to addons.mozilla.org.
 # Pre-release tags (v1.0.0-alpha, v1.0.0-rc.1): the part before "-" must equal package.json (extension manifests
-# allow only numeric versions), the GitHub release is marked pre-release, and nothing goes to the stores.
+# allow only numeric versions), the GitHub release is marked pre-release, and nothing goes to AMO.
 # After that, the `npm` job publishes the npm packages whose version is not on npmjs.com yet (trusted publishing,
 # no token: each package names this workflow file as its trusted publisher on npmjs.com).
 # See docs/store/README.md.
@@ -29,10 +30,6 @@ jobs:
     env:
       AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
       AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
-      CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
-      CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
-      CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
-      CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -61,7 +58,7 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ steps.tag.outputs.prerelease == 'true' }}
       - name: Submit the Firefox version to AMO (needs AMO_JWT_ISSUER and AMO_JWT_SECRET)
-        # A store error (e.g. this version was already submitted, on a re-run) shows in the log but does not stop
+        # An AMO error (e.g. this version was already submitted, on a re-run) shows in the log but does not stop
         # the npm job.
         continue-on-error: true
         if: ${{ steps.tag.outputs.prerelease == 'false' && env.AMO_JWT_ISSUER != '' && env.AMO_JWT_SECRET != '' }}
@@ -75,14 +72,6 @@ jobs:
             --upload-source-code ".output/blockflow-$version-sources.zip" \
             --amo-metadata docs/store/amo-metadata.json \
             --approval-timeout 0 --artifacts-dir .output/signed
-      - name: Upload the Chrome package as a draft (needs the CWS_* secrets)
-        # A store error (e.g. this version was already submitted, on a re-run) shows in the log but does not stop
-        # the npm job.
-        continue-on-error: true
-        if: ${{ steps.tag.outputs.prerelease == 'false' && env.CWS_CLIENT_ID != '' && env.CWS_CLIENT_SECRET != '' && env.CWS_REFRESH_TOKEN != '' && env.CWS_EXTENSION_ID != '' }}
-        run: |
-          zip="$(ls .output/*-chrome.zip | head -1)"
-          npx --yes chrome-webstore-upload-cli@3 upload --source "$zip" --extension-id "$CWS_EXTENSION_ID" --client-id "$CWS_CLIENT_ID" --client-secret "$CWS_CLIENT_SECRET" --refresh-token "$CWS_REFRESH_TOKEN"
 
   # npm trusted publishing (OIDC): npmjs.com accepts a publish from this workflow file in akibh-dev/blockflow
   # without a token, and adds provenance. Each package publishes only when its version is not on npm yet, so a

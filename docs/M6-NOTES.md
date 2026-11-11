@@ -16,8 +16,10 @@ Written at the end of M6 (see [M6-PLAN.md](M6-PLAN.md) for the plan). Version **
 
 ## Remaining for a person [HUMAN]
 
-- [ ] Create the Chrome Web Store and AMO developer accounts, the API keys, and the repository secrets
-      (`CWS_*`, `AMO_JWT_*`); upload the first version by hand ([store/README.md](store/README.md)).
+- [x] AMO developer account, API keys and repository secrets (`AMO_JWT_*`); first version submitted by hand,
+      1.0.1 by the release workflow.
+- [x] Chrome Web Store: **not used** (registration fee; BlockFlow is free). Chrome installs the release zip
+      unpacked ([store/README.md](store/README.md)).
 - [ ] Fill the stores' data-usage forms from [PRIVACY.md](PRIVACY.md); publish the privacy policy at a public URL.
 - [ ] Run [manual-test/M6-permissions.md](manual-test/M6-permissions.md) in Chrome and Firefox (the browser's
       real permission prompt cannot be automated).

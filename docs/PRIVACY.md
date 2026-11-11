@@ -1,7 +1,7 @@
 # BlockFlow privacy policy and permission justification
 
 BlockFlow is a browser extension that runs automations you build, in your own browser, with your own logins.
-This page is the privacy policy for the store listings (Chrome Web Store, Firefox Add-ons) and the reference
+This page is the privacy policy for the Firefox Add-ons listing and the GitHub releases and the reference
 for why each permission exists. The permission list below matches `wxt.config.ts`; when one changes, change
 this page in the same commit.
 

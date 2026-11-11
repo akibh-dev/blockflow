@@ -129,7 +129,23 @@ Open Tab (https://shop.test/login)
   together, Turn all on / off.
 - Imported and duplicated workflows always arrive **off** with fresh ids. Turning on a workflow with errors is refused with the reason.
 
-## Getting started
+## Install
+
+No build needed; every release is on the [releases page](https://github.com/akibh-dev/blockflow/releases).
+
+- **Firefox:** [addons.mozilla.org/firefox/addon/blockflow](https://addons.mozilla.org/firefox/addon/blockflow/)
+  (each version appears there once Mozilla's review approves it). Updates arrive automatically.
+- **Chrome, Edge, Brave:** BlockFlow is free and not on the Chrome Web Store (it charges developers a fee).
+  1. Download `blockflow-<version>-chrome.zip` from the latest release and unzip it into a folder you keep.
+  2. Open `chrome://extensions` (`edge://extensions`, `brave://extensions`) and switch on **Developer mode**.
+  3. **Load unpacked** → choose that folder. Pin the BlockFlow icon; clicking it opens the editor.
+
+  To update, unzip the new release over the same folder and press the reload arrow on BlockFlow's card: same
+  folder, same extension id, workflows kept. There are no automatic updates.
+- **CLI and MCP server:** `npx blockflow-runner run tests/` and `npx blockflow-mcp` (npm:
+  [blockflow-runner](https://www.npmjs.com/package/blockflow-runner), [blockflow-mcp](https://www.npmjs.com/package/blockflow-mcp)).
+
+## Getting started (from source)
 
 Requires Node 20+.
 
@@ -286,7 +302,7 @@ needed.
 | 2026-11-10, M4 (v0.5.0): `npm run check` (955 unit/DOM tests), `npm run e2e` in Chromium 156, 24 specs / 275 checks, headless and headed (adds `m4-bridge`: native host ⇄ extension ⇄ socket client for every method, per-run secrets never stored; `m4-integration`: the MCP repair loop through the real stdio server, `suite.run` with combined JUnit, the Suites and Settings pages); the M4 specs and `npm run e2e:cli` also in Brave Origin (headed); `npm run e2e:firefox` (44 checks, Firefox 159, now with the bridge, MCP and suites). Google Chrome, Edge, macOS and Windows not run | Run, passing. |
 | 2026-11-10, M3: `npm run check` (771 unit/DOM tests), `npm run e2e` in Chromium 156, 22 specs / 234 checks (adds Route via CDP and browser rules, Emulate with reset after success and failure, Clear Site Data, HAR Record, per-step console capture and Assert `console-errors`, run-scoped debugger sessions), `npm run e2e:firefox` (34 checks, Firefox 159: browser-rule Route works, the Chromium-only M3 blocks fail with `permission.missing`) | Run, passing. |
 | 2026-11-06, M2 (v0.4.0): `npm run check` (680 unit/DOM tests), `npm run e2e` in Chromium 18 specs / 207 checks (adds locator filters and role states, the new Assert subjects, key chords and insert-text, click options, Element Action, Drag and drop zones in both input modes, Wait for Download, Screenshot, Cookies & Storage, Wait For request and response bodies, Switch and Repeat until; the new blocks exported and run under `npx playwright test`), `npm run e2e:firefox` (30 checks, Firefox 159) | Run, passing. |
-| Firefox host permission grant by a user (non-temporary install), Safari conversion, Chrome Web Store upload | **Not run.** |
+| Firefox host permission grant by a user (non-temporary install), Safari conversion | **Not run.** (Chrome Web Store: not used, see Install.) |
 
 ## Known limitations
 
