@@ -11,12 +11,16 @@ name: Release
 on:
   push:
     tags: ['v*.*.*']
+  # Actions → Release → "Run workflow": only the npm job, on the chosen branch (default main). For a package fix
+  # without a new extension version; same workflow file, so the npm trusted publisher accepts it.
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -85,7 +89,8 @@ jobs:
   # tag that only changes the extension publishes nothing. Pre-release tags skip npm. Setup: docs/wiki/Build-and-Release.md.
   npm:
     needs: release
-    if: ${{ needs.release.outputs.prerelease == 'false' }}
+    # After a successful tag release (not a pre-release), or on its own when started by hand.
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || (needs.release.result == 'success' && needs.release.outputs.prerelease == 'false')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -99,6 +104,9 @@ jobs:
           cache: npm
           registry-url: https://registry.npmjs.org
       - run: npm ci
+      # Started by hand: the checks the release job would have run.
+      - if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: npm run check
       # blockflow-runner bundles this build (packages/cli/scripts/pack.mjs runs at prepack).
       - run: npm run build:automation
       - name: Publish new package versions (bridge first; mcp and runner depend on it)
