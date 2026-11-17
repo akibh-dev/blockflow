@@ -334,6 +334,11 @@ Folders for workflows, per-workflow permissions, If with several conditions, res
 Web Store packaging. (Done since the first version of this list: If with true/false outputs, reading
 elements, the recorder.)
 
+## Tempates
+[### Mark 10 whatsapp message](/templates/whatsapp-select-10.script.json)
+Replace the name for te chat with 19 CSE Akib in the .json file and then import the file and run the workflow.
+
+
 ## License
 
 [MIT](LICENSE). The npm packages in `packages/` are MIT too.

@@ -1,0 +1,277 @@
+{
+  "format": "blockflow-script",
+  "version": 1,
+  "name": "WhatsApp - select 10 messages (19 CSE Akib)",
+  "steps": [
+    {
+      "id": "open",
+      "open": {
+        "url": "https://web.whatsapp.com/",
+        "where": "new",
+        "active": true,
+        "waitUntil": "load"
+      }
+    },
+    {
+      "id": "waitChatList",
+      "wait-for": {
+        "mode": "visible",
+        "locator": "span[title=\"19 CSE Akib\"] >> nth=0"
+      },
+      "step": {
+        "timeoutSeconds": 90
+      }
+    },
+    {
+      "id": "openChat",
+      "click": {
+        "locator": "span[title=\"19 CSE Akib\"] >> nth=0"
+      },
+      "step": {
+        "retries": 2
+      }
+    },
+    {
+      "id": "waitMessages",
+      "wait-for": {
+        "mode": "visible",
+        "locator": "#main div[role=\"row\"] >> has=div[data-id] >> nth=-1"
+      },
+      "step": {
+        "timeoutSeconds": 30
+      }
+    },
+    {
+      "id": "openMenu",
+      "click": {
+        "locator": "#main header >> role=button[name=\"Menu\"]"
+      },
+      "step": {
+        "retries": 2
+      }
+    },
+    {
+      "id": "selectMode",
+      "click": {
+        "locator": "text=/select messages/i >> nth=0"
+      },
+      "step": {
+        "retries": 2
+      }
+    },
+    {
+      "id": "pause",
+      "timer": {
+        "seconds": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "countRows",
+      "read-element": {
+        "locator": "#main div[role=\"row\"] >> has=div[data-id]",
+        "read": "count",
+        "tab": "main"
+      }
+    },
+    {
+      "id": "logCount",
+      "log": {
+        "message": "Message rows found: {{count}}",
+        "level": "info"
+      }
+    },
+    {
+      "id": "countBoxes",
+      "read-element": {
+        "locator": "#main >> role=checkbox[include-hidden]",
+        "read": "count",
+        "tab": "main"
+      }
+    },
+    {
+      "id": "logBoxes",
+      "log": {
+        "message": "Checkboxes found: {{count}}",
+        "level": "info"
+      }
+    },
+    {
+      "id": "m1",
+      "click": {
+        "locator": "#main div[role=\"row\"] >> has=div[data-id] >> nth=-1 >> role=checkbox[include-hidden] >> nth=0",
+        "force": true
+      },
+      "step": {
+        "retries": 1
+      }
+    },
+    {
+      "id": "pm1",
+      "timer": {
+        "seconds": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "m2",
+      "click": {
+        "locator": "#main div[role=\"row\"] >> has=div[data-id] >> nth=-2 >> role=checkbox[include-hidden] >> nth=0",
+        "force": true
+      },
+      "step": {
+        "retries": 1
+      }
+    },
+    {
+      "id": "pm2",
+      "timer": {
+        "seconds": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "m3",
+      "click": {
+        "locator": "#main div[role=\"row\"] >> has=div[data-id] >> nth=-3 >> role=checkbox[include-hidden] >> nth=0",
+        "force": true
+      },
+      "step": {
+        "retries": 1
+      }
+    },
+    {
+      "id": "pm3",
+      "timer": {
+        "seconds": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "m4",
+      "click": {
+        "locator": "#main div[role=\"row\"] >> has=div[data-id] >> nth=-4 >> role=checkbox[include-hidden] >> nth=0",
+        "force": true
+      },
+      "step": {
+        "retries": 1
+      }
+    },
+    {
+      "id": "pm4",
+      "timer": {
+        "seconds": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "m5",
+      "click": {
+        "locator": "#main div[role=\"row\"] >> has=div[data-id] >> nth=-5 >> role=checkbox[include-hidden] >> nth=0",
+        "force": true
+      },
+      "step": {
+        "retries": 1
+      }
+    },
+    {
+      "id": "pm5",
+      "timer": {
+        "seconds": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "m6",
+      "click": {
+        "locator": "#main div[role=\"row\"] >> has=div[data-id] >> nth=-6 >> role=checkbox[include-hidden] >> nth=0",
+        "force": true
+      },
+      "step": {
+        "retries": 1
+      }
+    },
+    {
+      "id": "pm6",
+      "timer": {
+        "seconds": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "m7",
+      "click": {
+        "locator": "#main div[role=\"row\"] >> has=div[data-id] >> nth=-7 >> role=checkbox[include-hidden] >> nth=0",
+        "force": true
+      },
+      "step": {
+        "retries": 1
+      }
+    },
+    {
+      "id": "pm7",
+      "timer": {
+        "seconds": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "m8",
+      "click": {
+        "locator": "#main div[role=\"row\"] >> has=div[data-id] >> nth=-8 >> role=checkbox[include-hidden] >> nth=0",
+        "force": true
+      },
+      "step": {
+        "retries": 1
+      }
+    },
+    {
+      "id": "pm8",
+      "timer": {
+        "seconds": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "m9",
+      "click": {
+        "locator": "#main div[role=\"row\"] >> has=div[data-id] >> nth=-9 >> role=checkbox[include-hidden] >> nth=0",
+        "force": true
+      },
+      "step": {
+        "retries": 1
+      }
+    },
+    {
+      "id": "pm9",
+      "timer": {
+        "seconds": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "m10",
+      "click": {
+        "locator": "#main div[role=\"row\"] >> has=div[data-id] >> nth=-10 >> role=checkbox[include-hidden] >> nth=0",
+        "force": true
+      },
+      "step": {
+        "retries": 1
+      }
+    },
+    {
+      "id": "pm10",
+      "timer": {
+        "seconds": 1,
+        "repeat": false
+      }
+    },
+    {
+      "id": "done",
+      "log": {
+        "message": "Selected the last 10 messages in 19 CSE Akib. Nothing deleted or forwarded.",
+        "level": "info"
+      }
+    }
+  ]
+}
