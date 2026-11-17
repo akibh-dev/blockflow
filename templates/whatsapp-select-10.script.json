@@ -1,8 +1,15 @@
 {
   "format": "blockflow-script",
   "version": 1,
-  "name": "WhatsApp - select 10 messages (19 CSE Akib)",
+  "name": "WhatsApp - select 10 messages",
   "steps": [
+    {
+      "id": "setContact",
+      "set-variable": {
+        "name": "contact",
+        "value": "YOUR CONTACT NAME HERE"
+      }
+    },
     {
       "id": "open",
       "open": {
@@ -16,7 +23,7 @@
       "id": "waitChatList",
       "wait-for": {
         "mode": "visible",
-        "locator": "span[title=\"19 CSE Akib\"] >> nth=0"
+        "locator": "span[title=\"{{contact}}\"] >> nth=0"
       },
       "step": {
         "timeoutSeconds": 90
@@ -25,7 +32,7 @@
     {
       "id": "openChat",
       "click": {
-        "locator": "span[title=\"19 CSE Akib\"] >> nth=0"
+        "locator": "span[title=\"{{contact}}\"] >> nth=0"
       },
       "step": {
         "retries": 2
@@ -269,7 +276,7 @@
     {
       "id": "done",
       "log": {
-        "message": "Selected the last 10 messages in 19 CSE Akib. Nothing deleted or forwarded.",
+        "message": "Selected the last 10 messages in {{contact}}. Nothing deleted or forwarded.",
         "level": "info"
       }
     }
