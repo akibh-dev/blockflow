@@ -10,6 +10,7 @@ The mark: a trigger block (clock) wired to a browser block, with a "done" block.
 | [public/logo-small.svg](../../public/logo-small.svg) | transparent | Simplified (two blocks, one link) for the 16 and 32 px icons. |
 | `logo-transparent-512.png`, `-1024.png` | transparent | Exports of `logo.svg`. |
 | `logo-white-512.png`, `-1024.png` | white | Exports of `logo-white.svg`. |
+| `social-card.png` (1280×640) | light canvas | GitHub social preview (Settings → General → Social preview). Source: `social-card.html`; the render command is at its top. |
 
 In the editor the mark is `src/entrypoints/editor/components/Logo.tsx` (same paths); its colours are the
 `--logo-a`, `--logo-b`, `--logo-ok` tokens in `style.css`, lighter in dark mode.

@@ -1,0 +1,96 @@
+<!doctype html>
+<!--
+  GitHub social preview (repository card), 1280×640. Render:
+    chromium-browser --headless=new --hide-scrollbars --window-size=1280,640 \
+      --screenshot=docs/brand/social-card.png file://$PWD/docs/brand/social-card.html
+  Keep text and the mark inside the 80px safe border (GitHub may crop the edges).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BlockFlow social card</title>
+<style>
+@font-face { font-family: Geist; src: url(../../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2) format('woff2'); font-weight: 100 900; }
+@font-face { font-family: JBM; src: url(../../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2) format('woff2'); font-weight: 100 800; }
+:root { --violet: #7c3aed; --sky: #0284c7; --amber: #d97706; --green: #059669; --text: #171a21; --muted: #646b78; --border: #e3e6ec; }
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1280px; height: 640px; overflow: hidden; }
+body {
+  font-family: Geist, system-ui, sans-serif; color: var(--text);
+  background-color: #fafbfc;
+  background-image: radial-gradient(#d8dce4 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+  display: grid; grid-template-columns: 500px 1fr; column-gap: 24px; align-items: center;
+  padding: 80px 96px;
+}
+.brand { display: flex; align-items: center; gap: 18px; }
+.brand img { width: 84px; height: 84px; }
+h1 { font-size: 72px; font-weight: 700; letter-spacing: -0.035em; line-height: 1; }
+.tag { margin-top: 28px; font-size: 29px; line-height: 1.3; font-weight: 500; letter-spacing: -0.01em; color: #2a2f3a; }
+.tag b { color: var(--violet); font-weight: 650; }
+.chips { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 10px; }
+.chip { font: 600 16px JBM, monospace; padding: 8px 12px; border-radius: 9px; background: #fff; border: 1.5px solid var(--border); color: var(--muted); }
+.chip.v { color: var(--violet); border-color: #ddd0fb; background: #f6f1ff; }
+
+.flow { position: relative; height: 420px; }
+.flow svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.node {
+  position: absolute; width: 250px; background: #fff; border: 1.5px solid var(--border); border-radius: 16px;
+  box-shadow: 0 2px 4px rgb(16 19 27 / .05), 0 14px 32px rgb(16 19 27 / .08);
+}
+.node.sel { border-color: var(--violet); box-shadow: 0 0 0 4px rgb(124 58 237 / .16), 0 14px 32px rgb(16 19 27 / .08); }
+.head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.tile { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; }
+.tile svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.name { font-size: 20px; font-weight: 650; }
+.cat { font: 600 11px JBM, monospace; letter-spacing: .08em; color: #8d93a0; margin-top: 3px; }
+.ok { margin-left: auto; width: 26px; height: 26px; border-radius: 50%; background: #e6f7f0; color: var(--green); display: grid; place-items: center; }
+.ok svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.sum { border-top: 1.5px solid var(--border); padding: 11px 16px 13px; font: 15px JBM, monospace; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.h { position: absolute; top: 50%; width: 14px; height: 14px; margin-top: -7px; border-radius: 50%; background: #fff; border: 2.5px solid #9aa1b0; }
+.h.in { left: -8px; } .h.out { right: -8px; }
+.sel .h { border-color: var(--violet); }
+</style>
+</head>
+<body>
+  <div>
+    <div class="brand"><img src="../../public/logo.svg" alt=""><h1>BlockFlow</h1></div>
+    <p class="tag">Browser automation from <b>connected blocks</b>, Playwright-compatible, in your own browser.</p>
+    <div class="chips"><span class="chip v">Chrome</span><span class="chip v">Firefox</span><span class="chip">MCP</span><span class="chip">CLI</span><span class="chip">MIT</span></div>
+  </div>
+
+  <div class="flow" id="flow">
+    <svg class="edges"><path id="e1" fill="none" stroke="#9aa1b0" stroke-width="2.5"/><path id="e2" fill="none" stroke="#7c3aed" stroke-width="2.5" stroke-dasharray="7 7"/></svg>
+
+    <div class="node sel" id="a" style="left:0; top:150px">
+      <span class="h in"></span>
+      <div class="head"><span class="tile" style="background:#e3f3fb;color:#0284c7"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M3 9h18M10 14.5h4.5V19M14.5 14.5 9 20"/></svg></span><div><div class="name">Open Tab</div><div class="cat">TABS</div></div><span class="ok"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span></div>
+      <div class="sum">shop.example/pricing</div>
+      <span class="h out" data-out></span>
+    </div>
+
+    <div class="node" id="b" style="left:318px; top:36px">
+      <span class="h in" data-in="e1"></span>
+      <div class="head"><span class="tile" style="background:#e6f7f0;color:#059669"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="m8 12 3 3 5-6"/></svg></span><div><div class="name">Assert</div><div class="cat">TEST</div></div><span class="ok"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span></div>
+      <div class="sum">price contains "$"</div>
+      <span class="h out"></span>
+    </div>
+
+    <div class="node" id="c" style="left:318px; top:268px">
+      <span class="h in" data-in="e2"></span>
+      <div class="head"><span class="tile" style="background:#f1ebff;color:#7c3aed"><svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.5"/></svg></span><div><div class="name">Screenshot</div><div class="cat">READ &amp; SCRAPE</div></div><span class="ok"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span></div>
+      <div class="sum">full page, PNG</div>
+      <span class="h out"></span>
+    </div>
+  </div>
+  <script>
+    const box = document.getElementById('flow').getBoundingClientRect();
+    const mid = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2 - box.left, r.top + r.height / 2 - box.top]; };
+    const [x1, y1] = mid(document.querySelector('[data-out]'));
+    for (const target of document.querySelectorAll('[data-in]')) {
+      const [x2, y2] = mid(target); const dx = (x2 - x1) / 2;
+      document.getElementById(target.dataset.in).setAttribute('d', `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`);
+    }
+  </script>
+</body>
+</html>

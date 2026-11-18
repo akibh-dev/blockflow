@@ -1,3 +1,5 @@
+<p align="center"><img src="public/logo.svg" width="112" alt=""></p>
+
 # BlockFlow
 
 [![CI](https://github.com/akibh-dev/blockflow/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/akibh-dev/blockflow/actions/workflows/ci.yml)
@@ -9,6 +11,12 @@ Works in Chrome, Firefox and Safari from one codebase ([WXT](https://wxt.dev) + 
 
 **Status: v2.0.0** (editor redesign; code complete; store publishing and the Safari check on a Mac are still to do, see [docs/M6-NOTES.md](docs/M6-NOTES.md)). Includes M3 network and environment, M4 outside access (MCP server, CLI, suites), M5 debugging and visual, M6 encrypted secrets and per-workflow site access. 53 blocks (full list: [block reference](docs/guide/blocks.md)), a canvas editor, and a background engine. See
 [What has been verified](#what-has-been-verified) before you rely on it. Privacy and permissions: [docs/PRIVACY.md](docs/PRIVACY.md).
+
+**Where it lives.** Development happens on Forgejo at
+[git.akibh.dev/akib/blockflow](https://git.akibh.dev/akib/blockflow): send pull requests there. The GitHub
+repository [akibh-dev/blockflow](https://github.com/akibh-dev/blockflow) is a read-only mirror (pull requests are
+turned off and only the mirror can push branches and tags); CI, releases and npm publishing run there. Issues are
+welcome on either.
 
 **Using BlockFlow, or asking an AI to build workflows for you?** Read the
 [usage guide](docs/guide/README.md) and the generated [block reference](docs/guide/blocks.md)
