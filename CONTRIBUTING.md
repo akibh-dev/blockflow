@@ -1,7 +1,9 @@
 # Contributing to BlockFlow
 
 Thanks for helping. This page covers how to set up, the rules the code follows, and what a change must
-include before it is merged. For what each module does, see the [internals wiki](docs/wiki/Home.md).
+include before it is merged. Clone from and open pull requests on Forgejo,
+[git.akibh.dev/akib/blockflow](https://git.akibh.dev/akib/blockflow); the GitHub repository is a read-only mirror
+(pull requests are turned off there). For what each module does, see the [internals wiki](docs/wiki/Home.md).
 
 ## Set up
 
@@ -75,6 +77,9 @@ See [Testing](docs/wiki/Testing.md) for what each file covers and the fake host 
 - [ ] You tried it in a real browser when it touches `src/browser`, `src/dom` or the editor, and you say in the PR what you tried.
 
 Keep commits focused, and say *why* in the message. Work lands on `main` on Forgejo, which push-mirrors to GitHub, where CI runs.
+On GitHub, rulesets ("Only Forjejo", "Only Forjejo tags") block creating, updating and deleting branches and tags
+for everyone except repository admins, which is the account the Forgejo push mirror uses. Release tags are pushed to
+Forgejo and reach GitHub through the mirror.
 
 ## Publishing the wiki
 
