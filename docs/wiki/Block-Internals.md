@@ -21,7 +21,7 @@ side effects. The registry erases `C` (`AnyBlockDefinition`).
 | --- | --- | --- | --- |
 | `type` | yes | engine, saved workflows | The id stored in `NodeDef.type`. **Never rename**: saved workflows reference it (Open Tab is still `open-url`). Must be unique, `BlockRegistry.register` throws otherwise. |
 | `label`, `description`, `icon` | yes | editor palette and config panel, guide | `description` and field labels/help are copied into `docs/guide/blocks.*` by `scripts/guide.ts`. |
-| `accent` | yes | editor | Colour of the block. `PAGE_ACCENT` / `DATA_ACCENT` for page and data blocks. |
+| `accent` | yes | nothing at the moment | Was the block's colour in the editor. Since the 2026-11 redesign the editor colours blocks by category (`--c-<category>` in `style.css`) and draws its own icon per type (`BLOCK_ICONS` in `editor/components/Icon.tsx`; `icon` here is still used by the generated guide). Kept so block files stay valid. |
 | `category` | no | palette | Do **not** set it in the block: `createDefaultRegistry()` stamps it from `BLOCK_GROUPS` in `index.ts`. |
 | `defaultConfig: C` | yes | `withDefaults()` | Merged under the saved config (`{...defaultConfig, ...raw}`) on every resolve, so new keys get a value in old workflows. |
 | `fields: FieldSpec[]` | yes | editor, validation, templating, guide | One entry per editable key. Order = order in the config panel. See [Settings and the editor](#settings-fields-and-the-editor). |

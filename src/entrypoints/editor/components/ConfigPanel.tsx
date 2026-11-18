@@ -12,6 +12,7 @@ import { isExtensionMessage } from '../../../shared/messages';
 import type { StartPickMessage } from '../../../shared/messages';
 import { registry } from '../registry';
 import { runFromInput } from '../runFrom';
+import { BlockTile, Icon } from './Icon';
 import type { BlockFlowNode } from './BlockNode';
 
 interface ConfigPanelProps {
@@ -192,10 +193,13 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
 
   return (
     <aside className="bf-config">
-      <h2>
-        {def.icon} {def.label}
-      </h2>
-      <p className="bf-muted">{def.description}</p>
+      <header className="bf-config-head">
+        <BlockTile type={def.type} category={def.category} size="lg" />
+        <span>
+          <h2>{def.label}</h2>
+          <p className="bf-muted">{def.description}</p>
+        </span>
+      </header>
 
       {(() => {
         const listed = typeof def.permissions === 'function' ? def.permissions(config) : def.permissions;
@@ -245,7 +249,7 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
             {(field.kind === 'selector' || field.kind === 'locator') && (
               <>
                 <button type="button" onClick={() => startPick({ kind: 'field', nodeId: node.id, field }, config)}>
-                  🎯 Pick on page
+                  <Icon name="target" size={14} /> Pick on page
                 </button>
                 {pickStatus(field.key)}
               </>
@@ -282,8 +286,8 @@ export function ConfigPanel({ node, problems, onChange, onStepChange, onDelete, 
         <p className="bf-muted">Use these in the next block’s settings, e.g. an Open Tab block can open <code>{'{{url}}'}</code>.</p>
       </details>
 
-      <button type="button" className="bf-danger" onClick={() => onDelete(node.id)}>
-        Delete block
+      <button type="button" className="bf-danger bf-delete-block" onClick={() => onDelete(node.id)}>
+        <Icon name="trash" size={14} /> Delete block
       </button>
     </aside>
   );
@@ -573,7 +577,7 @@ function RunFromHere({
         title={found.ok ? `Run this block and what follows it, with its input from the run of ${new Date(found.startedAt).toLocaleString()}` : found.hint}
         onClick={() => found.ok && onRunFrom({ nodeId, input: found.input })}
       >
-        ⤵ Run from here
+        <Icon name="runFrom" size={14} /> Run from here
       </button>
       {hint && <small className="bf-muted">{hint}</small>}
     </div>

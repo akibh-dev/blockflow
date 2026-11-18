@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { RunRecord } from '../../../core/runs';
 import type { Workflow } from '../../../core/types';
 import { registry } from '../registry';
+import { Icon, blockIcon, categoryStyle } from './Icon';
 import { ImportButton } from './ImportButton';
 import { NewMenu } from './NewMenu';
 import type { WorkflowActions } from './WorkflowActions';
@@ -16,9 +17,23 @@ interface WorkflowsPageProps extends WorkflowActions {
   onSetAll(enabled: boolean): void;
 }
 
-function blockSummary(workflow: Workflow): string {
-  const labels = workflow.nodes.map((node) => registry.get(node.type)?.icon ?? '?');
-  return labels.length === 0 ? 'empty' : labels.join(' ');
+/** The workflow's blocks as small category-coloured icons (the first 12, then "+n"). */
+function BlockSummary({ workflow }: { workflow: Workflow }) {
+  if (workflow.nodes.length === 0) return <span className="bf-muted">empty</span>;
+  const shown = workflow.nodes.slice(0, 12);
+  return (
+    <span className="bf-block-icons">
+      {shown.map((node) => {
+        const def = registry.get(node.type);
+        return (
+          <span key={node.id} className="bf-block-icon" style={categoryStyle(def?.category)} title={def?.label ?? node.type}>
+            <Icon name={blockIcon(node.type, def?.category)} size={13} />
+          </span>
+        );
+      })}
+      {workflow.nodes.length > shown.length && <span className="bf-muted">+{workflow.nodes.length - shown.length}</span>}
+    </span>
+  );
 }
 
 /** Table of every workflow with the actions you would expect from a file manager. */
@@ -114,6 +129,7 @@ export function WorkflowsPage({ workflows, activeId, runs, errorCounts, onSetAll
                       disabled={problems > 0 && !workflow.enabled}
                       onChange={(event) => actions.onToggle(workflow.id, event.target.checked)}
                     />
+                    <span className="bf-track" aria-hidden="true" />
                   </label>
                 </td>
                 <td>
@@ -123,7 +139,7 @@ export function WorkflowsPage({ workflows, activeId, runs, errorCounts, onSetAll
                   {workflow.importedVia === 'bridge' && <span className="bf-muted" title="Imported by a program through the BlockFlow bridge"> · via bridge</span>}
                   {problems > 0 && <span className="bf-error"> · {problems} problem{problems === 1 ? '' : 's'}</span>}
                 </td>
-                <td title={`${workflow.nodes.length} blocks, ${workflow.edges.length} connections`}>{blockSummary(workflow)}</td>
+                <td title={`${workflow.nodes.length} blocks, ${workflow.edges.length} connections`}><BlockSummary workflow={workflow} /></td>
                 <td className="bf-muted">
                   {run ? (
                     <>

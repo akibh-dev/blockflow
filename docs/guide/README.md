@@ -405,9 +405,10 @@ A workflow may have several start blocks; each starts its own runs.
   in their input (the Open Tab that makes it) have no trace. Trace pictures are kept apart from failure
   screenshots: at most 200 per run, and the oldest runs' pictures are removed beyond 1,000 pictures or
   120 MB in total.
-- <a id="debugging"></a>**Debugging**: **🐞 Debug** (header; run option `debug`) runs once and pauses before
-  every block with the step setting **Pause here (breakpoint)** (`"pause": true`). With **pause on error**
-  ticked next to it (`debug: { "pauseOnError": true }`) it also pauses when a block fails, before the
+- <a id="debugging"></a>**Debugging**: **Debug** (the bug icon next to Run in the header, or Run's **▾**
+  menu; run option `debug`) runs once and pauses before every block with the step setting **Pause here
+  (breakpoint)** (`"pause": true`). With **pause on error** ticked in Run's **▾** menu
+  (`debug: { "pauseOnError": true }`) it also pauses when a block fails, before the
   failure is handled (`onError`, retries are already used up). While paused, a banner shows the block, why
   it paused, the error and the block's input, and the element of a page step is outlined on the page.
   **Continue** runs on to the next breakpoint, **Step** runs this block and pauses before the next one,

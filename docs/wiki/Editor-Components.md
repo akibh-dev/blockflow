@@ -29,7 +29,9 @@ state, and which messages, storage keys or browser APIs it touches. Read [Editor
 [VisualComparePanel.tsx](../../src/entrypoints/editor/components/VisualComparePanel.tsx),
 [runFrom.ts](../../src/entrypoints/editor/runFrom.ts),
 [Dialogs.tsx](../../src/entrypoints/editor/components/Dialogs.tsx),
-[TryItCard.tsx](../../src/entrypoints/editor/components/TryItCard.tsx)
+[TryItCard.tsx](../../src/entrypoints/editor/components/TryItCard.tsx),
+[Icon.tsx](../../src/entrypoints/editor/components/Icon.tsx),
+[Logo.tsx](../../src/entrypoints/editor/components/Logo.tsx)
 
 ## At a glance
 
@@ -81,17 +83,21 @@ How one block looks on the canvas. Registered in `Editor` as `nodeTypes = { bloc
 
 **What it renders**
 
-- Header: `def.icon`, `def.label` (falls back to `?` / the raw type for unknown blocks), a run badge
-  (`⏳ ✓ ✕ ↪ ⤼` for running / passed / failed / handled / skipped) and a `!` badge when it has problems
-  (the problems are the node's `title` tooltip).
+- Header: a [`BlockTile`](#icon-and-logo) (the block type's icon on its category colour), `def.label` (the
+  raw type for unknown blocks) with the category name under it, a run badge (line icons for running /
+  passed / failed / handled / skipped) and a `!` badge when it has problems (the problems are the node's
+  `title` tooltip). The category name is drawn by CSS from `data-label` (`::before { content: attr() }`),
+  so it is not part of the block's text: tests find blocks with `.bf-node:has-text("<label>")`, and "Send &
+  log" would otherwise match `has-text("Log")`.
 - `def.summary(config)` with `defaultConfig` merged in, the step note, and "Disabled: passes data through".
 - Handles: one target on the left. On the right, one source handle per port from
   `nodePorts(def, { config, step })` in `src/core/ports.ts` (so a Switch shows one per case plus `default`);
   the handle `id` is the port name, which becomes the edge's `sourceHandle`. When the port list changes
   it calls React Flow's `updateNodeInternals(id)` so new handles can be connected. With a single `out` port it draws one plain handle; otherwise labelled handles
   spread evenly down the right side and the node gets a `minHeight` of `22 + 20 × ports`.
-- CSS classes: `bf-node` + `selected`, `has-problem`, `disabled`, `run-<status>`, `multi-port`; the block's
-  colour arrives as `--accent`.
+- CSS classes: `bf-node` + `selected`, `has-problem`, `disabled`, `run-<status>`, `multi-port`; the
+  category colour arrives as `--cat` / `--cat-soft` (`categoryStyle(def.category)`). `def.accent` and
+  `def.icon` are no longer drawn by the editor.
 
 **Why contexts:** issues and run status are not stored in node `data`, because `data` is written back to
 the workflow by `fromFlow` (see [Editor, gotchas](Editor.md#gotchas)).
@@ -266,9 +272,9 @@ The left column: workflows on top, block palette below.
 
 | Part | Behaviour |
 | --- | --- |
-| Workflow row | Dot toggles on/off; name opens; double click or ✎ renames inline (Enter/blur saves a non-empty name, Esc cancels); ⧉ duplicate; ⬇ export; 🎭 Playwright; 🗑 delete. |
+| Workflow row | Dot toggles on/off; name opens; double click or the pen icon renames inline (Enter/blur saves a non-empty name, Esc cancels); then icon buttons (shown on hover/focus, each with a `title` and `aria-label`): Duplicate, Export to file, Download as a Playwright test, Delete. |
 | Header | [NewMenu](#newmenu) and [ImportButton](#importbutton). |
-| Palette | `registry.list()` grouped by `CATEGORY_LABELS` order, empty groups hidden. Filter matches label, description and type. Groups `start`, `browser` and `page` start open; all open while filtering. |
+| Palette | `registry.list()` grouped by `CATEGORY_LABELS` order, empty groups hidden. Filter matches label, description and type. Groups `start`, `browser` and `page` start open; all open while filtering. Each row is a `BlockTile` and the label; the description is the row's tooltip. |
 | Adding blocks | Click calls `onAddBlock(type)`. Drag sets `DRAG_MIME` (`application/x-blockflow-block`) to the block type; `Editor.onDrop` reads it. |
 
 **Export:** `DRAG_MIME`.
@@ -467,10 +473,30 @@ Test: `tests/dom/debugBanner.test.ts`.
 ## RunControls
 
 M5 header buttons, `RunControls({ onRun(options: RunOptions), running, disabled?, disabledReason? })`:
-**▶ Run** (`{}`), **◉ Run with trace** (`{ trace: true }`), **🐞 Debug** (`{ debug: {} }`, or
-`{ debug: { pauseOnError: true } }` with the **pause on error** box ticked; the box is remembered in this
-browser's `localStorage`, `bf-editor:pause-on-error`). All are disabled while `running` or `disabled`.
+**▶ Run** (`{}`) with a **▾** menu, then two icon buttons, **Run with trace** (`{ trace: true }`) and
+**Debug** (`{ debug: {} }`, or `{ debug: { pauseOnError: true } }` with **pause on error** ticked). The
+icon buttons keep their names as visually hidden text (`.bf-sr-only`), for screen readers and for the
+tests' `button:has-text("Debug")`. The ▾ menu repeats the three runs and holds the **pause on error** box
+(remembered in this browser's `localStorage`, `bf-editor:pause-on-error`; while ticked the Debug icon turns
+red); it closes on Escape or a click outside. All runs are disabled while `running` or `disabled`.
 The editor's `onRun` sends `bf:run-workflow` with the options; ■ Stop stays the editor's own button.
+
+## Icon and Logo
+
+`Icon.tsx` is the editor's icon set: 24×24 line icons drawn in `currentColor`.
+
+| Export | Purpose |
+| --- | --- |
+| `Icon({ name, size?, className? })` | One icon (`aria-hidden`; the button around it carries the name). |
+| `IconName` | The icon names. |
+| `blockIcon(type, category?)` | Icon of a block type; a type missing from the map gets its category's icon, so a new block is never blank (add it to `BLOCK_ICONS` when you add a block). |
+| `categoryStyle(category)` | `{ '--cat', '--cat-soft' }` pointing at `--c-<category>` in `style.css`. |
+| `BlockTile({ type, category?, size? })` | The icon on its category colour: palette rows, canvas blocks, settings panel header. |
+
+`Logo.tsx` draws the BlockFlow mark in the header, on no background, coloured by the `--logo-a`, `--logo-b`
+and `--logo-ok` tokens (lighter in dark mode). The same drawing is `public/logo.svg`; the extension icons
+`public/icon/*.png` and the white-tile and transparent exports are listed in
+[docs/brand/README.md](../brand/README.md).
 
 ## Dialogs
 

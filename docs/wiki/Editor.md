@@ -31,7 +31,7 @@ short:
 | File | What it does |
 | --- | --- |
 | `index.html` | WXT turns the `editor/` folder into an unlisted page, `editor.html`. Just `<div id="root">` and the module script. The toolbar button opens it (`openEditor()` in `background.ts` focuses an existing editor tab instead of opening a second one). |
-| `main.tsx` | Imports `@xyflow/react/dist/style.css` **before** `style.css` (ours overrides React Flow's), then `createRoot(...).render(<StrictMode><App/></StrictMode>)`. StrictMode runs effects twice in dev, so every effect cleans up (the `alive` flags in the hooks). |
+| `main.tsx` | Imports the bundled fonts (`@fontsource-variable/geist`, `@fontsource-variable/jetbrains-mono`; shipped in the extension, nothing loads from the network), then `@xyflow/react/dist/style.css` **before** `style.css` (ours overrides React Flow's), then `createRoot(...).render(<StrictMode><App/></StrictMode>)`. StrictMode runs effects twice in dev, so every effect cleans up (the `alive` flags in the hooks). |
 | `App.tsx` | Wraps `Editor` in `ReactFlowProvider` so `Editor` can call `useReactFlow()` (it needs `screenToFlowPosition` for drops and paste), and renders [`DialogHost`](Editor-Components.md#dialogs) for toasts and dialogs. |
 | `Editor.tsx` | Everything else: state, actions, layout. One component, ~780 lines, sectioned by `// --- name ---` comments. |
 
@@ -303,14 +303,25 @@ checked by `src/core/check.ts` ([Core Modules](Core-Modules.md#check)).
 
 All CSS is in `style.css`, plain CSS with a `bf-` class prefix (no CSS modules, no framework).
 
-- **Tokens** on `:root`: `--bg`, `--panel`, `--border`, `--text`, `--muted`, `--primary`, `--danger`,
-  `--ok`, redefined under `@media (prefers-color-scheme: dark)`. React Flow follows with
-  `colorMode="system"`.
+- **Tokens** on `:root`: `--bg`, `--canvas`, `--panel`, `--panel-2`, `--border`, `--border-strong`,
+  `--text`, `--muted`, `--faint`, `--primary` (violet; `-hover`, `-soft`, `-text`), `--danger`, `--ok`,
+  `--warn` (each with `-soft`), `--edge`, `--shadow`, and one colour pair per block category,
+  `--c-<category>` / `--c-<category>-soft`. All redefined under `@media (prefers-color-scheme: dark)`.
+  React Flow follows with `colorMode="system"`, and its own `--xy-*` variables are set from ours on
+  `.bf-canvas .react-flow`.
+- **Fonts**: `--sans` (Geist) and `--mono` (JetBrains Mono), set on `body`, not `:root`: Chrome gives
+  extension pages `body { font-size: 75%; font-family: system-ui }`, which would win over an inherited value.
 - **Layout**: `.bf-app` is a CSS grid, areas `header` / `sidebar canvas config` / `logs`, columns
-  `250px 1fr 340px` (`200px 1fr 260px` under 1000 px), rows `48px 1fr 190px`. The manage-style pages
-  (`.bf-manage`) span the canvas and config areas.
-- **Blocks**: `.bf-node` with modifiers `selected`, `has-problem`, `disabled`, `multi-port`,
-  `run-<status>`; the block's colour arrives as the `--accent` custom property set inline by BlockNode.
+  `256px 1fr 340px` (`236px 1fr 304px` under 1480 px, `210px 1fr 280px` under 1180 px), rows
+  `52px 1fr 200px`. The manage-style pages (`.bf-manage`) span the canvas and config areas.
+- **Header**: `.bf-brand` (Logo), `.bf-name`, `.bf-switch` (`.bf-track`), `.bf-toolgroup` of `.bf-tool`
+  buttons (icon-only ones are `.bf-icon-button` with a `.bf-sr-only` name), `RunControls`, then the
+  `.bf-tabs.bf-views` switcher and the Settings icon button.
+- **Blocks**: `.bf-node` (216px wide: `layoutWorkflow` puts columns 260px apart) with modifiers `selected`,
+  `has-problem`, `disabled`, `multi-port`, `run-<status>`; the category colour arrives as `--cat` /
+  `--cat-soft`, set inline by `categoryStyle()` ([Icon](Editor-Components.md#icon-and-logo)).
+- **Base button** is `inline-flex` (icon + text). Text that must ellipsize inside a button needs
+  `display: block` on that button (`.bf-workflow-name`): `text-overflow` does not apply in a flex container.
 - **Ports**: `.port-true`, `.port-false`, `.port-error` colour handles, labels and (for `error`) edges,
   overriding React Flow's `.react-flow__handle` / `.react-flow__edge` classes.
 - Run statuses share `.bf-run-status <status>` and `.bf-run-badge <status>` across header, log panel and

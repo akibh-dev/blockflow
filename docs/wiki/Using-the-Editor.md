@@ -15,7 +15,7 @@ Everything saves automatically, a moment after each change. There is no Save but
 
 | Area | What is there |
 | --- | --- |
-| **Header** | The open workflow's name (click to rename), its **On/Off** switch, **● Record**, **↶ ↷** (undo, redo), **Tidy up**, **Export as script**, **▶ Run**, **◉ Run with trace**, **🐞 Debug** with **pause on error**, **■ Stop** while a run is going on, the last run's result, a red **N problems** count, and the page tabs: **Canvas**, **All workflows (N)**, **Reports**, **Data**, **Secrets** |
+| **Header** | The logo, the open workflow's name (click to rename), its **On/Off** switch, **● Record**, icon buttons for undo, redo, **Tidy up** and **Export as script** (hover for the name), **▶ Run** with a **▾** menu, icon buttons for **Run with trace** (◎) and **Debug** (bug), **■ Stop** while a run is going on, the last run's result, a red **N problems** count, the page tabs **Canvas**, **All workflows (N)**, **Reports**, **Suites**, **Data**, **Secrets**, and the **Settings** gear |
 | **Sidebar** (left) | The workflow list and the block palette. Stays visible on every page |
 | **Canvas** (middle) | The blocks of the open workflow |
 | **Settings panel** (right) | The settings of the selected block. Canvas page only |
@@ -66,8 +66,10 @@ starts with its default settings and is selected.
 - **Delete**: select, then Delete or Backspace. Deleting a block removes its connections.
 - **Move around**: drag the background to pan, scroll or pinch to zoom; the controls at the bottom left zoom
   and fit everything in view; the minimap at the bottom right can be dragged and zoomed.
-- Each block shows its icon, name, a one-line summary of its settings, its note, and badges: **!** for a
-  problem (hover for the reason), and after a run ✓ passed, ✕ failed, ↪ handled, ⤼ skipped, ⏳ running.
+- Each block shows its icon (coloured by its group: Start amber, Tabs sky blue, Page actions blue, Read &
+  scrape violet, Test green, Logic pink, Data teal, Send & log grey), name, group, a one-line summary of its
+  settings, its note, and badges: **!** for a problem (hover for the reason), and after a run a round badge:
+  ✓ passed (green), ✕ failed (red), ↪ handled (amber), skipped, or a spinner while running.
   Disabled blocks say "Disabled: passes data through".
 
 An empty workflow shows a hint: add blocks from the left, then drag from one block's right dot to another's
@@ -198,9 +200,11 @@ reloaded or closed).
 - **▶ Run** runs the open workflow once, now, whether it is On or Off. A Timer or Schedule at the start fires
   immediately; Watch Element reads once; Page Visited and Context Menu use the tab you are on. Disabled while
   the workflow has problems or no blocks.
-- **◉ Run with trace** runs once and keeps pictures before and after every page step (see Reports).
-- **🐞 Debug** runs once and pauses before every block with **Pause here (breakpoint)** ticked, and, with
-  **pause on error** ticked, when a block fails. A banner shows the block, why it paused, the error and its
+- **Run with trace** (◎ next to Run, or in Run's **▾** menu) runs once and keeps pictures before and after
+  every page step (see Reports).
+- **Debug** (the bug next to Run, or in the **▾** menu) runs once and pauses before every block with
+  **Pause here (breakpoint)** ticked, and, with **pause on error** ticked in the **▾** menu (the bug turns
+  red), when a block fails. A banner shows the block, why it paused, the error and its
   input, and the element is outlined on the page: **▶ Continue** (to the next breakpoint), **⤼ Step** (this
   block, then pause again), **■ Stop**. You can close the editor while paused; the banner is back when you
   open it. A pause nobody answers ends the run after an hour.

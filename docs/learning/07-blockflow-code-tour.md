@@ -238,7 +238,7 @@ The extension-specific lessons:
 
 Checkpoint: `npm test -- tests/core/engineM5.test.ts tests/core/pixelDiff.test.ts tests/core/ariaSnapshot.test.ts`,
 then `BF_HEADLESS=1 npm run e2e -- m5-debug m5-trace m5-visual m5-aria`. In the editor, tick "Pause here" on a
-block, press 🐞 Debug, close the editor tab while it waits, reopen it: the banner is still there.
+block, press Debug (the bug icon next to Run), close the editor tab while it waits, reopen it: the banner is still there.
 Exercise: add a `[focused]` state to the ARIA template matcher. Start with a failing test in
 `tests/core/ariaSnapshot.test.ts`, then find where the outline would have to record it.
 
@@ -293,6 +293,23 @@ refuses the file on any error, and the editor lists the issues in a dialog (`iss
 importer and (later) a script compiler, all without the DOM, so they live in `src/core` and blocks
 declare their own cross-field rules in `validate(config)`. Try it: import a copy of
 `docs/guide/examples/login-test.blockflow.json` with `"locator"` misspelled and read the dialog.
+
+Styling works like any CSS-variables design system (`style.css`: tokens on `:root`, a dark set under
+`prefers-color-scheme`), with three extension-page surprises you would not meet in Next.js:
+
+- **The browser styles your page first.** Chrome gives every extension page `body { font-size: 75%;
+  font-family: system-ui }`. A font set on `:root` or `html` is inherited, so this rule wins and all text
+  comes out a quarter smaller. Set the base font on `body` itself (see the comment there).
+- **No font CDN.** A Google Fonts `<link>` would be a remote request from every editor page (and needs a
+  CSP change). The fonts are npm packages (`@fontsource-variable/geist`, `…/jetbrains-mono`) imported in
+  `main.tsx`; Vite copies the `.woff2` files into the build, like `next/font` self-hosting.
+- **Icons are files the browser reads, not React.** The toolbar icon is `public/icon/*.png` (listed in the
+  manifest by WXT). They are rendered from `public/logo.svg` (16 and 32 px from a simpler
+  `logo-small.svg`, since detail disappears at that size; see `docs/brand/README.md`); inside the page the same mark is the
+  `Logo` component, and block icons are inline SVG from `components/Icon.tsx`.
+
+Try it: in `style.css`, move `font: 13px/1.45 var(--sans)` from `body` to `:root`, run `npm run dev`, and
+watch every label shrink. DevTools' Computed tab shows which rule set `font-size` on `body`.
 
 ## Project exercises (pick any, in rising difficulty)
 

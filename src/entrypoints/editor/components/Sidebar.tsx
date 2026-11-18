@@ -3,6 +3,7 @@ import type { DragEvent } from 'react';
 import { CATEGORY_LABELS } from '../../../core/types';
 import type { BlockCategory, Workflow } from '../../../core/types';
 import { registry } from '../registry';
+import { BlockTile, Icon, categoryStyle } from './Icon';
 import { ImportButton } from './ImportButton';
 import { NewMenu } from './NewMenu';
 import type { WorkflowActions } from './WorkflowActions';
@@ -103,20 +104,20 @@ export function Sidebar({ workflows, activeId, onAddBlock, ...actions }: Sidebar
                 </button>
               )}
               <span className="bf-row-actions">
-                <button type="button" title="Rename" onClick={() => setRenaming(workflow.id)}>
-                  ✎
+                <button type="button" title="Rename" aria-label="Rename" onClick={() => setRenaming(workflow.id)}>
+                  <Icon name="pen" size={14} />
                 </button>
-                <button type="button" title="Duplicate" onClick={() => actions.onDuplicate(workflow.id)}>
-                  ⧉
+                <button type="button" title="Duplicate" aria-label="Duplicate" onClick={() => actions.onDuplicate(workflow.id)}>
+                  <Icon name="copy" size={14} />
                 </button>
-                <button type="button" title="Export to file" onClick={() => actions.onExport([workflow.id])}>
-                  ⬇
+                <button type="button" title="Export to file" aria-label="Export to file" onClick={() => actions.onExport([workflow.id])}>
+                  <Icon name="download" size={14} />
                 </button>
-                <button type="button" title="Download as a Playwright test" onClick={() => actions.onExportPlaywright(workflow.id)}>
-                  🎭
+                <button type="button" title="Download as a Playwright test" aria-label="Download as a Playwright test" onClick={() => actions.onExportPlaywright(workflow.id)}>
+                  <Icon name="code" size={14} />
                 </button>
-                <button type="button" className="bf-danger" title="Delete" onClick={() => actions.onDelete(workflow.id)}>
-                  🗑
+                <button type="button" className="bf-danger" title="Delete" aria-label="Delete" onClick={() => actions.onDelete(workflow.id)}>
+                  <Icon name="trash" size={14} />
                 </button>
               </span>
             </li>
@@ -129,18 +130,22 @@ export function Sidebar({ workflows, activeId, onAddBlock, ...actions }: Sidebar
         <div className="bf-section-title">
           <span>Blocks</span>
         </div>
-        <input
-          type="text"
-          className="bf-search"
-          placeholder="Find a block…"
-          value={blockQuery}
-          onChange={(event) => setBlockQuery(event.target.value)}
-          aria-label="Find a block"
-        />
+        <span className="bf-search-box">
+          <Icon name="search" size={15} />
+          <input
+            type="text"
+            className="bf-search"
+            placeholder="Find a block…"
+            value={blockQuery}
+            onChange={(event) => setBlockQuery(event.target.value)}
+            aria-label="Find a block"
+          />
+        </span>
         {groups.map(({ category, blocks }) => (
-          <details key={category} className="bf-palette-group" open={blockQuery.trim() !== '' || category === 'start' || category === 'browser' || category === 'page'}>
+          <details key={category} className="bf-palette-group" style={categoryStyle(category)} open={blockQuery.trim() !== '' || category === 'start' || category === 'browser' || category === 'page'}>
             <summary>
-              {CATEGORY_LABELS[category]} <span className="bf-muted">{blocks.length}</span>
+              <Icon name="chevronRight" size={12} className="bf-chevron" />
+              {CATEGORY_LABELS[category]} <span className="bf-group-count">{blocks.length}</span>
             </summary>
             <ul className="bf-palette">
               {blocks.map((def) => (
@@ -150,13 +155,10 @@ export function Sidebar({ workflows, activeId, onAddBlock, ...actions }: Sidebar
                     draggable
                     onDragStart={(event) => onDragStart(event, def.type)}
                     onClick={() => onAddBlock(def.type)}
-                    style={{ borderLeftColor: def.accent }}
                     title={`${def.description} Drag onto the canvas, or click to add.`}
                   >
-                    <strong>
-                      {def.icon} {def.label}
-                    </strong>
-                    <span>{def.description}</span>
+                    <BlockTile type={def.type} category={def.category} size="sm" />
+                    <span className="bf-palette-label">{def.label}</span>
                   </button>
                 </li>
               ))}

@@ -47,6 +47,8 @@ import { HostAccessNote } from './components/HostAccessNote';
 import { NO_NEED, describeNeed, missingAccess, needsAccess, requestAccess } from './hostAccess';
 import type { HostNeed } from './hostAccess';
 import { RunControls } from './components/RunControls';
+import { Icon } from './components/Icon';
+import { Logo } from './components/Logo';
 import type { RunOptions } from '../../core/runs';
 import { SuitesPage } from './components/SuitesPage';
 import { TryItCard } from './components/TryItCard';
@@ -57,6 +59,13 @@ import type { SyncBase } from './sync';
 
 /** React Flow node renderers by node `type`; every BlockFlow node is `'block'`. Module-level so it is stable. */
 const nodeTypes = { block: BlockNode };
+
+const MINIMAP_SIZE = { width: 176, height: 112 };
+
+/** Minimap rectangles take the block's category colour (`--c-<category>` in style.css). */
+function miniMapColor(node: BlockFlowNode): string {
+  return `var(--c-${registry.get(node.data.blockType)?.category ?? 'output'})`;
+}
 /** Above this many blocks the canvas draws only the ones in view (`onlyRenderVisibleElements`). */
 const VIRTUALISE_ABOVE = 150;
 const defaultEdgeOptions = { type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } };
@@ -884,7 +893,11 @@ export function Editor() {
       <HostAccessNote need={hostNeed} onGranted={refreshHostNeed} />
       <div className="bf-app">
         <header className="bf-header">
-          <strong className="bf-brand">BlockFlow</strong>
+          <span className="bf-brand">
+            <Logo size={30} />
+            BlockFlow
+          </span>
+          <span className="bf-sep" />
           <input
             className="bf-name"
             value={active.name}
@@ -901,36 +914,50 @@ export function Editor() {
               disabled={errors.length > 0 && !active.enabled}
               onChange={(event) => toggleOn(active.id, event.target.checked)}
             />
+            <span className="bf-track" aria-hidden="true" />
             <span>{active.enabled ? 'On' : 'Off'}</span>
           </label>
-          {recording?.status === 'recording' ? (
-            <button type="button" className="bf-stop" onClick={() => void browser.runtime.sendMessage({ type: 'bf:stop-recording' })} title="Stop recording and add the blocks">
-              ■ Stop recording ({recording.steps.length})
+          <span className="bf-sep" />
+          <span className="bf-toolgroup">
+            {recording?.status === 'recording' ? (
+              <button type="button" className="bf-tool bf-stop" onClick={() => void browser.runtime.sendMessage({ type: 'bf:stop-recording' })} title="Stop recording and add the blocks">
+                ■ Stop recording ({recording.steps.length})
+              </button>
+            ) : (
+              <button type="button" className="bf-tool bf-record" onClick={startRecording} title="Record your clicks and typing on a page as blocks">
+                <span className="bf-rec-dot">●</span> <span className="bf-label-md">Record</span>
+              </button>
+            )}
+            <button type="button" className="bf-tool bf-icon-button" onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo">
+              <Icon name="undo" />
             </button>
-          ) : (
-            <button type="button" onClick={startRecording} title="Record your clicks and typing on a page as blocks">
-              ● Record
+            <button type="button" className="bf-tool bf-icon-button" onClick={redo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+              <Icon name="redo" />
             </button>
-          )}
-          <button type="button" onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo">
-            ↶
-          </button>
-          <button type="button" onClick={redo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
-            ↷
-          </button>
-          <button type="button" onClick={tidyUp} disabled={view !== 'canvas' || active.nodes.length === 0} title="Lay the blocks out in columns, left to right (Undo puts them back)">
-            Tidy up
-          </button>
-          <button
-            type="button"
-            onClick={exportScript}
-            disabled={!activeScript}
-            title={activeScript ? 'Download this workflow as a script (a list of steps)' : 'This workflow cannot be written as a list of steps (several start blocks, or an output feeding several blocks)'}
-          >
-            Export as script
-          </button>
+            <button
+              type="button"
+              className="bf-tool bf-icon-button"
+              onClick={tidyUp}
+              disabled={view !== 'canvas' || active.nodes.length === 0}
+              title="Tidy up: lay the blocks out in columns, left to right (Undo puts them back)"
+            >
+              <Icon name="layout" />
+              <span className="bf-sr-only">Tidy up</span>
+            </button>
+            <button
+              type="button"
+              className="bf-tool bf-icon-button"
+              onClick={exportScript}
+              disabled={!activeScript}
+              title={activeScript ? 'Export as script: download this workflow as a list of steps' : 'This workflow cannot be written as a list of steps (several start blocks, or an output feeding several blocks)'}
+            >
+              <Icon name="export" />
+              <span className="bf-sr-only">Export as script</span>
+            </button>
+          </span>
+          <span className="bf-sep" />
           {runningRun && (
-            <button type="button" className="bf-stop" onClick={stopRun} title="Stop the run that is going on">
+            <button type="button" className="bf-tool bf-stop" onClick={stopRun} title="Stop the run that is going on">
               ■ Stop
             </button>
           )}
@@ -945,14 +972,19 @@ export function Editor() {
               {inspectedRun.status}
             </span>
           )}
-          {errors.length > 0 && <span className="bf-error">{errors.length} problem{errors.length === 1 ? '' : 's'}</span>}
+          {errors.length > 0 && (
+            <span className="bf-error bf-problem-count">
+              <Icon name="alert" size={14} />
+              {errors.length} problem{errors.length === 1 ? '' : 's'}
+            </span>
+          )}
           <span className="bf-spacer" />
-          <nav className="bf-tabs" aria-label="View">
+          <nav className="bf-tabs bf-views" aria-label="View">
             <button type="button" className={view === 'canvas' ? 'active' : ''} onClick={() => setView('canvas')}>
               Canvas
             </button>
             <button type="button" className={view === 'manage' ? 'active' : ''} onClick={() => setView('manage')}>
-              All workflows ({workflows.length})
+              All workflows <span className="bf-count">({workflows.length})</span>
             </button>
             <button type="button" className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>
               Reports
@@ -966,10 +998,16 @@ export function Editor() {
             <button type="button" className={view === 'secrets' ? 'active' : ''} onClick={() => setView('secrets')}>
               Secrets
             </button>
-            <button type="button" className={view === 'settings' ? 'active' : ''} onClick={() => setView('settings')}>
-              Settings
-            </button>
           </nav>
+          <button
+            type="button"
+            className={`bf-tool bf-icon-button${view === 'settings' ? ' active' : ''}`}
+            onClick={() => setView('settings')}
+            aria-label="Settings"
+            title="Settings"
+          >
+            <Icon name="gear" />
+          </button>
         </header>
 
         <Sidebar workflows={workflows} activeId={activeId} onAddBlock={addBlock} {...actions} />
@@ -1034,9 +1072,9 @@ export function Editor() {
             fitViewOptions={{ padding: 0.4, maxZoom: 1 }}
             proOptions={{ hideAttribution: true }}
           >
-            <Background />
+            <Background gap={18} size={1.2} />
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable />
+            <MiniMap pannable zoomable style={MINIMAP_SIZE} nodeColor={miniMapColor} nodeBorderRadius={4} ariaLabel={`Minimap: ${nodes.length} block${nodes.length === 1 ? '' : 's'}`} />
           </ReactFlow>
           <TryItCard onCreate={createFromTemplate} />
           {active.nodes.length === 0 && (
