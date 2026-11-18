@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- BlockFlow mark simplified for 16 and 32 px icons (public/icon/16.png, 32.png): trigger block wired
+       to a browser block. Full mark: logo.svg. -->
+  <path d="M12.5 13.5 C17 13.5 15 21 19.5 21" fill="none" stroke="#7c3aed" stroke-width="2.6" stroke-linecap="round"/>
+  <rect x="2" y="7.5" width="11" height="11" rx="3" fill="#7c3aed" fill-opacity=".15" stroke="#7c3aed" stroke-width="2.4"/>
+  <path d="M7.5 10.5 V13.5 H9.7" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="18.5" y="15.5" width="11.5" height="10" rx="3" fill="#0284c7" fill-opacity=".15" stroke="#0284c7" stroke-width="2.4"/>
+  <path d="M18.5 19 H30" stroke="#0284c7" stroke-width="2"/>
+</svg>

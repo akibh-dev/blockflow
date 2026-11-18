@@ -5,7 +5,10 @@ import type { CSSProperties } from 'react';
 import { DEFAULT_PORT, nodePorts } from '../../../core/ports';
 import type { StepStatus } from '../../../core/runs';
 import type { BlockNodeData } from '../flow/convert';
+import { CATEGORY_LABELS } from '../../../core/types';
 import { registry } from '../registry';
+import { BlockTile, Icon, categoryStyle } from './Icon';
+import type { IconName } from './Icon';
 
 /** A React Flow node as the editor stores it in state: `type: 'block'` with `BlockNodeData`. */
 export type BlockFlowNode = Node<BlockNodeData, 'block'>;
@@ -16,12 +19,12 @@ export const IssuesContext = createContext<Map<string, string[]>>(new Map());
 /** nodeId → how the block did in the run being inspected (latest run by default). */
 export const RunStatusContext = createContext<Map<string, StepStatus>>(new Map());
 
-const STATUS_ICON: Record<StepStatus, string> = {
-  running: '⏳',
-  passed: '✓',
-  failed: '✕',
-  handled: '↪',
-  skipped: '⤼',
+const STATUS_ICON: Record<StepStatus, IconName> = {
+  running: 'loader',
+  passed: 'check',
+  failed: 'x',
+  handled: 'runFrom',
+  skipped: 'skip',
 };
 
 /**
@@ -55,16 +58,20 @@ export function BlockNode({ id, data, selected }: NodeProps<BlockFlowNode>) {
   return (
     <div
       className={classes.join(' ')}
-      style={{ '--accent': def?.accent ?? '#888', minHeight: single ? undefined : 22 + ports.length * 20 } as CSSProperties}
+      style={{ ...categoryStyle(def?.category), minHeight: single ? undefined : 22 + ports.length * 20 } as CSSProperties}
       title={problems.join('\n')}
     >
       <Handle type="target" position={Position.Left} />
       <div className="bf-node-head">
-        <span className="bf-node-icon">{def?.icon ?? '?'}</span>
-        <strong>{def?.label ?? data.blockType}</strong>
+        <BlockTile type={data.blockType} category={def?.category} />
+        <span className="bf-node-title">
+          <strong>{def?.label ?? data.blockType}</strong>
+          {/* Drawn by CSS from the attribute, so it is not part of the block's text (tests find blocks by their label). */}
+          {def?.category && <span className="bf-node-category" data-label={CATEGORY_LABELS[def.category]} />}
+        </span>
         {status && (
           <span className={`bf-run-badge ${status}`} title={`Last run: ${status}`}>
-            {STATUS_ICON[status]}
+            <Icon name={STATUS_ICON[status]} size={12} />
           </span>
         )}
         {problems.length > 0 && <span className="bf-badge">!</span>}

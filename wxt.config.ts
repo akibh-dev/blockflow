@@ -83,7 +83,12 @@ export default defineConfig({
       // switched on (src/core/origins.ts, src/entrypoints/editor/hostAccess.ts). The e2e, automation (CLI) builds
       // have every site granted up front, because nobody can click the browser's prompt there.
       ...(granted && !noHosts ? { host_permissions: ['<all_urls>'] } : { host_permissions: [], optional_host_permissions: ['<all_urls>'] }),
-      action: { default_title: 'Open BlockFlow editor' },
+      // default_icon set explicitly: without it Chrome falls back to `icons`, and keeps showing a cached
+      // toolbar image after the icons change and the extension is reloaded.
+      action: {
+        default_title: 'Open BlockFlow editor',
+        default_icon: { 16: 'icon/16.png', 32: 'icon/32.png', 48: 'icon/48.png', 128: 'icon/128.png' },
+      },
       ...(browser === 'firefox'
         ? {
             browser_specific_settings: {
