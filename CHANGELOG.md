@@ -4,10 +4,25 @@ BlockFlow versions, newest first. Each entry lists what a user or an integrator 
 before; the task-level history is in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) and `git log`. Versions
 follow the milestones of [docs/PLAN.md](docs/PLAN.md).
 
-## Unreleased
+## 2.0.0: Editor redesign
 
+- **New editor look.** A grouped header (logo, On/Off switch, icon buttons for undo, redo, Tidy up and Export
+  as script, **Run** with a ▾ menu for trace, debug and *pause on error*, a page switcher and a Settings gear);
+  a compact sidebar with icon actions on workflow rows; the block palette as icon rows coloured by category;
+  canvas blocks with an icon tile, category, settings summary and round status badges; a category-coloured
+  minimap; restyled settings panel, log and pages, in light and dark mode.
+- **Line icons** for every block type instead of emoji, and a colour per block category (Start, Tabs, Page
+  actions, Read & scrape, Test, Logic & loops, Data, Send & log).
+- **Bundled fonts** (Geist, JetBrains Mono) shipped inside the extension; nothing loads from the network.
+- **Text size fix.** Chrome's extension-page rule (`body { font-size: 75% }`) made the old editor's text a
+  quarter smaller than intended; the base font is now set on `body`.
+- **New logo and extension icon**, on a transparent background (white-tile and transparent exports in
+  `docs/brand/`); the toolbar icon is set explicitly in the manifest (`action.default_icon`).
+- Blocks are 216px wide, so blocks laid out by Tidy up no longer touch.
 - **No Chrome Web Store.** Chrome, Edge and Brave install the release's Chrome zip unpacked (README "Install");
   the release workflow no longer has a Chrome Web Store step. Firefox stays on addons.mozilla.org.
+- npm: `blockflow-runner`, `blockflow-bridge` and `blockflow-mcp` 2.0.0, released with the extension
+  (`blockflow-runner` bundles the 2.0.0 extension; bridge and MCP have no code changes).
 
 ## npm: blockflow-bridge 1.0.1, blockflow-mcp 1.0.1
 

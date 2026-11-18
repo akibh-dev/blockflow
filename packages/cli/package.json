@@ -1,6 +1,6 @@
 {
   "name": "blockflow-runner",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "Run BlockFlow workflows and suites from the command line or CI, in Chromium with the extension.",
   "keywords": [
     "blockflow",
@@ -47,7 +47,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "blockflow-bridge": "1.0.1",
+    "blockflow-bridge": "2.0.0",
     "playwright-core": "^1.64.1"
   }
 }
